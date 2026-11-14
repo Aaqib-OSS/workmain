@@ -244,5 +244,5 @@ No issue converts the non-CLI callers onto a unit of work (F24), and #261 and #2
 
 ## 6. Disposition
 
-- Promoted to:
+- Promoted to: `../specs/UNIT_OF_WORK_SPEC.md`; issues #278 (Q6), #279, #280, #281 and #282 (Q7)
 - Superseded by:
