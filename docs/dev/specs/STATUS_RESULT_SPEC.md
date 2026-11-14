@@ -19,6 +19,7 @@
 | 20261114 | Ray | Design study Q1: the generic is `Summary[T]`. | Adopted; DR1, Step 1. |
 | 20261114 | Ray | Design study Q2: the totals types are `CalendarStatusTotals` and `ClientStatusTotals`. | Adopted; DR3, Steps 1 and 2. |
 | 20261114 | Ray | Design study Q1 and Q2: `CalendarStatus`, `ClientStatus` and both `StatusTotals` are deleted, not kept as aliases. | Adopted; DR2, AC1.1. |
+| 20261114 | Ray | Step 1's fail-first run would fail with an `ImportError` at collection, not an `AssertionError` from `test_s5_status`, if the test imports `Summary` before `results.py` defines it. | Adopted; Step 1 adds `Summary` before the assertion, and the fail-first runs in Steps 1 and 2, AC1.2 and §6 require an `AssertionError`. |
 | 20261114 | Spanner | `Summary`'s fields follow `Page`, the precedent in the same module (design study F3): `totals: T` first, `filters` last, defaulting to `()`. | Adopted; DR4. |
 | 20261114 | Spanner | The issue's third criterion is checked by command tests that mock the service and the renderer, so they can't show output unchanged (design study F7). The criterion also leaves out `clients set active` (F6). Restated in §5 as AC3.1–AC3.3 under `docs/standards/1-workflow.md` §1.2. A test rendering the real views is ruled out by `docs/standards/6-testing.md` §6.2. The issue body's edit is made at close-out. | Adopted; §5. |
 
@@ -82,25 +83,31 @@ Anything these rules and the steps don't decide is a departure: `.claude/skills/
 
 ### Step 1 — `Summary` and the calendar status
 
-- `workmain/services/results.py` adds, after `Page`:
+Done in this order, so that the fail-first run fails on the new assertion and not at import (`docs/standards/6-testing.md` §6.2 rule 9):
 
-  ```python
-  @dataclass(frozen=True)
-  class Summary(Generic[T]):
-      totals: T
-      filters: Tuple[Tuple[str, object], ...] = ()
-  ```
+1. `workmain/services/results.py` adds, after `Page`:
 
-  Its docstring says it is the result of a query that returns totals and no rows, and describes `filters` as `Page`'s does. The module docstring no longer limits the module to collection queries.
-- `workmain/services/calendar_service.py`: rename `StatusTotals` to `CalendarStatusTotals` (DR3) and delete `CalendarStatus` (DR2). Change `get_status`'s signature to `get_status(session: Session) -> Summary[CalendarStatusTotals]`, returning `Summary(CalendarStatusTotals(count, latest.date() if latest else None, LIVE_SYNC))`. Import `Summary` from `workmain.services.results`.
-- `tests/test_calendar_service.py` `TestStatus::test_s5_status` adds `assert type(status) is Summary`. No other assertion in the file changes.
-- Before the service change, the implementer runs `test_s5_status` with the new assertion and sees it fail. After the change, the implementer runs it again and sees it pass. Results records both runs (`docs/standards/6-testing.md` §6.2 rule 9).
+   ```python
+   @dataclass(frozen=True)
+   class Summary(Generic[T]):
+       totals: T
+       filters: Tuple[Tuple[str, object], ...] = ()
+   ```
+
+   Its docstring says it is the result of a query that returns totals and no rows, and describes `filters` as `Page`'s does. The module docstring no longer limits the module to collection queries.
+2. `tests/test_calendar_service.py` imports `Summary` from `workmain.services.results`, and `TestStatus::test_s5_status` adds `assert type(status) is Summary`. No other assertion in the file changes.
+3. The implementer runs `test_s5_status` and sees it fail with an `AssertionError` on that line, because `get_status` still returns `CalendarStatus`. A failure of any other kind, such as an `ImportError` at collection, is not the fail-first run.
+4. `workmain/services/calendar_service.py`: rename `StatusTotals` to `CalendarStatusTotals` (DR3) and delete `CalendarStatus` (DR2). Change `get_status`'s signature to `get_status(session: Session) -> Summary[CalendarStatusTotals]`, returning `Summary(CalendarStatusTotals(count, latest.date() if latest else None, LIVE_SYNC))`. Import `Summary` from `workmain.services.results`.
+5. The implementer runs `test_s5_status` again and sees it pass. Results records both runs.
 
 ### Step 2 — the clients status
 
-- `workmain/services/clients_service.py`: rename `StatusTotals` to `ClientStatusTotals` (DR3) and delete `ClientStatus` (DR2). The signatures become `get_status(session: Session) -> Summary[ClientStatusTotals]` and `set_active(session: Session, name: str) -> Summary[ClientStatusTotals]`. `get_status` returns `Summary(totals)`, and `set_active` still returns `get_status(session)`. Import `Summary` from `workmain.services.results`.
-- `tests/test_clients_service.py`: each `clients_service.StatusTotals` becomes `clients_service.ClientStatusTotals`, with the same arguments. `TestActive::test_s17_sets_the_active_client_by_name` and `TestStatus::test_s20_reports_the_active_client` each add `assert type(status) is Summary`. No other assertion in the file changes.
-- Fail-first as in Step 1, for `test_s17` and `test_s20`.
+`Summary` exists from Step 1. Done in this order:
+
+1. `tests/test_clients_service.py` imports `Summary` from `workmain.services.results`. `TestActive::test_s17_sets_the_active_client_by_name` and `TestStatus::test_s20_reports_the_active_client` each add `assert type(status) is Summary`.
+2. The implementer runs both tests and sees each fail with an `AssertionError` on that line, because the service still returns `ClientStatus`.
+3. `workmain/services/clients_service.py`: rename `StatusTotals` to `ClientStatusTotals` (DR3) and delete `ClientStatus` (DR2). The signatures become `get_status(session: Session) -> Summary[ClientStatusTotals]` and `set_active(session: Session, name: str) -> Summary[ClientStatusTotals]`. `get_status` returns `Summary(totals)`, and `set_active` still returns `get_status(session)`. Import `Summary` from `workmain.services.results`. In the same change, each `clients_service.StatusTotals` in `tests/test_clients_service.py` becomes `clients_service.ClientStatusTotals`, with the same arguments. No other assertion in the file changes.
+4. The implementer runs both tests again and sees them pass. Results records both runs.
 
 ### Step 3 — the map
 
@@ -123,7 +130,7 @@ The issue's third criterion is restated as AC3.1–AC3.3 (Decision Log, 20261114
 | AC | Criterion | How it is checked |
 | --- | --- | --- |
 | AC1.1 | No class under `workmain/` is named `StatusTotals`, `CalendarStatus` or `ClientStatus`, and no alias or re-export of those names remains anywhere in the code or tests (DR2) | `git grep -nwE 'StatusTotals\|CalendarStatus\|ClientStatus' -- workmain tests automation scripts` returning nothing |
-| AC1.2 | `workmain/services/results.py` holds the generic, and the three status functions return it: `calendar_service.get_status`, `clients_service.get_status` and `clients_service.set_active` | `git grep -n '^class ' workmain/services/results.py` showing `Page` and `Summary`; `pytest tests/test_calendar_service.py::TestStatus::test_s5_status tests/test_clients_service.py::TestActive::test_s17_sets_the_active_client_by_name tests/test_clients_service.py::TestStatus::test_s20_reports_the_active_client` passing, each asserting `type(status) is Summary`, with results recording the failing run before the change |
+| AC1.2 | `workmain/services/results.py` holds the generic, and the three status functions return it: `calendar_service.get_status`, `clients_service.get_status` and `clients_service.set_active` | `git grep -n '^class ' workmain/services/results.py` showing `Page` and `Summary`; `pytest tests/test_calendar_service.py::TestStatus::test_s5_status tests/test_clients_service.py::TestActive::test_s17_sets_the_active_client_by_name tests/test_clients_service.py::TestStatus::test_s20_reports_the_active_client` passing, each asserting `type(status) is Summary`, with results recording each test's earlier run failing with an `AssertionError` on that assertion before its service changed |
 | AC2.1 | The map no longer lists per-service status types as a known deficiency | `grep -n 'Per-service status types' docs/ARCHITECTURE.md` returning nothing |
 | AC2.2 | No class name is defined twice under `workmain/`, so the check reports nothing for the deleted entry and nothing new | `python3 automation/architecture_check.py` printing `New findings: 0`, with no `#259` line under `Known deficiencies` |
 | AC3.1 | `calendar status`, `clients status` and `clients set active` render through views and a renderer the branch leaves as they were | `git diff --stat origin/main...HEAD -- workmain/cli/` returning nothing |
@@ -135,7 +142,7 @@ The issue's third criterion is restated as AC3.1–AC3.3 (Decision Log, 20261114
 
 - **Baseline before this work:** `1708 passed, 0 failed, 0 skipped` (`CHANGELOG.md` 1.58.3).
 - **Expected after:** `1708 passed, 0 failed, 0 skipped`. The type assertions are added to existing tests, so the count doesn't change.
-- `tests/test_calendar_service.py` `TestStatus::test_s5_status`, and `tests/test_clients_service.py` `TestActive::test_s17_sets_the_active_client_by_name` and `TestStatus::test_s20_reports_the_active_client`: each asserts that the result is a `Summary`. These are the fail-first tests.
+- `tests/test_calendar_service.py` `TestStatus::test_s5_status`, and `tests/test_clients_service.py` `TestActive::test_s17_sets_the_active_client_by_name` and `TestStatus::test_s20_reports_the_active_client`: each asserts that the result is a `Summary`. These are the fail-first tests: each is seen failing with an `AssertionError` before its service changes (Steps 1 and 2).
 - No renderer test is added. `tests/test_output.py` `TestReport::test_o1_totals_when_empty_with_no_sections` already covers a result with no sections and `totals_when_empty`, the shape both `STATUS` views render.
 
 ## 7. Risks and rollback
