@@ -1,6 +1,6 @@
 # Unit of Work — Spec
 
-**Status:** Draft
+**Status:** Approved
 **Author:** Spanner (Role 1)
 **Date:** 20261114
 **Branch:** `hotfix/issue-258-unit-of-work` (from `main`)
