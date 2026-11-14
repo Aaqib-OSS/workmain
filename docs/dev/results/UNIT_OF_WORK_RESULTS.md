@@ -1,10 +1,10 @@
 # Unit of Work — Implementation Results
 
-**Status:** Active
+**Status:** Shipped
 **Author:** Anvil (Role 3)
 **Date:** 20261114
 **Spec:** `../specs/UNIT_OF_WORK_SPEC.md`
-**Released as:** set by `/closeout`
+**Released as:** v1.58.3 (tag v1.58.3)
 
 ---
 
@@ -18,7 +18,7 @@ Complete. All six steps shipped as the spec writes them. Two changes Ray directe
 - `automation/session_param_check.py` lists session parameters.
 - The map and `docs/standards/4-database.md` §4.1, §4.3 and `docs/standards/6-testing.md` §6.1, §6.2 state the unit-of-work form.
 
-No caller in `workmain/` uses the unit of work yet. Ray has read AC1.2 and AC10.1 as met; AC10.2 awaits his second reading.
+No caller in `workmain/` uses the unit of work yet. Ray has read AC1.2, AC10.1 and AC10.2 as met.
 
 ## 2. What shipped, by step
 
