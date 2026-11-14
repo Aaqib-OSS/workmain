@@ -1,6 +1,6 @@
 # Unit of Work — Spec
 
-**Status:** Approved
+**Status:** Draft
 **Author:** Spanner (Role 1)
 **Date:** 20261114
 **Branch:** `hotfix/issue-258-unit-of-work` (from `main`)
@@ -56,6 +56,7 @@
 | 20261114 | Caliper | 7, Spec defect, non-blocking: Nothing checks the fake's check order or its message. DR4 runs the re-entry guard first, and DR7 says the fake follows "DR4's order" "with the same message". When a non-record fake is entered a second time while it is still open, both checks fire, because its own flag is `True`. AC6.1's fake checks ("entering an entered fake and an exited fake each raise") and §6's `TestFakeUnitOfWork` "re-entry guard's two cases" check only that it raises. On the real one, AC6.1 checks "raises the guard's message". A fake that runs the open-scope check first, or uses its own message, passes AC6.1 and AC8.3. | Accepted. AC6.1 and §6's `TestFakeUnitOfWork` assert the guard's message on the fake, the same as the real one's, including a non-record fake entered again while still open, where both checks apply and the guard runs first. |
 | 20261114 | Caliper | 7, Spec defect, non-blocking: Nothing checks that a record fake resets the flag by token, which Ray's 20261114 meaning row requires and DR7 states ("Every fake, record or not, … resets it with its token in a `finally`"). AC8.3's "a non-record fake enters after the outer has exited …" and §6's "the variable is clear after a normal exit, after an `Exception` and after a `KeyboardInterrupt`" do not say whether a record fake is ever the outer. The case "a `record=True` fake inside an open one enters" never checks that the flag is still `True` once the inner fake exits. So a record fake that resets with `set(False)` passes every listed check, while it clears the flag of the non-record fake still open around it. That lets a nested non-record fake through, where production refuses it. The real side has the matching check: AC8.2, "a nested scope leaves it true when it closes". | Accepted. AC8.3 and §6's `TestFakeOpenScopeCheck`: after a record fake exits inside an open non-record fake, a non-record fake entered inside the outer still raises, which a reset to `False` would let through; and the flag is checked clear after each way out with the outer both non-record and `record=True`. |
 | 20261114 | Caliper | Pass at e73eabc, changes since 6ced4d7: 19 items checked, 0 blocking, 3 non-blocking. | n/a |
+| 20261114 | Ray | Anvil's discrepancy: whether `docs/standards/7-file-placement.md` §7's `tests/mocks/` row, "Fakes for external services, never test files", covers a fake of the unit of work and a repository. Ray's reading: the database is an external service under §7, since the application reaches PostgreSQL over a connection as it reaches the AI providers that `tests/mocks/stub_providers.py` stands in for. `tests/mocks/fake_unit_of_work.py` is the fake's home under that row, and DR8's `tests/mocks/__init__.py` wording is right. §7 is not changed. | DR7, DR8, DR13 |
 
 ---
 
@@ -80,7 +81,7 @@
 
 ## 2. Verified current state
 
-Read on `hotfix/issue-258-unit-of-work`, which differs from `origin/main` `e84f093` only in `docs/dev/design/`.
+Read on `hotfix/issue-258-unit-of-work`, which differs from `origin/main` `e84f093` only in `docs/dev/`: this spec and its design study.
 
 | Claim | Evidence (file:line, symbol) |
 | --- | --- |
