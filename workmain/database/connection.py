@@ -2,6 +2,7 @@
 Database connection management using SQLAlchemy
 """
 
+import contextvars
 import os
 from contextlib import contextmanager
 
@@ -19,6 +20,12 @@ load_dotenv()
 # lets go (docs/standards/4-database.md §4.3), or another process, which under §4.1
 # holds a written row only for its own database work, well under a second.
 RECORD_LOCK_TIMEOUT = '5s'
+
+# Whether a session_scope() is open on the calling thread. Only session_scope()
+# sets it, and only scope_open() reads it.
+_scope_open: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    'session_scope_open', default=False
+)
 
 # Create declarative base for models
 Base = declarative_base()
@@ -80,14 +87,18 @@ class DatabaseConnection:
                 session.add(obj)
         """
         session = self.get_session()
+        token = _scope_open.set(True)
         try:
-            yield session
-            session.commit()
-        except Exception:
-            session.rollback()
-            raise
+            try:
+                yield session
+                session.commit()
+            except Exception:
+                session.rollback()
+                raise
+            finally:
+                session.close()
         finally:
-            session.close()
+            _scope_open.reset(token)
     
     @contextmanager
     def record_scope(self):
@@ -118,6 +129,19 @@ db = DatabaseConnection()
 def get_db():
     """Get database connection instance"""
     return db
+
+
+def scope_open() -> bool:
+    """
+    Report whether a session_scope() is open on the calling thread.
+
+    A scope opened inside another leaves this true when it closes, and the
+    value is per thread: a new thread starts with it false.
+
+    Returns:
+        True while a session_scope() or record_scope() is open on this thread
+    """
+    return _scope_open.get()
 
 
 def init_db():

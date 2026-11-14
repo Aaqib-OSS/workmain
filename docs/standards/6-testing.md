@@ -30,7 +30,7 @@
 - **A record committed inside another session's open transaction is discarded by that session's rollback in a test**, though in production it is on its own connection and survives. Test an outside-action record (§4.3) at the function that writes it: call it, fail a later scope, and assert the record through `db_session`.
 - **Inject a database failure; never rely on one.** Patch the module's `get_db` to raise, as `tests/test_ai_costs.py` does.
 - **Leaving the transaction fails the test.** During a test `DatabaseConnection.close()` raises, and replacing `SessionLocal` fails the test at teardown. Code that builds its own engine is outside the fixture, and no test may reach it.
-- `tests/test_database_isolation.py` tests the fixture and the build themselves, so its tests may call `get_db()` and build their own engine. Whatever such a test does outside the fixture's transaction is undone before it ends.
+- `tests/test_database_isolation.py` tests the fixture and the build themselves, so its tests may call `get_db()` and build their own engine. Whatever such a test does outside the fixture's transaction is undone before it ends. `tests/test_unit_of_work.py` tests the scope state and the unit of work, so its tests may call `get_db()` to open a `session_scope()`.
 - **A child process is outside the transaction.** A test that reaches code which launches `workmain` (`workmain/utils/self_invoke.py`, `workmain/workflows/eod_workflow.py`) patches the launch.
 - **Every session in a test shares one connection, so database work stays on the test's thread.** A test that reaches a step thread replaces `threading.Thread`, as `tests/test_orchestration.py` does.
 
