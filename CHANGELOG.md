@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.58.3] - 2026-11-14
+
+Every service built its repositories from a session, so a test of a service needed a database. A unit of work now holds the repositories and the transaction a use case enters, with a fake in `tests/` that keeps its rows in memory, so a converted service can be tested without one. No existing service or command is converted here; #278 to #282 and the open #198 children do that (#258).
+
+### Added
+
+- `workmain/services/unit_of_work.py`: `UnitOfWork`, holding all twelve repositories and its transaction. It commits on a normal exit and rolls back on an exception, has no public commit, and is refused when entered twice or inside an open `session_scope()` unless it records an outside action (`UnitOfWork(record=True)`, on `record_scope()`).
+- `workmain/database/connection.py`: `session_scope()` records that it is open on the calling thread, and `scope_open()` reads it.
+- `tests/mocks/fake_unit_of_work.py`: `FakeUnitOfWork` and `FakeSystemStateRepository`, with tests that run each fake method against the real repository as well as the fake.
+- `automation/session_param_check.py`: lists every function or method that takes a session, in the modules given or in the services a package imports.
+
+### Changed
+
+- `docs/standards/4-database.md` §4.1 states the unit-of-work form beside the session-taking one, and "unit of work" means only the `UnitOfWork` object in §4.1 and §4.3.
+- `docs/standards/6-testing.md` §6.1 lets `tests/test_unit_of_work.py` open a `session_scope()`, and §6.2 says where the fake unit of work is and how a fake repository is written and tested.
+- `docs/ARCHITECTURE.md` names `workmain/services/unit_of_work.py`'s owner, and says a surface builds a unit of work and passes it to a use case.
+
+Suite: 1708 passed, 0 failed, 0 skipped (baseline 1635 passed, 0 failed, 0 skipped).
+
 ## [1.58.2] - 2026-11-13
 
 Comments in 18 test files said a sentinel date, key or ID kept the test clear of production data or of other tests' rows. The test database (#257), rebuilt empty each run with every test rolled back, rules that out. Each comment now gives the value's real reason, or none. Three guards that did no work were removed or made into real checks (#273).
