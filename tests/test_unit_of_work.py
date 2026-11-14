@@ -114,6 +114,23 @@ class TestUnitOfWork:
         for name in UnitOfWork.REPOSITORIES:
             assert not hasattr(uow, name)
 
+    def test_repository_that_fails_to_build_closes_the_scope(self) -> None:
+        class FailingRepository:
+            def __init__(self, session: Session) -> None:
+                raise RuntimeError("repository failed to build")
+
+        uow = UnitOfWork()
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setitem(UnitOfWork.REPOSITORIES, 'notes', FailingRepository)
+            with pytest.raises(RuntimeError, match="repository failed to build"):
+                with uow:
+                    pass
+        assert scope_open() is False
+        for name in UnitOfWork.REPOSITORIES:
+            assert not hasattr(uow, name)
+        with UnitOfWork() as fresh:
+            assert isinstance(fresh.system_state, SystemStateRepository)
+
     def test_repositories_absent_after_commit_raises(self) -> None:
         def failing_commit() -> None:
             raise RuntimeError("commit failed")

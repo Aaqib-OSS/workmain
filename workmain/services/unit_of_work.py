@@ -91,6 +91,9 @@ class UnitOfWork:
             RuntimeError: This instance has been entered before, or it does not
                 record and a session_scope() is already open on this thread.
                 Nothing is opened or changed.
+            BaseException: Building a repository raised. The scope is exited
+                with that exception, no repository is left set, and the
+                instance stays unentered.
         """
         if self._entered:
             raise RuntimeError(_REENTRY_MESSAGE)
@@ -99,10 +102,16 @@ class UnitOfWork:
         db = get_db()
         scope = db.record_scope() if self._record else db.session_scope()
         session = scope.__enter__()
+        try:
+            for name, repository_class in self.REPOSITORIES.items():
+                setattr(self, name, repository_class(session))
+        except BaseException as error:
+            for name in self.REPOSITORIES:
+                self.__dict__.pop(name, None)
+            scope.__exit__(type(error), error, error.__traceback__)
+            raise
         self._entered = True
         self._scope = scope
-        for name, repository_class in self.REPOSITORIES.items():
-            setattr(self, name, repository_class(session))
         return self
 
     def __exit__(
