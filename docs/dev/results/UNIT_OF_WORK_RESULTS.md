@@ -56,7 +56,7 @@ No caller in `workmain/` uses the unit of work yet. Ray has read AC1.2 and AC10.
 | AC9.1 | Met | `pytest automation/session_param_check_test.py`: 21 passed, 0 failed, 0 skipped |
 | AC9.2 | Met | `python3 automation/session_param_check.py workmain/services/*.py --exclude workmain/services/unit_of_work.py` exits 1. As a set, its lines equal the criterion's independent walk: 41 lines, `diff` of the sorted outputs is empty. `--package workmain/workflows` prints `workmain/services/schedule_service.py:36 __init__` |
 | AC10.1 | Met | Ray, 20261114: read `docs/standards/4-database.md` §4.1 for the six points DR11 lists |
-| AC10.2 | Not met | Awaiting Ray: read again after §4 departure 2 |
+| AC10.2 | Met | Ray, 20261114: read again after §4 departure 2, §6.2 tells a test author where the fake unit of work is and how a fake repository is written and tested |
 
 ## 4. Deviations and decisions
 
