@@ -24,6 +24,7 @@ from workmain.services.exceptions import (
     ClientNotFoundError,
     InvalidClientNameError,
 )
+from workmain.services.results import Summary
 
 
 def _seed_linked(session, name):
@@ -217,7 +218,7 @@ class TestDelete:
         assert ClientRepository(db_session).get_by_id(client.id) is None
         assert SystemStateRepository(db_session).get_int("active_client_id") is None
         assert clients_service.get_status(db_session).totals == (
-            clients_service.StatusTotals("internal", None)
+            clients_service.ClientStatusTotals("internal", None)
         )
 
     def test_s16_delete_of_unknown_id(self, db_session):
@@ -231,7 +232,9 @@ class TestActive:
 
         status = clients_service.set_active(db_session, "_t204_ACT")
 
-        assert status.totals == clients_service.StatusTotals("_T204_Act", client.id)
+        assert type(status) is Summary
+        assert status.filters == ()
+        assert status.totals == clients_service.ClientStatusTotals("_T204_Act", client.id)
         db_session.refresh(client)
         assert client.is_active is True
         assert SystemStateRepository(db_session).get_int("active_client_id") == client.id
@@ -243,7 +246,7 @@ class TestActive:
 
         status = clients_service.set_active(db_session, name)
 
-        assert status.totals == clients_service.StatusTotals("internal", None)
+        assert status.totals == clients_service.ClientStatusTotals("internal", None)
 
     def test_s19_unknown_name_leaves_the_active_client(self, db_session):
         repo = ClientRepository(db_session)
@@ -257,7 +260,7 @@ class TestActive:
             f"Client '_T204_' not found. Did you mean: _T204_Alpha (#{alpha.id})?"
         )
         assert clients_service.get_status(db_session).totals == (
-            clients_service.StatusTotals("_T204_Alpha", alpha.id)
+            clients_service.ClientStatusTotals("_T204_Alpha", alpha.id)
         )
 
 
@@ -268,7 +271,8 @@ class TestStatus:
 
         status = clients_service.get_status(db_session)
 
-        assert status.totals == clients_service.StatusTotals("_T204_Act", client.id)
+        assert type(status) is Summary
+        assert status.totals == clients_service.ClientStatusTotals("_T204_Act", client.id)
         assert status.filters == ()
 
     def test_s21_falls_back_to_the_flagged_client(self, db_session):
@@ -280,14 +284,14 @@ class TestStatus:
 
         status = clients_service.get_status(db_session)
 
-        assert status.totals == clients_service.StatusTotals("_T204_Flag", client.id)
+        assert status.totals == clients_service.ClientStatusTotals("_T204_Flag", client.id)
 
     def test_s22_internal_when_nothing_is_active_and_formatters(self, db_session):
         ClientRepository(db_session).clear_active()
 
         status = clients_service.get_status(db_session)
 
-        assert status.totals == clients_service.StatusTotals("internal", None)
+        assert status.totals == clients_service.ClientStatusTotals("internal", None)
         assert clients_service.format_active_marker(True) == "●"
         assert clients_service.format_active_marker(False) == ""
         assert clients_service.format_yes_no(True) == "Yes"

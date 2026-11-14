@@ -138,6 +138,4 @@ Code that breaks a rule above, where the fix is tracked. A known deficiency is n
 
 **Capabilities fetching their own data — #212, and #208 for `workmain/ai/note_condenser.py`.** Covers `workmain/ai/prompt_builder.py`, `workmain/ai/report_generator.py`, `workmain/ai/note_condenser.py` and `workmain/templates_engine/field_manager.py`. The prompt builder, the report generator and the field manager query the database themselves. The note condenser and the field manager are handed database models rather than plain values.
 
-**Per-service status types — #259.** Covers `workmain/services/calendar_service.py` and `workmain/services/clients_service.py`. `workmain/services/calendar_service.py` and `workmain/services/clients_service.py` each declare their own "filters plus totals" wrapper and a type named `StatusTotals`.
-
 **Packages — #263, and #108 for the packages with no modules.** Covers `workmain/**/__init__.py`. `__init__.py` files that hold more than their docstring, and packages with no modules, are found by the package check.

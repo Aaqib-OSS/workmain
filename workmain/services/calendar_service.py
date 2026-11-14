@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from workmain.database.models import Meeting
 from workmain.database.repositories.meetings_repo import MeetingsRepository
 from workmain.services.exceptions import InvalidICSFileError
-from workmain.services.results import Page
+from workmain.services.results import Page, Summary
 from workmain.utils.ics_parser import (
     ICSEvent,
     ICSParseError,
@@ -62,16 +62,19 @@ class MeetingRow:
 
 
 @dataclass(frozen=True)
-class StatusTotals:
+class CalendarStatusTotals:
+    """
+    The count of Outlook meetings, the date of the latest import and the sync state.
+
+    Attributes:
+        events: The number of meetings imported from Outlook.
+        last_import: The date of the latest import, or None when none was made.
+        live_sync: Whether live calendar sync is available.
+    """
+
     events: int
     last_import: Optional[date]
     live_sync: str
-
-
-@dataclass(frozen=True)
-class CalendarStatus:
-    filters: Filters
-    totals: StatusTotals
 
 
 @dataclass(frozen=True)
@@ -169,12 +172,10 @@ def meetings_month(session: Session, today: date) -> Page[MeetingRow]:
     )
 
 
-def get_status(session: Session) -> CalendarStatus:
+def get_status(session: Session) -> Summary[CalendarStatusTotals]:
     """The count of Outlook meetings and the date of the latest import."""
     count, latest = MeetingsRepository(session).get_outlook_import_stats()
-    return CalendarStatus(
-        (), StatusTotals(count, latest.date() if latest else None, LIVE_SYNC)
-    )
+    return Summary(CalendarStatusTotals(count, latest.date() if latest else None, LIVE_SYNC))
 
 
 # ------------------------------------------------------------------

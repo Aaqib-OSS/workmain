@@ -21,7 +21,7 @@ from workmain.services.exceptions import (
     ClientNotFoundError,
     InvalidClientNameError,
 )
-from workmain.services.results import Page
+from workmain.services.results import Page, Summary
 
 
 @dataclass(frozen=True)
@@ -66,19 +66,11 @@ class DeletePreview:
 
 
 @dataclass(frozen=True)
-class StatusTotals:
+class ClientStatusTotals:
     """The active client's name and ID; 'internal' and None when none is set."""
 
     client: str
     client_id: Optional[int]
-
-
-@dataclass(frozen=True)
-class ClientStatus:
-    """The active client context."""
-
-    filters: Tuple[Tuple[str, object], ...]
-    totals: StatusTotals
 
 
 def _row(client: Client) -> ClientRow:
@@ -187,17 +179,17 @@ def delete_client(session: Session, client_id: int) -> ClientRow:
     return row
 
 
-def get_status(session: Session) -> ClientStatus:
+def get_status(session: Session) -> Summary[ClientStatusTotals]:
     """The active client, or internal when none is set."""
     client = ClientRepository(session).get_active()
     if client is None:
-        totals = StatusTotals(client="internal", client_id=None)
+        totals = ClientStatusTotals(client="internal", client_id=None)
     else:
-        totals = StatusTotals(client=client.name, client_id=client.id)
-    return ClientStatus(filters=(), totals=totals)
+        totals = ClientStatusTotals(client=client.name, client_id=client.id)
+    return Summary(totals)
 
 
-def set_active(session: Session, name: str) -> ClientStatus:
+def set_active(session: Session, name: str) -> Summary[ClientStatusTotals]:
     """Make a client active by name, or clear the context with 'internal'.
 
     Raises:
