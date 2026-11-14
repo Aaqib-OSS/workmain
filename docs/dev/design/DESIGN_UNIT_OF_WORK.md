@@ -10,7 +10,7 @@
 
 ## 1. Purpose
 
-Every service function in `workmain/services/` takes a SQLAlchemy `Session` and builds the repositories it needs from it, so a test of a service needs a real database session. Issue #258 adds a unit of work: one object a service receives, holding its repositories and its transaction, with a real form wrapping a session and a fake form in `tests/` holding repositories in memory. Services converted under #198 from #206 on take it; existing services are not converted here. This study measures what the unit of work must fit and sets out the choices whose answers change the spec. Ray answered Q1–Q5 and added scope on 20261113 (§4, §5); Q6 and Q7 are open.
+Every service function in `workmain/services/` takes a SQLAlchemy `Session` and builds the repositories it needs from it, so a test of a service needs a real database session. Issue #258 adds a unit of work: one object a service receives, holding its repositories and its transaction, with a real form wrapping a session and a fake form in `tests/` holding repositories in memory. Services converted under #198 from #206 on take it; existing services are not converted here. This study measures what the unit of work must fit and sets out the choices whose answers change the spec. Ray answered Q1–Q7 and added scope on 20261113 (§4, §5).
 
 ## 2. Scope of the read
 
@@ -78,10 +78,16 @@ Each is the answer a written rule gives. Ray can reverse any of them.
 
 ### Added to #258's scope
 
-Ray, 20261113. Neither is in the issue's criteria; the issue body is edited at close-out to carry them (`docs/standards/1-workflow.md` §1.2).
+Ray, 20261113. None is in the issue's criteria; the issue body is edited at close-out to carry them (`docs/standards/1-workflow.md` §1.2).
 
 1. **Re-entry guard.** `__enter__` raises if the unit of work is already entered or has been used. Without it a nested or reused unit of work silently drops writes: the inner scope replaces the outer one's session, and the outer scope never exits. Tested against the real unit of work.
 2. **Scope parameter.** The unit of work wraps `session_scope()` by default and `record_scope()` when told to. Without it the Clockify pull path (F7) has nothing to pass to a converted `create_note`. Savepoints (F8) stay with the converting issue.
+3. **Open-scope check.** The check on Q5's sixth point. pytest under F15 cannot show a second session waiting or reading stale (F25), so the check is on the call, not its effect.
+   - `session_scope()` sets a context variable while it is open, and resets it with its token in a `finally`, so `SystemExit` and `KeyboardInterrupt`, which skip its commit and rollback (§4.1), clear it too.
+   - `UnitOfWork.__enter__` on `session_scope()` raises when the variable is set. A record-scope unit of work does not check it.
+   - Because the unit of work wraps `session_scope()`, an entered unit of work sets the variable itself, so the check also catches a use case nested in another on a fresh unit of work: the gap the re-entry guard cannot see (Q5, third point).
+   - It fails in production as in tests: every test that drives a command into a use case inside its scope fails whatever the data, and the daemon and Slack paths fail loudly rather than hang. A static check for a use-case call lexically inside a `with … session_scope()` block was set aside: it misses a call made through a helper, and that miss is silent.
+   - Tests: a use case entered inside an open `session_scope()` raises; entered after the scope closes, it does not; the variable is clear after the scope exits by an `Exception` and by a `BaseException`.
 
 ### Q1 — Where it lives and who owns it
 
@@ -164,19 +170,16 @@ What it is for: F11 — a service test passes against a fake that answers differ
 - **Approach:** §4.1 states:
   - the session-taking form and the unit-of-work form side by side;
   - a use case enters a unit of work; an operation takes one already entered and never enters or commits it;
-  - workflows, orchestration and the daemon call use cases: they build one unit of work per call and never enter one themselves. A use case never builds a unit of work; only its caller does, so one use case never calls another on a unit of work of its own, which the re-entry guard cannot see;
+  - workflows, orchestration and the daemon call use cases: they build one unit of work per call and never enter one themselves. A use case never builds a unit of work; only its caller does, so one use case never calls another on a unit of work of its own, which the re-entry guard cannot see and the open-scope check catches (Added to #258's scope, item 3);
   - the wait rule, narrowed: a use case holds no write across an outside call (F20, F23);
   - a use case that decides not to go ahead raises, so a normal return always means its writes are wanted (F22);
   - a use case is not called inside an open `session_scope()`, except on a `record_scope()` unit of work under §4.3's existing conditions. Reasoning: a second session beside an open one can wait forever on the first's locks and reads around its uncommitted writes (F25). §4.3 already allows exactly one second session beside an open one, the outside-action record, because it is written immediately after the action and never writes or references a row the open transaction has written; a record-scope unit of work under those same conditions carries the same guarantee, and its `lock_timeout` turns any wait into an error. No other condition carries it: "the caller has not written since its last commit" holds at eight of F25's sites today, but nothing keeps it true when the command changes, and the stale read after the call remains.
 - **Pros:** §6.2 already names the unit of work (F3); every converting author reads the rule, not a precedent.
 - **Cons:** a standards edit the issue did not list.
 
-**Where the third and sixth points meet the outside-action record.** An outside-action record is written while a use case runs: `condense_meeting` calls `provider_manager.generate`, which records its cost through `record_scope()` (`workmain/ai/provider_manager.py:210`), and #262 moves that recording into the application layer that asked for it. If that record goes onto a record-scope unit of work, the use case that made the call is the code that would build it, which the third point forbids. Two forms satisfy both points; which one is Ray's:
+**The outside-action record.** An outside-action record is written while a use case runs: `condense_meeting` calls `provider_manager.generate`, which records its cost through `record_scope()` (`workmain/ai/provider_manager.py:210`). Ray, 20261113: the third point holds without exception. A use case that makes an outside call receives the outside-call dependency from its caller (the provider manager, per #198's testing-review decision 2), and that dependency makes its own §4.3 record. The use case never builds a unit of work, its caller passes nothing extra, and a test passes a stub that records nothing (`tests/mocks/stub_providers.py`). Reasoning: a §4.3 record is not part of the use case's transaction by design; passing it with the dependency keeps it out of the use case without exposing it to every caller. The shape of the dependency and its recording belong to #262 and the first conversion that calls a provider. Two forms considered first were set aside: a caller passing a second, record-scope unit of work exposes the record to every caller of such a use case, and a carve-out letting a use case build one on `record_scope()` makes the third point a rule with an exception.
 
-- **The caller passes it in.** A use case that makes an outside call takes a second, record-scope unit of work, or a factory for one, from its caller. The third point holds without exception; every caller of such a use case builds two.
-- **A stated carve-out.** The third point reads "a use case never builds a unit of work on `session_scope()`"; it may build one on `record_scope()` for a §4.3 record. One rule gains an exception, and the record stays where the outside call is.
-
-**How the sixth point could be checked.** pytest under F15 cannot show a second session waiting or reading stale (F25), so the check is on the call, not its effect. Proposed, as a mechanism the issue did not name: `session_scope()` sets a context variable while it is open, and `UnitOfWork.__enter__` on `session_scope()` raises when one is set on the same thread. A record-scope unit of work does not check it. It fails in production as in tests: every test that drives a command into a use case inside its scope fails, whatever the data, and the daemon and Slack paths fail loudly rather than hang. A static check (a use-case call lexically inside a `with … session_scope()` block) is the alternative; it misses a call made through a helper, and that miss is silent.
+**Checking the sixth point** is the open-scope check, item 3 under Added to #258's scope.
 
 #### Option B — no; #206 states it when it first uses one
 
@@ -186,13 +189,13 @@ What it is for: F11 — a service test passes against a fake that answers differ
 
 ### Q6 — Converting the note and time-entry write family
 
-Open. Converting `create_note` and `create_paired_time_entry` (and with them `create_time_entry` and `link_condensed_note`, F19) cuts across command groups: they are called from the meetings, notes and time groups (#208, #209, #216), from `clockify_service.apply_pull` (F7) and from `ActionExecutor` (F24). Under §4 they become operations, and the groupings F19 lists become use cases that enter the unit of work.
+Converting `create_note` and `create_paired_time_entry` (and with them `create_time_entry` and `link_condensed_note`, F19) cuts across command groups: they are called from the meetings, notes and time groups (#208, #209, #216), from `clockify_service.apply_pull` (F7) and from `ActionExecutor` (F24). Under §4 they become operations, and the groupings F19 lists become use cases that enter the unit of work.
 
 #### Option A — a separate #198 child, sequenced before #208, #209 and #216
 
 - **Approach:** one issue converts the family to operations, adds the use cases F19's groupings need, and moves every caller onto them: the three command groups' call sites, `apply_pull` (on a `record_scope()` unit of work) and `ActionExecutor`.
 - **Pros:** no command-group conversion carries the change or two signatures; the write path (`CLAUDE.md` § Note Write-Path Convergence) changes once, in one spec, against one census.
-- **Cons:** it edits three unconverted command groups' call sites, which #208, #209 and #216 then convert again in their own terms. Each moved call site that sits inside an open scope, eleven of twelve (F25), is restructured so the use case runs outside the command's scope: the command closes its scope before the call and opens a new one for anything it reads after, it hands the use case ids rather than its own models (`link_condensed_note`'s `Meeting`), and the three that have written since their last commit either commit before the call or move that write (the condensation) into the use case. `ActionExecutor`'s two calls run inside the scope its callers open in `workmain/daemon/daemon.py` and `workmain/integrations/slack/slack_eod.py`, so the move reaches code #261 and #254 also change.
+- **Cons:** it edits three unconverted command groups' call sites, which #208, #209 and #216 then convert again in their own terms. Each moved call site that sits inside an open scope, eleven of twelve (F25), is restructured so the use case runs outside the command's scope: the command closes its scope before the call and opens a new one for anything it reads after, it hands the use case ids rather than its own models (`link_condensed_note`'s `Meeting`), and the three that have written since their last commit either commit before the call or move that write (the condensation) into the use case. `ActionExecutor`'s two calls run inside the scope its callers open at `workmain/daemon/daemon.py:492` and `workmain/integrations/slack/slack_eod.py:468`, around the whole of `execute`, so the move reaches scopes #261 and #254 also change: those two callers stop opening a scope around `execute`, and `ActionExecutor` opens one for each handler that still takes a session and builds a unit of work for each that calls a use case (Q5, third point). Sequencing: the child is opened with #254 and #261 in its `blocking` field (`docs/standards/1-workflow.md` §1.3), so both start from the restructured scopes and neither edits those lines while the child does; its position on the board is Ray's (§1.6).
 
 #### Option B — the first of #208, #209 and #216 on the board carries it
 
@@ -206,7 +209,7 @@ A third form, a unit-of-work signature beside the session one until the last gro
 
 ### Q7 — Where the criterion retiring the session-taking form lives
 
-Open. No issue converts the non-CLI callers onto a unit of work (F24), and #261 and #262 are not #198 children.
+No issue converts the non-CLI callers onto a unit of work (F24), and #261 and #262 are not #198 children.
 
 #### Option A — on #198, with each caller's issue converting its own call sites
 
@@ -229,9 +232,9 @@ Open. No issue converts the non-CLI callers onto a unit of work (F24), and #261 
 | Q2 | Does the real unit of work hold every repository from the start, or only those a converted service uses, added per conversion? | Ray, 20261113: Option A, every repository. |
 | Q3 | Does #258 ship a fake of `SystemStateRepository` only, or of what #206's `status` reads today? | Ray, 20261113: Option A, a fake of `SystemStateRepository` only, over one shared in-memory store (F12). |
 | Q4 | Is a fake kept faithful by name and signature parity only, by parity plus behaviour tests run against both the fake and the real repository, or not at all? | Ray, 20261113: Option B, parity plus behaviour tests run against both. |
-| Q5 | Does #258 state the unit of work in `docs/standards/4-database.md` §4.1, or is that left to #206? | Ray, 20261113: Option A, with the five points first listed. The sixth point, the addition to the third, how they meet the outside-action record, and the check proposed for the sixth were raised in review, 20261113, and await Ray. |
-| Q6 | Is the note and time-entry write family converted by a separate #198 child sequenced before #208, #209 and #216, or by the first of those three on the board? | |
-| Q7 | Does the criterion retiring the session-taking form live on #198, with each non-CLI caller's issue converting its own call sites, or on a last #198 child? | |
+| Q5 | Does #258 state the unit of work in `docs/standards/4-database.md` §4.1, or is that left to #206? | Ray, 20261113: Option A, with all six points as Q5 Option A lists them, including the third point's "a use case never builds a unit of work; only its caller does". The outside-action record is made by the outside-call dependency the caller passes in (Q5, The outside-action record). The sixth point is checked by the open-scope check, added to #258's scope. |
+| Q6 | Is the note and time-entry write family converted by a separate #198 child sequenced before #208, #209 and #216, or by the first of those three on the board? | Ray, 20261113: Option A, a separate #198 child sequenced before #208, #209 and #216, opened with #254 and #261 in its `blocking` field. |
+| Q7 | Does the criterion retiring the session-taking form live on #198, with each non-CLI caller's issue converting its own call sites, or on a last #198 child? | Ray, 20261113: Option A, on #198, with each non-CLI caller's issue converting its own call sites. |
 
 ## 6. Disposition
 
