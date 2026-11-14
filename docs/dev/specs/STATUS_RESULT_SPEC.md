@@ -30,6 +30,7 @@
 | 20261114 | Caliper | Pass at dc930c4, full: 28 items checked, 1 blocking, 4 non-blocking. | n/a |
 | 20261114 | Caliper | 3, Spec defect, non-blocking: Step 2.3 ends "No assertion changes beyond those step 1 adds." Inside Step 2, "step 1" can mean Step 2's own item 1 or the spec's Step 1. Step 1 adds no assertion to `tests/test_clients_service.py`, and Step 2.3 itself adds none, so either reading leads to the same build. But the sentence uses the name of a defined step to mean a sub-item. Every other in-step reference spells out what it means (Step 1.3: "on that line"; Step 2's opening: "`Summary` exists from Step 1"). | Accepted. Step 2.3 now reads "beyond those item 1 of this step adds". |
 | 20261114 | Caliper | Pass at c9afd97, changes since dc930c4: 22 items checked, 0 blocking, 1 non-blocking. | n/a |
+| 20261114 | Caliper (post-implementation) | No findings. | n/a |
 
 ---
 
