@@ -71,8 +71,13 @@ The issue puts every kind of argument to one choice: rule 5 names it, or the tes
   - a fixture in `tests/conftest.py` (F3, and `db_session`)
   - a name the `parametrize` mark on the test or on its class supplies (F6, F7, F8)
 
-  Anything else is built in the test body. The fixtures in F4 become module helpers that each test calls in its body. The `@patch` decorators in F5 become `with patch(...) as mock_generate:` in the body. The rule keeps its reason, and §6.1 and §6.2's Repository fake rule then agree with it.
-- **Pros:** The suite already does this, so the rule describes it. One place, `tests/conftest.py`, holds every fixture a test can take that pytest does not provide. The rule doesn't have to change when a new built-in or shared fixture comes into use. F9 and F10 stop contradicting rule 5. Edits are limited to 34 tests in 8 files, all mechanical.
+  Anything else is built in the test body.
+  - **The F4 fixtures become helpers in the same file**, each called in the test body. Two of them, `provider_manager` and `dirs`, are yield fixtures: each yields inside a `with patch(...)`, so pytest undoes the patch at teardown. Each becomes a `contextlib.contextmanager` function with the same body, and the test enters it: `with _provider_manager() as provider_manager:` and `with _dirs(tmp_path) as (reports, drafts):`. The patch is then undone when the `with` block exits, where pytest's teardown used to undo it, and no later than the test's end. The other four have no teardown and become plain functions: `ts`, `loader` and `_sentinel_monday` return a value, and `_active_client(db_session)` seeds the client on the test's session and returns it.
+  - **F5's `@patch` decorators become `with patch(...) as mock_generate:`** in the test body, for the two tests in the plain class `TestNotesLogUnitOfWork` (`tests/test_notes_log.py:243`, `:265`). The three in `unittest.TestCase` classes (`tests/test_meetings_condense.py:93`, `:124`; `tests/test_notes_log.py:156`) are left as they are. #208 (meetings) and #209 (notes) replace those tests when they convert their command groups.
+  - **Rule 5 states what it governs:** how a test gets what it takes. It does not change what a test may assert. The §6.2 rules for each layer still govern that, so being allowed to take `capsys` does not allow reading printed text outside the tests that §6.2's Renderer rule names.
+
+  The rule keeps its reason, and §6.1 and §6.2's Repository fake rule then agree with it.
+- **Pros:** The suite already does this, so the rule describes it. One place, `tests/conftest.py`, holds every fixture a test can take that pytest does not provide. The rule doesn't have to change when a new built-in or shared fixture comes into use. F9 and F10 stop contradicting rule 5. Edits are limited to 31 tests in 7 files, all mechanical.
 - **Cons:** A shared fixture in `tests/conftest.py`, such as `offline_provider_env`, still sets up things a reader cannot see from the test body.
 
 ### Option B — rule 5 names any fixture
@@ -87,17 +92,17 @@ The issue puts every kind of argument to one choice: rule 5 names it, or the tes
 - **Pros:** The rule needs no change, apart from what a parametrized name is.
 - **Cons:** 123 arguments in 23 files rewritten into code that does the same thing in more lines (F12). §6.1's exemplar (F10) has to change with them. It keeps a list that F11 shows was never measured against the suite, and every built-in that comes into use later goes against it.
 
-**Recommendation: Option A.** Rule 5 is there to fix the form of a test, an argument rather than `setUp`, `setup_method` or `self` (F11). A built-in fixture, a shared fixture and a parametrized name all fit that form, and the standard already relies on two of them (F9, F10). Moving them into the body changes nothing a test does (F12), so C is churn. B is cheaper than A by 34 edits, but it leaves the second half of the rule meaning nothing, and it allows the one positional-injection form (F5) the suite barely uses. A keeps the second half meaningful, and means the lines the rule allows can be read off a file listing, not a register of names that must be kept up by hand (`docs/standards/1-workflow.md` §1.5).
+**Recommendation: Option A.** Rule 5 is there to fix the form of a test, an argument rather than `setUp`, `setup_method` or `self` (F11). A built-in fixture, a shared fixture and a parametrized name all fit that form, and the standard already relies on two of them (F9, F10). Moving them into the body changes nothing a test does (F12), so C is churn. B is cheaper than A by 31 edits, but it leaves the second half of the rule meaning nothing, and it allows the one positional-injection form (F5) the suite barely uses. A keeps the second half meaningful, and means the lines the rule allows can be read off a file listing, not a register of names that must be kept up by hand (`docs/standards/1-workflow.md` §1.5).
 
 ## 5. Open questions
 
 | Q | Question | Answer |
 | --- | --- | --- |
-| Q1 | Which option does rule 5 take: A (sources: pytest built-ins, `tests/conftest.py` fixtures, the test's or its class's `parametrize`; test-file fixtures and `@patch` arguments move into the body), B (any fixture, no test edits), or C (the three names; built-ins and fixtures rebuilt in the body)? | |
-| Q2 | Is the issue's work also to state rule 5's position on fixtures a test depends on without naming them: the two test-file `autouse` fixtures (F13) and the seven `usefixtures` marks (F14)? Or do they go to an issue of their own? Joining this issue means the study adds options for them before the spec. | |
-| Q3 | 86 module-level tests in 9 files break rule 5's "method of a plain class" (F15), and no open issue covers them. Do they join this issue, go to an issue of their own, or does rule 5 change? The 60 TestCase tests are already covered by the command-group issues under #198 and are not proposed here. | |
+| Q1 | Which option does rule 5 take: A (sources: pytest built-ins, `tests/conftest.py` fixtures, the test's or its class's `parametrize`; test-file fixtures and `@patch` arguments move into the body), B (any fixture, no test edits), or C (the three names; built-ins and fixtures rebuilt in the body)? | Q1 answered 20261114, Ray: Option A, with three corrections, now in Option A's approach: the yield fixtures `provider_manager` and `dirs` become context managers so their patches are still undone; the three `@patch` tests in `unittest.TestCase` classes are left to #208 and #209; rule 5 states that it governs how a test gets an argument, not what the test asserts. |
+| Q2 | Is the issue's work also to state rule 5's position on fixtures a test depends on without naming them: the two test-file `autouse` fixtures (F13) and the seven `usefixtures` marks (F14)? Or do they go to an issue of their own? Joining this issue means the study adds options for them before the spec. | Q2 answered 20261114, Ray: an issue of its own, #287, blocked by #278. |
+| Q3 | 86 module-level tests in 9 files break rule 5's "method of a plain class" (F15), and no open issue covers them. Do they join this issue, go to an issue of their own, or does rule 5 change? The 60 TestCase tests are already covered by the command-group issues under #198 and are not proposed here. | Q3 answered 20261114, Ray: an issue of its own, #288; rule 5 unchanged. |
 
 ## 6. Disposition
 
-- Promoted to:
+- Promoted to: F13 and F14 to issue #287; the module-level part of F15 to issue #288.
 - Superseded by:
