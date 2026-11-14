@@ -10,7 +10,7 @@
 
 ## 1. Summary
 
-Complete. All six steps shipped as the spec writes them, with no departure:
+Complete. All six steps shipped as the spec writes them. Two changes Ray directed after the steps were committed are recorded in §4:
 
 - `session_scope()` now records whether it is open on the calling thread, and `scope_open()` reads it.
 - `workmain/services/unit_of_work.py` adds `UnitOfWork`. It holds all twelve repositories and its transaction, guards against re-entry, and is refused inside an open scope unless it records.
@@ -18,7 +18,7 @@ Complete. All six steps shipped as the spec writes them, with no departure:
 - `automation/session_param_check.py` lists session parameters.
 - The map and `docs/standards/4-database.md` §4.1, §4.3 and `docs/standards/6-testing.md` §6.1, §6.2 state the unit-of-work form.
 
-No caller in `workmain/` uses the unit of work yet. Three criteria are readings by Ray (AC1.2, AC10.1, AC10.2) and are left to him.
+No caller in `workmain/` uses the unit of work yet. Ray has read AC1.2 and AC10.1 as met; AC10.2 awaits his second reading.
 
 ## 2. What shipped, by step
 
@@ -30,13 +30,15 @@ No caller in `workmain/` uses the unit of work yet. Three criteria are readings 
 | 4 (`e4f5ec7`) | `automation/session_param_check.py` (DR14) and its tests | `automation/session_param_check.py`, `automation/session_param_check_test.py` | +21 (automation suite) |
 | 5 (`4737662`) | §4.1's unit-of-work form and its six points, "unit of work" held to the object in §4.1 and §4.3 (DR11); §6.2 Service and Repository fake bullets (DR13) | `docs/standards/4-database.md`, `docs/standards/6-testing.md` | 0 |
 | 6 | This artifact | `docs/dev/results/UNIT_OF_WORK_RESULTS.md` | 0 |
+| After 6 (`0ac72d4`) | `UnitOfWork.__enter__` closes its scope when a repository fails to build (§4, departure 1) | `workmain/services/unit_of_work.py`, `tests/test_unit_of_work.py` | +1 |
+| After 6 (`c2b2aab`) | §6.2 Repository fake bullet says how a fake repository is written (§4, departure 2) | `docs/standards/6-testing.md` | 0 |
 
 ## 3. Acceptance criteria
 
 | AC | Status | Evidence |
 | --- | --- | --- |
-| AC1.1 | Met | `pytest tests/test_unit_of_work.py::TestUnitOfWork`: 7 passed, 0 failed, 0 skipped. Covers repositories built on the one session opened while entered, absent after exit and after a commit that raises, and no `session`, `commit`, `rollback` or `begin_nested` attribute |
-| AC1.2 | Not met | Awaiting Ray |
+| AC1.1 | Met | `pytest tests/test_unit_of_work.py::TestUnitOfWork`: 8 passed, 0 failed, 0 skipped. Covers repositories built on the one session opened while entered, absent after exit, after a commit that raises and after a repository that fails to build, and no `session`, `commit`, `rollback` or `begin_nested` attribute |
+| AC1.2 | Met | Ray, 20261114: read `docs/ARCHITECTURE.md` section 1's Surfaces row and section 2's `unit_of_work.py` and `connection.py` lines |
 | AC2.1 | Met | `pytest tests/test_fake_unit_of_work.py::TestFakeUnitOfWork`: 8 passed, 0 failed, 0 skipped. No test in the class (lines 28–101) takes `db_session` |
 | AC2.2 | Met | `TestFakeUnitOfWork::test_exception_restores_store_and_sets_rolled_back`: seeds a store, deep-copies it as the expected state, writes and raises, then asserts `uow.store is store`, `store == expected`, `rolled_back` true and `committed` false |
 | AC2.3 | Met | `pytest tests/test_fake_unit_of_work.py::TestFakeParity`: 2 passed, 0 failed, 0 skipped |
@@ -45,7 +47,7 @@ No caller in `workmain/` uses the unit of work yet. Three criteria are readings 
 | AC3.2 | Met | `TestUnitOfWork::test_rolls_back_on_exception_and_propagates`: the `ValueError` is seen outside, and `db_session` finds no row |
 | AC3.3 | Met | `TestUnitOfWork::test_discards_writes_on_keyboard_interrupt`: `KeyboardInterrupt` caught outside, no row through `db_session` |
 | AC4.1 | Met | `python3 automation/architecture_check.py` prints `New findings: 0` |
-| AC5.1 | Met | `pytest`: 1707 passed, 0 failed, 0 skipped |
+| AC5.1 | Met | `pytest`: 1708 passed, 0 failed, 0 skipped |
 | AC6.1 | Met | `pytest tests/test_unit_of_work.py::TestReentryGuard`: 6 passed, 0 failed, 0 skipped. This covers the guard's message on an entered and an exited instance, and a refused instance entering once the scope closes. A `get_session` counter, built with `pytest.MonkeyPatch.context()`, shows 0 sessions for each of the three refusals. Fake: `TestFakeUnitOfWork::test_entered_again_while_open_raises_guard_message` and `::test_entered_after_exit_raises_guard_message` pass, as does `TestFakeOpenScopeCheck::test_refused_fake_leaves_store_and_enters_after_outer_exits` |
 | AC7.1 | Met | `pytest tests/test_unit_of_work.py::TestRecordUnitOfWork`: 2 passed, 0 failed, 0 skipped. The record unit of work reads `RECORD_LOCK_TIMEOUT`. The default one reads the same value as `db_session` and not `RECORD_LOCK_TIMEOUT` |
 | AC8.1 | Met | `pytest tests/test_unit_of_work.py::TestOpenScopeCheck`: 4 passed, 0 failed, 0 skipped |
@@ -53,14 +55,15 @@ No caller in `workmain/` uses the unit of work yet. Three criteria are readings 
 | AC8.3 | Met | `pytest tests/test_fake_unit_of_work.py::TestFakeOpenScopeCheck`: 10 passed, 0 failed, 0 skipped. No test in the class takes `db_session`. `test_record_inside_open_non_record_enters_and_restores_flag` shows that the record fake resets by token |
 | AC9.1 | Met | `pytest automation/session_param_check_test.py`: 21 passed, 0 failed, 0 skipped |
 | AC9.2 | Met | `python3 automation/session_param_check.py workmain/services/*.py --exclude workmain/services/unit_of_work.py` exits 1. As a set, its lines equal the criterion's independent walk: 41 lines, `diff` of the sorted outputs is empty. `--package workmain/workflows` prints `workmain/services/schedule_service.py:36 __init__` |
-| AC10.1 | Not met | Awaiting Ray |
-| AC10.2 | Not met | Awaiting Ray |
+| AC10.1 | Met | Ray, 20261114: read `docs/standards/4-database.md` §4.1 for the six points DR11 lists |
+| AC10.2 | Not met | Awaiting Ray: read again after §4 departure 2 |
 
 ## 4. Deviations and decisions
 
 | # | Departure or ambiguity | Step stopped at | Resolution | Resolved by |
 | --- | --- | --- | --- | --- |
-| — | None | — | — | — |
+| 1 | `UnitOfWork.__enter__` left its scope open when building a repository raised after the scope had opened: the session stayed open and `scope_open()` stayed true on that thread, refusing every later unit of work there. Found by Ray after Step 2's commit. | none | `__enter__` catches any `BaseException` from the repository loop, removes the repositories already set, exits the scope with that exception, and re-raises, leaving the instance unentered (`0ac72d4`). `TestUnitOfWork::test_repository_that_fails_to_build_closes_the_scope` failed before the fix (`scope_open()` true) and passed after. Ruled within DR4's "a refused `__enter__` changes nothing" | Ray, 20261114 |
+| 2 | `docs/standards/6-testing.md` §6.2's Repository fake bullet said where a fake goes and how it is tested, but not how it is written, so AC10.2 was not met. Found by Ray after Step 5's commit. | none | The bullet now says a fake repository takes the fake unit of work's store, keeps its rows under its table's name, and is added to `FakeUnitOfWork.REPOSITORIES` under the same attribute name as in `UnitOfWork.REPOSITORIES` (`c2b2aab`). Text beyond DR13's | Ray, 20261114 |
 
 **Decisions below the contract.**
 
@@ -93,11 +96,13 @@ No caller in `workmain/` uses the unit of work yet. Three criteria are readings 
 | 25 | 5 | §4.1 layout: point 1 ("two forms") comes before the two existing session-taking bullets, and points 2–6 directly after them. Point 1 names each form's bullets by position | All six points together before the existing bullets | DR11 point 1 keeps the existing bullets as the session-taking form's, and the order 1–6 is kept |
 | 26 | 5 | §4.1's unit-of-work example is a second code block after the existing one, and it uses `uow.system_state.set_bool` | One block holding both forms | Each form reads on its own, and the method is real |
 | 27 | 5 | The wait-rule bullet states only DR11 point 4 and calls it the unit-of-work form's wait rule | A drafted sentence on placing the outside call around writes, removed before the commit | That sentence was wrong (a write made earlier in the unit of work is held until exit) and is not in DR11 |
+| 28 | After 6 | On a repository build failure, the repositories are removed before the scope is exited | Exiting the scope first | Removal cannot raise; if the scope's exit raises a new exception, no repository is left set |
+| 29 | After 6 | The build-failure test replaces the `notes` entry of `UnitOfWork.REPOSITORIES` with `pytest.MonkeyPatch.context().setitem` | The first or the last entry | A middle entry leaves repositories already set before the failure, so their removal is exercised |
 
 ## 5. Verification
 
-- **Test suite:** 1707 passed, 0 failed, 0 skipped (baseline: 1635 passed, 0 failed, 0 skipped). `pytest automation/`: 134 passed, 0 failed, 0 skipped.
-- **Defect shown before the fix:** n/a. Issue #258 is a gap, not a defect fix.
+- **Test suite:** 1708 passed, 0 failed, 0 skipped (baseline: 1635 passed, 0 failed, 0 skipped). `pytest automation/`: 134 passed, 0 failed, 0 skipped.
+- **Defect shown before the fix:** issue #258 is a gap. For §4 departure 1, `tests/test_unit_of_work.py::TestUnitOfWork::test_repository_that_fails_to_build_closes_the_scope` was run on the unfixed `__enter__` (1 failed: `assert True is False` where `True = scope_open()`) and on the fix (1 passed).
 - **Live verification:** none. No caller in `workmain/` builds a unit of work (DR6).
 - **Daemon restart:** close-out's (`docs/standards/2-git.md` §2.6).
 
