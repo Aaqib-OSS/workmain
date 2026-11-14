@@ -10,7 +10,7 @@
 
 ## 1. Purpose
 
-`workmain/services/calendar_service.py` and `workmain/services/clients_service.py` each declare a result that holds only `filters` and `totals`, and each declares a totals type named `StatusTotals`. `docs/ARCHITECTURE.md` section 1, Result types, requires one generic type in `workmain/services/results.py` for a result shape several services share, and names unique to their domain for a domain's own types. Ray set the direction on 20261102 (option A of the architecture map decisions): one generic "filters plus totals" result beside `Page`, which both services return, and a renamed totals type in each service. This study measures what the change reaches and sets out the two names the spec needs.
+`workmain/services/calendar_service.py` and `workmain/services/clients_service.py` each declare a result that holds only `filters` and `totals`, and each declares a totals type named `StatusTotals`. `docs/ARCHITECTURE.md` section 1, Result types, requires one generic type in `workmain/services/results.py` for a result shape several services share, and names unique to their domain for a domain's own types. Ray set the direction on 20261102 (option A of the architecture map decisions): one generic "filters plus totals" result beside `Page`, which both services return, and a renamed totals type in each service. This study measures what the change reaches and sets out the two names the spec needs. Ray answered Q1 and Q2 on 20261114 (§5).
 
 ## 2. Scope of the read
 
@@ -53,7 +53,15 @@ Two rules settle the field order and default, so this isn't an open question. Th
 
 ### What the issue's third criterion is checked by
 
-A rule settles this too: `docs/standards/1-workflow.md` §1.2, that a criterion's check must be able to produce the answer it states, and that a criterion verifying changed behaviour covers every entry path. The command tests can't show that output is unchanged (F7), and the criterion leaves out `clients set active` (F6). The spec restates the criterion in its §5 for all three commands. The check is a rendering test for each `STATUS` view: it hands a result built from the service types to a real `Renderer` and asserts the exact text printed. It is written and passing before the types change, and passes unchanged afterwards apart from the renamed types. The issue body's edit is made at close-out.
+Rules settle this too. `docs/standards/1-workflow.md` §1.2 says a criterion's check must be able to produce the answer it states, and a criterion that verifies changed behaviour covers every entry path. The command tests can't show that output is unchanged (F7), and the criterion leaves out `clients set active` (F6), so the spec restates the criterion in its §5 for all three commands.
+
+The check can't be a test that renders the real `STATUS` views. `docs/standards/6-testing.md` §6.2 makes renderer tests the only tests that read printed text: they live in `tests/test_output.py` and build their view and result by hand. The output is instead fixed by its three inputs, each checked on its own:
+
+- **The views and the renderer.** Nothing under `workmain/cli/` changes on the branch.
+- **The values the renderer reads.** `Renderer.report` reads only `result.filters`, the `totals` attribute and that object's fields (F5). The service tests' assertions on `filters` and on every totals field stay the same, apart from the type names.
+- **The wiring.** The three command tests pass unchanged.
+
+The issue body's edit is made at close-out.
 
 ### Q1 — the generic's name
 
@@ -84,10 +92,10 @@ The map requires names unique to the domain. The project's idiom is `<role>Total
 
 | Q | Question | Answer |
 | --- | --- | --- |
-| Q1 | What is the generic "filters plus totals" result in `workmain/services/results.py` named, given that #206's `status` will also return it: `Summary[T]`, `Status[T]` or `Totals[T]`? | |
-| Q2 | What are the two renamed totals types named: `CalendarStatusTotals` and `ClientStatusTotals`, or `OutlookImportTotals` and `ActiveClientTotals`? | |
+| Q1 | What is the generic "filters plus totals" result in `workmain/services/results.py` named, given that #206's `status` will also return it: `Summary[T]`, `Status[T]` or `Totals[T]`? | Ray, 20261114: Option A, `Summary[T]`. `CalendarStatus` and `ClientStatus` are deleted, not kept as aliases of it. |
+| Q2 | What are the two renamed totals types named: `CalendarStatusTotals` and `ClientStatusTotals`, or `OutlookImportTotals` and `ActiveClientTotals`? | Ray, 20261114: Option A, `CalendarStatusTotals` and `ClientStatusTotals`. Both `StatusTotals` names are deleted, not kept as aliases. |
 
 ## 6. Disposition
 
-- Promoted to:
+- Promoted to: `../specs/STATUS_RESULT_SPEC.md`
 - Superseded by:
