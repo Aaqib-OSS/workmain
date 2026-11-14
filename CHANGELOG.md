@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.58.4] - 2026-11-14
+
+`calendar_service` and `clients_service` each declared their own result holding only filters and totals, and each named its totals type `StatusTotals`, so two classes shared one name. Both now return one generic result, and each totals type has a name unique to its service. `calendar status`, `clients status` and `clients set active` print what they printed before (#259).
+
+### Changed
+
+- `workmain/services/results.py`: `Summary[T]`, a result of totals and the filters behind them, beside `Page`.
+- `workmain/services/calendar_service.py`: `get_status` returns `Summary[CalendarStatusTotals]`. `StatusTotals` is renamed `CalendarStatusTotals`, and `CalendarStatus` is deleted.
+- `workmain/services/clients_service.py`: `get_status` and `set_active` return `Summary[ClientStatusTotals]`. `StatusTotals` is renamed `ClientStatusTotals`, and `ClientStatus` is deleted.
+- `docs/ARCHITECTURE.md`: the "Per-service status types" known deficiency is removed.
+
+Suite: 1708 passed, 0 failed, 0 skipped (baseline 1708 passed, 0 failed, 0 skipped).
+
 ## [1.58.3] - 2026-11-14
 
 Every service built its repositories from a session, so a test of a service needed a database. A unit of work now holds the repositories and the transaction a use case enters, with a fake in `tests/` that keeps its rows in memory, so a converted service can be tested without one. No existing service or command is converted here; #278 to #282 and the open #198 children do that (#258).
