@@ -23,8 +23,11 @@
 | 20261113 | Ray | Added to scope: the re-entry guard, the `record` scope parameter, and the open-scope check (design study §4, Added to #258's scope, items 1–3). | DR1, DR2, DR4, DR5 |
 | 20261114 | Ray | Added to scope: `automation/session_param_check.py`, with `--exclude`, `<path>::<function>`, and `--package` resolving imports inside functions (design study §4, item 4). | DR14 |
 | 20261114 | Spanner | The home of Q4's rule for writing a fake is `docs/standards/6-testing.md` §6.2, beside the Service rule that already names the fake unit of work. Without it the next fake (#279–#282) would follow a rule stated only in an archived study, which `docs/standards/1-workflow.md` §1.5 forbids citing as the basis for a decision. | DR13 |
-| 20261114 | Spanner | The open-scope tests must open a bare `session_scope()`, because the check exists for commands that still hold one (DR2). A test that opens it only through a unit of work could pass with the scope state set by the unit of work instead of by `session_scope()`, which would miss exactly that case. `docs/standards/6-testing.md` §6.1 forbids `get_db()` in a test except in `tests/test_database_isolation.py`. Proposed: §6.1 also names `tests/test_unit_of_work.py`, for tests of the scope state and the unit of work. | **Awaiting Ray.** DR13 and Step 1 carry the proposed sentence. |
+| 20261114 | Spanner | The open-scope tests must open a bare `session_scope()`, because the check exists for commands that still hold one (DR2). A test that opens it only through a unit of work could pass with the scope state set by the unit of work instead of by `session_scope()`, which would miss exactly that case. `docs/standards/6-testing.md` §6.1 forbids `get_db()` in a test except in `tests/test_database_isolation.py`. Proposed: §6.1 also names `tests/test_unit_of_work.py`, for tests of the scope state and the unit of work. | Approved, Ray 20261114: `tests/test_unit_of_work.py` may call `get_db()` to open a `session_scope()`, for tests of the scope state and the unit of work. DR13, Step 1. |
 | 20261114 | Spanner | Misuse raises the built-in `RuntimeError`, not a new class: no surface catches it, and `workmain/services/exceptions.py` holds errors raised to surfaces (`docs/ARCHITECTURE.md` section 2). | DR4, DR5 |
+| 20261114 | Ray | Branch: `hotfix/*` stands. The work changes 2 application files (`workmain/database/connection.py`, `workmain/services/unit_of_work.py`), within the limit of 3, and has one root cause: services build their repositories from a session. The session-parameter check is bundled, not a separate concern, because it checks for the form this issue introduces (`docs/standards/2-git.md` §2.2). | Branch field; §4 |
+| 20261114 | Ray | AC6–AC10 are added to issue #258's body before Caliper's review, not at close-out: they are added scope, not criteria the design made wrong, so `docs/standards/1-workflow.md` §1.2's close-out edit does not apply to them. Criterion 1's rewording stays a close-out edit. | §5 |
+| 20261114 | Ray | Finding: every repository keeps its session in a public `.session` attribute, so "the unit of work exposes no session" (DR3) holds only by convention; AC7.1's test reads `uow.system_state.session`. Outside this spec's scope. | **Not fixed here** (`docs/standards/1-workflow.md` §1.2). Proposed to Ray as an issue; awaiting his decision. If it lands, AC7.1's test reads the scope another way there. |
 
 ---
 
@@ -107,7 +110,7 @@ Read on `hotfix/issue-258-unit-of-work`, which differs from `origin/main` `e84f0
 - **DR13 — §6.1 and §6.2 state how a fake is tested.**
   - §6.2, Service bullet, after its last sentence: the fake unit of work is `tests/mocks/fake_unit_of_work.py`'s `FakeUnitOfWork`.
   - §6.2 gains a bullet after Service, **Repository fake**: a fake repository goes in `tests/mocks/fake_unit_of_work.py` with the service that first needs it, and fakes only the methods its services call. A test asserts that each fake method exists on the real repository with an equal signature, and each fake method's behaviour tests run in one class parametrized over the real repository on `db_session` and the fake.
-  - §6.1, the `tests/test_database_isolation.py` bullet, gains `tests/test_unit_of_work.py`: its tests may call `get_db()` to open a `session_scope()`, because they test the scope state and the unit of work. Awaiting Ray (Decision Log).
+  - §6.1, the `tests/test_database_isolation.py` bullet, gains `tests/test_unit_of_work.py`: its tests may call `get_db()` to open a `session_scope()`, because they test the scope state and the unit of work.
 - **DR14 — One script lists session parameters.** `automation/session_param_check.py`, owner `automation/` (`docs/standards/7-file-placement.md` §7; the map covers the application only).
   - A session parameter is one named `session`, or one whose annotation's source text contains `Session`. It is found on any function or method, at any depth.
   - Arguments: one or more module paths, each optionally narrowed as `<path>::<name>` to the functions and methods of that name; or `--package <dir>`, which resolves every import of a `workmain/services/` module made anywhere in the package's modules, at module level or inside a function (`import workmain.services.x`, `from workmain.services.x import y`, `from workmain.services import x`), and checks those modules whole; and `--exclude <path>`, repeatable, which leaves a module out.
@@ -121,7 +124,7 @@ Each step ends with a commit and leaves the suite green.
 
 | Step | Deliverable | Files |
 | --- | --- | --- |
-| 1 | **The scope state.** DR1, DR2. DR13's §6.1 sentence, once Ray rules on it. `TestScopeState` in `tests/test_unit_of_work.py` (§6). | `workmain/database/connection.py`, `docs/standards/6-testing.md`, `tests/test_unit_of_work.py` |
+| 1 | **The scope state.** DR1, DR2. DR13's §6.1 sentence. `TestScopeState` in `tests/test_unit_of_work.py` (§6). | `workmain/database/connection.py`, `docs/standards/6-testing.md`, `tests/test_unit_of_work.py` |
 | 2 | **The unit of work.** DR3–DR6, and DR12's three map changes in the same commit, so `automation/architecture_check.py` finds the new module owned. The remaining classes of `tests/test_unit_of_work.py` (§6). | `workmain/services/unit_of_work.py`, `docs/ARCHITECTURE.md`, `tests/test_unit_of_work.py` |
 | 3 | **The fake.** DR7–DR10. `tests/test_fake_unit_of_work.py` (§6). | `tests/mocks/fake_unit_of_work.py`, `tests/mocks/__init__.py`, `tests/test_fake_unit_of_work.py` |
 | 4 | **The session-parameter check.** DR14, with its tests. | `automation/session_param_check.py`, `automation/session_param_check_test.py` |
@@ -136,10 +139,7 @@ None. No migration, no GitHub object deletion, no merge to `main`, no force-push
 
 ## 5. Acceptance criteria
 
-Issue #258's criteria are AC1–AC5. AC6–AC10 are the scope Ray added (Decision Log, 20261113 and 20261114). At close-out the issue body is edited (`docs/standards/1-workflow.md` §1.2):
-
-- Criterion 1 reads "holds the repositories and its transaction", not "the commit": there is no public `commit()` (DR3).
-- AC6–AC10 are added as criteria.
+Issue #258's criteria are AC1–AC5. AC6–AC10 are the scope Ray added (Decision Log, 20261113 and 20261114), carried in the issue body as its criteria 6–10. At close-out the issue body's criterion 1 is edited to read "holds the repositories and its transaction", not "the commit": there is no public `commit()` (DR3; `docs/standards/1-workflow.md` §1.2).
 
 | AC | Criterion | How it is checked |
 | --- | --- | --- |
