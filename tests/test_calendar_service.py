@@ -29,6 +29,7 @@ from workmain.services.calendar_service import (
     run_import,
 )
 from workmain.services.exceptions import InvalidICSFileError
+from workmain.services.results import Summary
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -120,6 +121,7 @@ class TestStatus:
         _meeting(db_session, "s5@test", datetime(2099, 1, 1, 9, 0))
         count, latest = MeetingsRepository(db_session).get_outlook_import_stats()
         status = get_status(db_session)
+        assert type(status) is Summary
         assert status.filters == ()
         assert status.totals.events == count
         assert status.totals.last_import == latest.date()
