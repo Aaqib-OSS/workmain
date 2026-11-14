@@ -13,8 +13,25 @@
       # ... work ...
   ```
 
-- **The code that opens a scope owns its unit of work.** It may commit inside the scope. Code it hands the session to — a repository, a service, an orchestrator such as `ActionExecutor` — reads and writes through that session and never commits it, rolls it back or opens another. Two exceptions: it may contain a failure in a savepoint (`session.begin_nested()`, below), and it records an outside action in a session of its own (§4.3).
+  ```python
+  from workmain.services.unit_of_work import UnitOfWork
+
+  def set_flag(uow: UnitOfWork, key: str) -> None:    # a use case
+      with uow:
+          uow.system_state.set_bool(key, True)
+          # ... work; a normal return commits ...
+
+  set_flag(UnitOfWork(), 'some_flag')                  # its caller
+  ```
+
+- **There are two forms, side by side.** In the **session-taking form**, the code that opens a `session_scope()` owns it, and code handed the session never commits it. The next two bullets state it, and apply to that form only. In the **unit-of-work form**, a caller builds a `UnitOfWork` (`workmain/services/unit_of_work.py`) and passes it to a use case. The use case enters it with `with uow:`, and on exit it commits after a normal return and rolls back on an `Exception`. It has no public `commit()`. The five bullets after the next two state it, and apply to that form only.
+- **The code that opens a scope owns it.** It may commit inside the scope. Code it hands the session to — a repository, a service, an orchestrator such as `ActionExecutor` — reads and writes through that session and never commits it, rolls it back or opens another. Two exceptions: it may contain a failure in a savepoint (`session.begin_nested()`, below), and it records an outside action in a session of its own (§4.3).
 - **The owner commits before it waits.** If the scope has written since its last commit, the owner commits immediately before it prompts, opens an editor, starts a child `workmain` process or performs an outside action. No transaction holding a write stays open across user input, a child process or a call to another system.
+- **A use case enters its unit of work; an operation is handed one already entered.** A **use case** is a service function that a surface, workflow, orchestration module or the daemon calls: it takes a unit of work not yet entered and enters it. An **operation** is one a use case calls: it takes a unit of work already entered, and never enters or commits it.
+- **Only a use case's caller builds its unit of work.** Workflows, orchestration and the daemon call use cases: they build one unit of work per call and never enter one themselves. A use case never builds a unit of work.
+- **A use case holds no write across an outside call.** This is the wait rule for the unit-of-work form.
+- **A use case that decides not to go ahead raises,** so a normal return always means its writes are wanted.
+- **A use case is not called inside an open `session_scope()`,** except on a `UnitOfWork(record=True)` under §4.3's conditions for an outside-action record; `UnitOfWork.__enter__` raises otherwise. A use case that makes an outside call receives the outside-call dependency from its caller, and that dependency makes its own §4.3 record; the use case never builds a unit of work for it.
 - `get_session()` is a method on `DatabaseConnection`, not a module-level function. In application code under `workmain/`, only `session_scope()` calls it; tests follow §6.1.
 - **A handler that recovers from an exception sits outside the `with`, or outside a savepoint inside it.** A handler that wraps the `with` runs after the scope has rolled back. Inside the block, the guarded work runs in `with session.begin_nested():` and the handler wraps that, so a failure rolls back to the savepoint and the scope carries on. Nothing inside a savepoint commits: a commit there commits the whole transaction. A handler inside the block that swallows a database error without a savepoint leaves the transaction failed, and the scope's commit then raises.
 - **An exception that is not an `Exception` skips both commit and rollback.** `SystemExit` (from `sys.exit()` or `raise SystemExit`) and `KeyboardInterrupt` derive only from `BaseException`, so the scope only closes the session and its uncommitted writes are discarded. `ctx.exit()` and `click.Abort` are `Exception`s and roll the scope back.
@@ -45,7 +62,7 @@
 
 - **A repository method never commits.** It flushes after a write, so the row has its id and its database defaults, and later queries in the session see it.
 - **A repository method that returns rows loads, with them, every related record a caller reads on each row.** A relationship is lazy by default. Reading one issues a query the first time for each row, or for each distinct related row of a many-to-one, so a list of N rows costs up to N + 1 queries. The method uses `contains_eager` where its query already joins the related table, `joinedload` for a many-to-one it doesn't join, and `selectinload` for a one-to-many. It loads only what its callers read. A caller that reads none of it still gets it, and pays one join or one query per call, which doesn't grow with the rows. A change that adds a per-row read of a relationship adds the loader to the method in the same change. §6.2 states how the loading is tested.
-- **A write that records an outside action commits on its own.** A row that records something already done outside WorkmAIn's database — a provider call that has been billed, a file in Drive, a Slack message, an entry in Clockify — is written in its own session, opened with `get_db().record_scope()`, immediately after the action, independent of the command's unit of work, so a later failure in the command can't undo the record of something that can't be undone. `record_scope()` is `session_scope()` with a lock timeout, so a record that reaches a row another transaction holds fails instead of waiting.
+- **A write that records an outside action commits on its own.** A row that records something already done outside WorkmAIn's database — a provider call that has been billed, a file in Drive, a Slack message, an entry in Clockify — is written in its own session, opened with `get_db().record_scope()`, immediately after the action, independent of the command's transaction, so a later failure in the command can't undo the record of something that can't be undone. `record_scope()` is `session_scope()` with a lock timeout, so a record that reaches a row another transaction holds fails instead of waiting.
   - It never writes or references a row the command's open transaction has written. A second session can't see an uncommitted row, and waits on a row the transaction has locked.
   - Its failure is never silent. Cost recording logs a warning and carries on. Every other record reports, on stderr, what happened outside, what was not recorded and what will repeat. The command's exit status doesn't change: the outside action succeeded, and a non-zero exit invites a rerun that would repeat it.
   - It is tested at the function that writes it (§6.1).
