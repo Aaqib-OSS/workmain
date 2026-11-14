@@ -12,7 +12,7 @@ A layer may call the layers below it, and never the layers above it.
 
 | Layer | Packages | Rule |
 | --- | --- | --- |
-| **Surfaces** | `workmain/cli/`, `workmain/daemon/`, the Slack conversation code (`workmain/integrations/slack/slack_eod.py`, `workmain/integrations/slack/socket_client.py`) | Take input from a person or a clock, call the application layer, and present the result. No business decisions and no direct data access: a surface owns its session through `workmain/database/connection.py`, and receives plain values from the application layer. |
+| **Surfaces** | `workmain/cli/`, `workmain/daemon/`, the Slack conversation code (`workmain/integrations/slack/slack_eod.py`, `workmain/integrations/slack/socket_client.py`) | Take input from a person or a clock, call the application layer, and present the result. No business decisions and no direct data access: a surface builds a unit of work (`workmain/services/unit_of_work.py`) and passes it to a use case, or, while it calls a service that still takes a session, owns that session through `workmain/database/connection.py`, and receives plain values from the application layer. |
 | **Application** | `workmain/services/`, `workmain/workflows/`, `workmain/orchestration/` | Business decisions. A service owns one domain. A workflow sequences several services for one process, the same for every surface. A command handler executes a confirmed structured action. |
 | **Capabilities** | `workmain/ai/`, `workmain/templates_engine/`, `workmain/integrations/` (except the Slack conversation code) | Do one external or computational job: talk to a model, render a template, call an API. Receive the data they work on from the application layer as plain values, never fetch it, and return data. Nothing from `workmain/database/` is imported, models included. No business decisions. |
 | **Data** | `workmain/database/repositories/`, `workmain/database/models.py`, `workmain/database/connection.py` | All database access. A repository owns one table, or one tightly bound group of tables, and never commits (`docs/standards/4-database.md` §4.3). |
@@ -65,6 +65,7 @@ The three entry points (CLI, daemon, Slack Socket Mode) are the three surfaces, 
 - `workmain/services/schedule_service.py` — whether a day is a working day, and whether a time is within working hours.
 - `workmain/services/results.py` — the result types services share.
 - `workmain/services/exceptions.py` — the typed errors the application layer raises to surfaces.
+- `workmain/services/unit_of_work.py` — the unit of work: the transaction a use case enters, and the repositories it holds.
 - `workmain/workflows/eod_workflow.py` — the EOD step sequence and its step runners.
 - `workmain/orchestration/action_executor.py` — executes a confirmed structured action.
 - `workmain/orchestration/confirmation_gate.py` — formats an action for confirmation and classifies the reply.
@@ -83,7 +84,7 @@ The three entry points (CLI, daemon, Slack Socket Mode) are the three surfaces, 
 
 ### Data
 
-- `workmain/database/connection.py` — `get_db()` and `session_scope()`, the only way to get a session.
+- `workmain/database/connection.py` — `get_db()`, `session_scope()` and `record_scope()`, the only way to get a session, and `scope_open()`, whether a `session_scope()` is open on the calling thread.
 - `workmain/database/models.py` — every ORM model.
 - `workmain/database/migrations/` — the schema's migrations: the Alembic environment (`env.py`), the revision template (`script.py.mako`), and `versions/`, one revision per schema change.
 - `workmain/database/repositories/` — one repository per table, named for it. `system_state_repository` is the key-value store.
