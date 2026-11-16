@@ -84,10 +84,10 @@ The question is real. §6.2's end-to-end command test needs a renderer that reco
 
 | Q | Question | Answer |
 | --- | --- | --- |
-| Q1 | Is the recording renderer `create_autospec(Renderer, instance=True)` in a `tests/conftest.py` fixture (Option A, with the issue's sixth criterion restated), or a hand-written `Renderer` subclass in `tests/mocks/` (Option B, as the issue states)? | |
-| Q2 | #279 delivers #265's `clients` half (F19). Is #265's body narrowed now to the `calendar` commands and names, or at #279's close-out? | |
-| Q3 | Are #251 and #255 linked as blocked by #279 (F18), so each is written against the unit-of-work form and #251's first criterion is rewritten to §6.2's end-to-end form? Or do they stay unlinked, so whichever lands second reworks? | |
-| Q4 | Does #219 gain a context line saying its literal-match tests also run against the fakes #279 adds (F10), so its fix covers both sides? | |
+| Q1 | Is the recording renderer `create_autospec(Renderer, instance=True)` in a `tests/conftest.py` fixture (Option A, with the issue's sixth criterion restated), or a hand-written `Renderer` subclass in `tests/mocks/` (Option B, as the issue states)? | Ray, 20261116: Option A. The recording renderer is `create_autospec(Renderer, instance=True)` in a `tests/conftest.py` fixture, and the spec restates the issue's sixth criterion (`docs/standards/1-workflow.md` §1.2); the issue body's edit is made at close-out. |
+| Q2 | #279 delivers #265's `clients` half (F19). Is #265's body narrowed now to the `calendar` commands and names, or at #279's close-out? | Ray, 20261116: narrowed now. #265's title and body name only the `calendar` commands, and its body says why the `clients` commands moved to #279. |
+| Q3 | Are #251 and #255 linked as blocked by #279 (F18), so each is written against the unit-of-work form and #251's first criterion is rewritten to §6.2's end-to-end form? Or do they stay unlinked, so whichever lands second reworks? | Ray, 20261116: linked. #251 and #255 are blocked by #279, each body says why, and #251's first criterion's check is the end-to-end form. |
+| Q4 | Does #219 gain a context line saying its literal-match tests also run against the fakes #279 adds (F10), so its fix covers both sides? | Ray, 20261116: yes. #219's body says its literal-match tests for the faked methods go in #279's contract classes once #279 has landed. |
 
 ## 6. Disposition
 
