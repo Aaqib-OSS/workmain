@@ -1,6 +1,6 @@
 # Top-Level Commands — Spec
 
-**Status:** Approved
+**Status:** Draft
 **Author:** Spanner (Role 1)
 **Date:** 20261116
 **Branch:** `hotfix/issue-206-interface-commands` (from `main`)
@@ -68,9 +68,8 @@ Measured on `origin/main` `91102e0`, 20261116.
 
 - **DR1 — Removal only.** `interface.py` loses the three commands and every name only they use. Nothing else in the module changes: the root group, its version option, its logging setup and its group registrations behave as before.
 - **DR2 — Nothing replaces a removed name.** No command, alias or message is added for `init`, `status` or `today`. A user who runs one gets Click's own `No such command` error, with exit 2.
-- **DR3 — The Quick Start shows only commands that exist.** Its block becomes exactly:
+- **DR3 — The Quick Start shows only commands that exist.** The content of its `bash` code block, between the fence lines, becomes exactly:
 
-  ````text
   ```bash
   # Install
   pip install -r requirements.txt
@@ -81,7 +80,6 @@ Measured on `origin/main` `91102e0`, 20261116.
   workmain time add "Bug fix" 2h -T 1430
   workmain reports preview daily_internal
   ```
-  ````
 
 - **DR4 — The map and §5.1 name no removed command.**
   - `docs/ARCHITECTURE.md:39` becomes "- `workmain/cli/interface.py` — the root `workmain` group."
