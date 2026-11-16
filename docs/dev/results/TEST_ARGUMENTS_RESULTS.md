@@ -10,7 +10,7 @@
 
 ## 1. Summary
 
-Complete. `docs/standards/6-testing.md` §6.2 rule 5 now names where a test argument may come from, and every test outside `unittest.TestCase` classes takes only arguments from those places: the six fixtures defined in test files and the two `@patch` decorator arguments in `TestNotesLogUnitOfWork` are gone, replaced by values and patches each test builds or enters in its own body. AC2.1 is Ray's reading and awaits him.
+Complete. `docs/standards/6-testing.md` §6.2 rule 5 now names where a test argument may come from, and every test outside `unittest.TestCase` classes takes only arguments from those places: the six fixtures defined in test files and the two `@patch` decorator arguments in `TestNotesLogUnitOfWork` are gone, replaced by values and patches each test builds or enters in its own body.
 
 ## 2. What shipped, by step
 
@@ -30,7 +30,7 @@ Complete. `docs/standards/6-testing.md` §6.2 rule 5 now names where a test argu
 | AC1.2 | Met | The AC1.2 command, its probe copied from the spec, at `24cad37`: no `PATCH PROBE` line, `27 passed` (0 failed, 0 skipped). The eight tests that never reach their target are left to the post-implementation review, as the criterion states. |
 | AC1.3 | Met | At `24cad37`, `pytest --fixtures -v -p no:cacheprovider 2>/dev/null \| grep -E -- '-- tests/test_'` printed only `_no_writes -- tests/test_ai_costs.py:750` and `_no_editor -- tests/test_notes_log.py:200`. |
 | AC1.4 | Met | At `24cad37`, the assertion search printed nothing (grep exit 1); `git diff --name-only origin/main...HEAD -- tests/` listed exactly the seven files the criterion names. |
-| AC2.1 | Not met | Awaiting Ray |
+| AC2.1 | Met | Ray, 20261116: A test author can tell from `docs/standards/6-testing.md` §6.2, rule 5 alone where a test may get each kind of argument the census found |
 | AC3.1 | Met | `pytest` at `24cad37`: 1708 passed, 0 failed, 0 skipped. |
 
 ## 4. Deviations and decisions
