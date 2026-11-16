@@ -1,10 +1,10 @@
 # Test Arguments — Implementation Results
 
-**Status:** Active
+**Status:** Shipped
 **Author:** Anvil (Role 3)
 **Date:** 20261116
 **Spec:** `../specs/TEST_ARGUMENTS_SPEC.md`
-**Released as:** set by `/closeout`
+**Released as:** v1.58.5 (tag `v1.58.5`)
 
 ---
 
@@ -49,7 +49,7 @@ No departures.
 
 ## 5. Verification
 
-- **Test suite:** 1708 passed, 0 failed, 0 skipped (baseline: 1708 passed, 0 failed, 0 skipped).
+- **Test suite:** 1708 passed, 0 failed, 0 skipped (baseline: 1708 passed, 0 failed, 0 skipped). Re-run at close-out, `baec299`: 1708 passed, 0 failed, 0 skipped.
 - **Defect shown before the fix** (in place of a test's runs, per the spec's Decision Log): the AC1.1 command run at `5458e5b`, before Step 1 (`tests/` unchanged until Step 2), printed 31 lines; run at `24cad37`, after Step 4, it printed nothing. The 31 lines:
 
   ```text

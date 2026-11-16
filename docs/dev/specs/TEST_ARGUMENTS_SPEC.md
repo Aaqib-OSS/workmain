@@ -1,6 +1,6 @@
 # Test Arguments — Spec
 
-**Status:** Approved
+**Status:** Shipped
 **Author:** Spanner (Role 1)
 **Date:** 20261116
 **Branch:** `hotfix/issue-286-test-arguments` (from `main`)
