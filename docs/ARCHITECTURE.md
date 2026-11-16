@@ -36,7 +36,7 @@ The three entry points (CLI, daemon, Slack Socket Mode) are the three surfaces, 
 
 ### Surfaces
 
-- `workmain/cli/interface.py` — the root `workmain` group, and `init`, `status`, `today`.
+- `workmain/cli/interface.py` — the root `workmain` group.
 - `workmain/cli/output.py` — every terminal rendering: views, `Renderer`, and the group-level error wiring.
 - `workmain/cli/params.py` — Click parameter types shared by the command groups.
 - `workmain/cli/commands/<group>.py` — one Click group each. Parse arguments, call the application layer, render.
