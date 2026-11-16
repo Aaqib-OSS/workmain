@@ -37,7 +37,7 @@ APPROVED_VERBS: Dict[str, str] = {
 }
 
 # Top-level commands §5.1 permits, as workflows that coordinate several groups.
-TOP_LEVEL = {"eod", "status", "today"}
+TOP_LEVEL = {"eod"}
 
 # Subgroups whose commands are named for what they act on (§5.2). None means any name.
 NOUN_SUBGROUPS: Dict[str, Optional[Set[str]]] = {
@@ -52,7 +52,6 @@ NOUN_SUBGROUPS: Dict[str, Optional[Set[str]]] = {
 EXISTING_EXCEPTIONS = {
     "calendar month", "calendar sync", "calendar today", "calendar week",
     "email assign", "email unassign",
-    "init",
     "meetings costs", "meetings reschedule", "meetings skip", "meetings template use", "meetings today", "meetings upcoming",
     "notes costs", "notes date", "notes meeting", "notes search", "notes today",
     "notifications disable", "notifications enable", "notifications set", "notifications test",
