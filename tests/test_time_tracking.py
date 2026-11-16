@@ -13,7 +13,7 @@ dates in 2099).
 from datetime import date, time, timedelta
 from decimal import Decimal
 
-import pytest
+from sqlalchemy.orm import Session
 
 from workmain.database.repositories.notes_repo import NotesRepository
 from workmain.database.repositories.time_entries_repo import TimeEntriesRepository
@@ -36,8 +36,7 @@ def _make_te(db_session, content: str, **kwargs):
 _TEST_DATE = date(2099, 1, 1)
 
 
-@pytest.fixture
-def _sentinel_monday():
+def _sentinel_monday() -> date:
     """First Monday on or after 2099-01-01."""
     d = _TEST_DATE
     return d + timedelta(days=(0 - d.weekday()) % 7)
@@ -181,8 +180,8 @@ class TestTimeAggregations:
 class TestWeekRetrieval:
     """get_week() with explicit start_of_week on sentinel Monday."""
 
-    def test_week_contains_created_entries(self, db_session, _sentinel_monday):
-        monday = _sentinel_monday
+    def test_week_contains_created_entries(self, db_session: Session) -> None:
+        monday = _sentinel_monday()
         created_ids = []
         for i in range(5):
             entry = _make_te(db_session, f"Work day {i + 1}",
@@ -197,8 +196,8 @@ class TestWeekRetrieval:
         found_ids = {e.id for e in week_entries}
         assert all(eid in found_ids for eid in created_ids)
 
-    def test_week_date_range(self, db_session, _sentinel_monday):
-        monday = _sentinel_monday
+    def test_week_date_range(self, db_session: Session) -> None:
+        monday = _sentinel_monday()
         for i in range(5):
             _make_te(db_session, f"Day {i + 1}",
                 duration_hours=8.0,

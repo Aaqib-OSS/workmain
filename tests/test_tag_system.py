@@ -10,11 +10,6 @@ import pytest
 from workmain.utils.tag_utils import TagSystem, format_tags, get_valid_tags, parse_tags
 
 
-@pytest.fixture
-def ts():
-    return TagSystem()
-
-
 class TestTagSystem:
     """TagSystem's individual pipeline stages."""
 
@@ -29,9 +24,10 @@ class TestTagSystem:
         ("#ilo #cr #ifo multiple tags", "multiple tags", ["ilo", "cr", "ifo"]),
     ])
     def test_extract_tags_strips_hashtags_and_lowercases_them(
-        self, ts, text, expected_clean, expected_tags
-    ):
+        self, text: str, expected_clean: str, expected_tags: list[str]
+    ) -> None:
         """extract_tags() returns the text with hashtags and extra whitespace removed, and the hashtags lowercased in order of appearance."""
+        ts = TagSystem()
         assert ts.extract_tags(text) == (expected_clean, expected_tags)
 
     @pytest.mark.parametrize('tags, expected_valid, expected_invalid', [
@@ -42,9 +38,10 @@ class TestTagSystem:
         (["ILO", "CR"], ["ilo", "cr"], []),
     ])
     def test_validate_tags_splits_known_from_unknown_case_insensitively(
-        self, ts, tags, expected_valid, expected_invalid
-    ):
+        self, tags: list[str], expected_valid: list[str], expected_invalid: list[str]
+    ) -> None:
         """validate_tags() returns the configured shortcuts, lowercased, and the unknown ones as given."""
+        ts = TagSystem()
         assert ts.validate_tags(tags) == (expected_valid, expected_invalid)
 
     @pytest.mark.parametrize('shorts, expected_full', [
@@ -53,8 +50,11 @@ class TestTagSystem:
         (["both", "cf"], ["both", "carry-forward"]),
         (["ilo", "cr", "blk"], ["internal-only", "client-report", "blocker"]),
     ])
-    def test_convert_to_full_names_maps_each_shortcut_in_order(self, ts, shorts, expected_full):
+    def test_convert_to_full_names_maps_each_shortcut_in_order(
+        self, shorts: list[str], expected_full: list[str]
+    ) -> None:
         """convert_to_full_names() maps each shortcut to its full name, keeping input order."""
+        ts = TagSystem()
         assert ts.convert_to_full_names(shorts) == expected_full
 
     @pytest.mark.parametrize('tags, expected', [
@@ -63,8 +63,9 @@ class TestTagSystem:
         (["internal-only", "internal-only", "both"], ["both", "internal-only"]),
         (["client-report"], ["client-report"]),
     ])
-    def test_normalize_tags_deduplicates_and_sorts(self, ts, tags, expected):
+    def test_normalize_tags_deduplicates_and_sorts(self, tags: list[str], expected: list[str]) -> None:
         """normalize_tags() drops duplicate full names and sorts the rest alphabetically."""
+        ts = TagSystem()
         assert ts.normalize_tags(tags) == expected
 
     @pytest.mark.parametrize('tags, expected', [
@@ -73,8 +74,9 @@ class TestTagSystem:
         (["blocker", "both", "internal-only"], "[blocker] [both] [internal-only]"),
         ([], ""),
     ])
-    def test_format_display_brackets_each_tag_space_separated(self, ts, tags, expected):
+    def test_format_display_brackets_each_tag_space_separated(self, tags: list[str], expected: str) -> None:
         """format_display() wraps each tag in brackets and joins them with a space; no tags gives an empty string."""
+        ts = TagSystem()
         assert ts.format_display(tags) == expected
 
     @pytest.mark.parametrize('text, apply_default, expected', [
@@ -83,9 +85,10 @@ class TestTagSystem:
         ("Fixed a bug", False, ("Fixed a bug", [], [])),
     ])
     def test_default_tag_applies_only_when_text_has_no_tags_and_default_requested(
-        self, ts, text, apply_default, expected
-    ):
+        self, text: str, apply_default: bool, expected: tuple[str, list[str], list[str]]
+    ) -> None:
         """process_tags() adds internal-only only when the text carries no tag and apply_default is true."""
+        ts = TagSystem()
         assert ts.process_tags(text, apply_default=apply_default) == expected
 
 
