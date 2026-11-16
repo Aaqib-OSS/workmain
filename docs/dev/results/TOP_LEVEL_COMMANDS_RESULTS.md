@@ -1,10 +1,10 @@
 # Top-Level Commands — Implementation Results
 
-**Status:** Active
+**Status:** Shipped
 **Author:** Anvil (Role 3)
 **Date:** 20261116
 **Spec:** `../specs/TOP_LEVEL_COMMANDS_SPEC.md`
-**Released as:** set by `/closeout`
+**Released as:** v1.58.6 (tag v1.58.6)
 
 ---
 
