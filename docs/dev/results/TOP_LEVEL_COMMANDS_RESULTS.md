@@ -10,7 +10,7 @@
 
 ## 1. Summary
 
-Complete. `workmain init`, `workmain status` and `workmain today` are removed with every name only they used, and running one gives Click's `No such command` error with exit 2. Their one test is deleted and the CLI conventions test no longer allows their names. `README.md`'s Quick Start, `docs/ARCHITECTURE.md` §2 and `docs/standards/5-cli.md` §5.1 name only commands that exist. AC3.2 is Ray's reading and is left to him.
+Complete. `workmain init`, `workmain status` and `workmain today` are removed with every name only they used, and running one gives Click's `No such command` error with exit 2. Their one test is deleted and the CLI conventions test no longer allows their names. `README.md`'s Quick Start, `docs/ARCHITECTURE.md` §2 and `docs/standards/5-cli.md` §5.1 name only commands that exist.
 
 ## 2. What shipped, by step
 
@@ -26,7 +26,7 @@ Complete. `workmain init`, `workmain status` and `workmain today` are removed wi
 | AC1.1 | Met | The AC1.1 command printed `['init', 'status', 'today']` before Step 1 and `[]` after it (§5). |
 | AC2.1 | Met | `git grep -nE '\brich\b\|console\.\|click\.echo\|\bprint\(\|get_db\|Repository' workmain/cli/interface.py`: no hits (exit 1), after Step 1. |
 | AC3.1 | Met | `git grep -nE 'workmain (init\|today\|status)\b' -- . ':!docs/archive' ':!docs/dev' ':!CHANGELOG.md'` and `git grep -nE '"(init\|today\|status)"' tests/test_cli_conventions.py`: no hits (exit 1 each), after Step 2. |
-| AC3.2 | Not met | Awaiting Ray |
+| AC3.2 | Met | Ray, 20261116: `docs/ARCHITECTURE.md` §2's `interface.py` entry and `docs/standards/5-cli.md` §5.1 name no removed command, and §5.1 still states that a top-level command is permitted only for an orchestration workflow |
 | AC4.1 | Met | The AC4.1 check after Step 2 printed three `OK` lines and no `FAIL` line: `notes add` → `tags='cr'`, `text='Completed security audit'`; `time add` → `time='1430'`, `description='Bug fix'`, `duration='2h'`; `reports preview` → `template='daily_internal'`. |
 | AC5.1 | Met | `pytest`: 1707 passed, 0 failed, 0 skipped (§5). |
 
