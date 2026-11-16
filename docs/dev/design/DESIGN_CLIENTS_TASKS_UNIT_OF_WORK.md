@@ -91,4 +91,4 @@ The question is real. §6.2's end-to-end command test needs a renderer that reco
 
 ## 6. Disposition
 
-- Promoted to: <filled when the spec is written>
+- Promoted to: `../specs/CLIENTS_TASKS_UNIT_OF_WORK_SPEC.md`
