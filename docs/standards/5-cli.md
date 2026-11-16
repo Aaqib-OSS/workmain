@@ -11,7 +11,7 @@
     noun      verb    what/how
   ```
 
-- Top-level standalone commands (`eod`, `status`, `today`) are permitted **only** for orchestration workflows that coordinate across multiple groups.
+- Top-level standalone commands are permitted **only** for orchestration workflows that coordinate across multiple groups.
   - New ones need explicit justification and approval against that criterion.
 
 ### 5.2 Groups
