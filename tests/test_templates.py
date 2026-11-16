@@ -8,29 +8,24 @@ decide the result.
 
 from datetime import date
 
-import pytest
-
 from workmain.templates_engine import TemplateLoader, validate_template
-
-
-@pytest.fixture
-def loader():
-    return TemplateLoader()
 
 
 class TestShippedTemplates:
     """Every template under templates/reports/."""
 
-    def test_every_shipped_template_loads_with_its_required_fields(self, loader):
+    def test_every_shipped_template_loads_with_its_required_fields(self) -> None:
         """load() returns each listed template with name, sections and output_format."""
+        loader = TemplateLoader()
         names = loader.list_templates()
         assert names
         for name in names:
             template = loader.load(name)
             assert {'name', 'sections', 'output_format'} <= template.keys(), name
 
-    def test_every_shipped_template_passes_validation(self, loader):
+    def test_every_shipped_template_passes_validation(self) -> None:
         """validate_template() reports no error for any listed template."""
+        loader = TemplateLoader()
         for name in loader.list_templates():
             assert validate_template(loader.load(name)) == [], name
 
@@ -55,8 +50,9 @@ class TestTemplateValidation:
 class TestVariableSubstitution:
     """build_variables() and substitute_variables()."""
 
-    def test_build_variables_formats_the_report_date(self, loader):
+    def test_build_variables_formats_the_report_date(self) -> None:
         """build_variables() derives every date field from the report date, with the week starting Monday."""
+        loader = TemplateLoader()
         variables = loader.build_variables(
             report_date=date(2025, 12, 24),
             user_full_name='Tom Kitten',
@@ -72,8 +68,9 @@ class TestVariableSubstitution:
             'recipients': 'Benjamin, Bunny, Flopsy',
         }
 
-    def test_substitute_variables_replaces_every_placeholder_in_subject_line(self, loader):
+    def test_substitute_variables_replaces_every_placeholder_in_subject_line(self) -> None:
         """substitute_variables() fills each {name} in subject_line and leaves the input template unchanged."""
+        loader = TemplateLoader()
         template = {'subject_line': '{day_name}, {date_long} – {user_full_name}'}
         variables = {'day_name': 'Wednesday', 'date_long': 'December 24, 2025', 'user_full_name': 'Tom Kitten'}
         result = loader.substitute_variables(template, variables)

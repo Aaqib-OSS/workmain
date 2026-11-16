@@ -7,6 +7,8 @@ so none depends on terminal width. The condense token-line test checks the
 cells a command passed to Table.add_row.
 """
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date, datetime
 from unittest.mock import MagicMock, Mock, patch
 
@@ -164,8 +166,8 @@ def _names(*keys):
     return pytest.mark.parametrize('name', keys)
 
 
-@pytest.fixture
-def provider_manager():
+@contextmanager
+def _provider_manager() -> Iterator[MagicMock]:
     manager = MagicMock()
     manager.get_configured_provider_names.return_value = ['claude', 'gemini', 'ollama']
     manager.get_report_type_names.return_value = ['daily_internal', 'weekly_client']
@@ -193,77 +195,84 @@ def _month(today):
 class TestCostCommands:
     @_names('meetings', 'notes', 'providers', 'reports')
     def test_service_gets_the_parsed_options_and_the_renderer_the_result(
-        self, name, provider_manager
-    ):
+        self, name: str
+    ) -> None:
         """C1"""
-        _, _, _, view_name, extra, expected = _COMMANDS[name]
-        result, service, renderer = _run(
-            name, ['-P', 'claude', '-d', '2099-01-01', *extra])
+        with _provider_manager():
+            _, _, _, view_name, extra, expected = _COMMANDS[name]
+            result, service, renderer = _run(
+                name, ['-P', 'claude', '-d', '2099-01-01', *extra])
 
-        assert result.exit_code == 0, result.stderr
-        service.assert_called_once()
-        assert service.call_args.args[1:] == expected(
-            'claude', 'daily_internal', _DAY, _DAY, 5)
-        renderer.report.assert_called_once_with(
-            getattr(_COMMANDS[name][1], view_name), service.return_value)
+            assert result.exit_code == 0, result.stderr
+            service.assert_called_once()
+            assert service.call_args.args[1:] == expected(
+                'claude', 'daily_internal', _DAY, _DAY, 5)
+            renderer.report.assert_called_once_with(
+                getattr(_COMMANDS[name][1], view_name), service.return_value)
 
     @_names('meetings', 'notes', 'providers', 'reports')
     def test_no_options_means_this_month_and_every_provider(
-        self, name, provider_manager
-    ):
+        self, name: str
+    ) -> None:
         """C2"""
-        expected = _COMMANDS[name][5]
-        result, service, _ = _run(name, [])
+        with _provider_manager():
+            expected = _COMMANDS[name][5]
+            result, service, _ = _run(name, [])
 
-        start, end = _month(date.today())
-        assert result.exit_code == 0, result.stderr
-        assert service.call_args.args[1:] == expected(None, None, start, end, 20)
+            start, end = _month(date.today())
+            assert result.exit_code == 0, result.stderr
+            assert service.call_args.args[1:] == expected(None, None, start, end, 20)
 
-    def test_all_means_no_dates(self, provider_manager):
+    def test_all_means_no_dates(self) -> None:
         """C3"""
-        result, service, _ = _run('providers', ['--all'])
-        assert result.exit_code == 0, result.stderr
-        assert service.call_args.args[1:] == (None, None, None)
+        with _provider_manager():
+            result, service, _ = _run('providers', ['--all'])
+            assert result.exit_code == 0, result.stderr
+            assert service.call_args.args[1:] == (None, None, None)
 
-    def test_start_and_end_are_passed_through(self, provider_manager):
+    def test_start_and_end_are_passed_through(self) -> None:
         """C4"""
-        result, service, _ = _run(
-            'reports', ['-b', '2099-01-01', '-e', '2099-01-15'])
-        assert result.exit_code == 0, result.stderr
-        assert service.call_args.args[1:] == (
-            None, None, date(2099, 1, 1), date(2099, 1, 15), 20)
+        with _provider_manager():
+            result, service, _ = _run(
+                'reports', ['-b', '2099-01-01', '-e', '2099-01-15'])
+            assert result.exit_code == 0, result.stderr
+            assert service.call_args.args[1:] == (
+                None, None, date(2099, 1, 1), date(2099, 1, 15), 20)
 
-    def test_month_means_its_first_and_last_day(self, provider_manager):
+    def test_month_means_its_first_and_last_day(self) -> None:
         """C5"""
-        result, service, _ = _run('notes', ['-M', '2099-02'])
-        assert result.exit_code == 0, result.stderr
-        assert service.call_args.args[1:] == (
-            None, date(2099, 2, 1), date(2099, 2, 28), 20)
+        with _provider_manager():
+            result, service, _ = _run('notes', ['-M', '2099-02'])
+            assert result.exit_code == 0, result.stderr
+            assert service.call_args.args[1:] == (
+                None, date(2099, 2, 1), date(2099, 2, 28), 20)
 
-    def test_a_service_failure_is_one_error_line_on_stderr(self, provider_manager):
+    def test_a_service_failure_is_one_error_line_on_stderr(self) -> None:
         """C6"""
-        group = _COMMANDS['meetings'][0]
-        renderer = Mock(spec=Renderer)
-        with patch.object(ai_cost_service, 'condensation_costs', autospec=True,
-                          side_effect=RuntimeError('db down')):
-            result = CliRunner(mix_stderr=False).invoke(
-                group, ['costs'], obj=renderer)
+        with _provider_manager():
+            group = _COMMANDS['meetings'][0]
+            renderer = Mock(spec=Renderer)
+            with patch.object(ai_cost_service, 'condensation_costs', autospec=True,
+                              side_effect=RuntimeError('db down')):
+                result = CliRunner(mix_stderr=False).invoke(
+                    group, ['costs'], obj=renderer)
 
-        assert result.exit_code == 1
-        assert result.stderr == 'Error: RuntimeError: db down\n'
-        assert result.stdout == ''
-        renderer.report.assert_not_called()
+            assert result.exit_code == 1
+            assert result.stderr == 'Error: RuntimeError: db down\n'
+            assert result.stdout == ''
+            renderer.report.assert_not_called()
 
-    def test_bad_values_are_usage_errors(self, provider_manager):
+    def test_bad_values_are_usage_errors(self) -> None:
         """C7"""
-        for name in _COMMANDS:
-            for args in (['-d', '2026-13-01'], ['-M', '2026-13'], ['-n', '0'], ['-n', '-1']):
-                if name == 'providers' and args[0] == '-n':
-                    continue
-                result, service, _ = _run(name, args)
-                assert result.exit_code == 2, (name, args)
-                assert 'Error:' in result.stderr, (name, args)
-                service.assert_not_called()
+        with _provider_manager():
+            for name in _COMMANDS:
+                for args in (['-d', '2026-13-01'], ['-M', '2026-13'], ['-n', '0'], ['-n', '-1']):
+                    if name == 'providers' and args[0] == '-n':
+                        continue
+                    result, service, _ = _run(name, args)
+                    assert result.exit_code == 2, (name, args)
+                    assert 'Error:' in result.stderr, (name, args)
+                    service.assert_not_called()
 
     def test_each_view_is_the_one_the_design_declares(self):
         """C8"""

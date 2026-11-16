@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.58.5] - 2026-11-16
+
+The testing standard's rule for what a test takes as an argument named three fixtures, while 123 tests took others: pytest's own fixtures, fixtures in `tests/conftest.py`, names their `parametrize` marks supply, fixtures defined in their own files, and `@patch` decorator arguments. The rule now names the places an argument may come from, and the tests that took a fixture defined in their own file, or a `@patch` argument in a plain class, now build or patch what they need in their own body (#286).
+
+### Changed
+
+- `docs/standards/6-testing.md` §6.2 rule 5: an argument is a fixture pytest itself provides, a fixture in `tests/conftest.py`, or a name a `parametrize` mark on the test or its class supplies; anything else, the test builds in its own body.
+- `tests/test_tag_system.py`, `tests/test_templates.py`, `tests/test_time_tracking.py`, `tests/test_slack_channel_config.py`: `ts`, `loader`, `_sentinel_monday` and `_active_client` are built in the test body instead of by fixtures.
+- `tests/test_cost_display.py`, `tests/test_email_service.py`: the `provider_manager` and `dirs` fixtures are replaced by context managers each test enters around its body, patching the same targets with the same values.
+- `tests/test_notes_log.py`: `TestNotesLogUnitOfWork`'s t17 and t18 patch `ProviderManager.generate` in their body instead of through a decorator.
+
+Suite: 1708 passed, 0 failed, 0 skipped (baseline 1708 passed, 0 failed, 0 skipped).
+
 ## [1.58.4] - 2026-11-14
 
 `calendar_service` and `clients_service` each declared their own result holding only filters and totals, and each named its totals type `StatusTotals`, so two classes shared one name. Both now return one generic result, and each totals type has a name unique to its service. `calendar status`, `clients status` and `clients set active` print what they printed before (#259).

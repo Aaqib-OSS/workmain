@@ -11,7 +11,6 @@ Repository tests use db_session fixture for transaction isolation.
 CLI tests use CliRunner and seed their own active client.
 """
 
-import pytest
 from click.testing import CliRunner
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
@@ -25,8 +24,7 @@ from workmain.database.models import Client
 # Helpers for CliRunner tests
 # ---------------------------------------------------------------------------
 
-@pytest.fixture
-def _active_client(db_session: Session) -> Client:
+def _make_active_client(db_session: Session) -> Client:
     """A client of the test's own, with no Slack channel, made the active client."""
     from workmain.database.repositories.client_repository import ClientRepository
 
@@ -140,8 +138,9 @@ class TestResolveSlackChannel:
 class TestSlackSetChannel:
     """slack set channel writes clients.slack_channel for the active client."""
 
-    def test_slack_set_channel_active_client(self, db_session: Session, _active_client: Client) -> None:
+    def test_slack_set_channel_active_client(self, db_session: Session) -> None:
         """Sets slack_channel for the active client."""
+        _active_client = _make_active_client(db_session)
         result = _invoke('set', 'channel', '#test-set-channel')
         assert result.exit_code == 0
         assert '#test-set-channel' in result.output
@@ -151,8 +150,9 @@ class TestSlackSetChannel:
         db_session.expire_all()
         assert _active_client.slack_channel == '#test-set-channel'
 
-    def test_slack_set_channel_normalizes_hash(self, db_session: Session, _active_client: Client) -> None:
+    def test_slack_set_channel_normalizes_hash(self, db_session: Session) -> None:
         """Channel without # prefix gets # added."""
+        _active_client = _make_active_client(db_session)
         result = _invoke('set', 'channel', 'int-test-channel')
         assert result.exit_code == 0
         assert '#int-test-channel' in result.output
@@ -232,8 +232,9 @@ class TestSlackChannelSetRetired:
 class TestSlackStatusDisplay:
     """slack status displays clients.slack_channel as the primary channel value."""
 
-    def test_slack_status_shows_client_channel(self, db_session: Session, _active_client: Client) -> None:
+    def test_slack_status_shows_client_channel(self, db_session: Session) -> None:
         """slack status output contains the active client's slack_channel."""
+        _active_client = _make_active_client(db_session)
         # Set a known channel value
         _active_client.slack_channel = '#status-test-channel'
         db_session.commit()
@@ -242,8 +243,9 @@ class TestSlackStatusDisplay:
         assert result.exit_code == 0
         assert '#status-test-channel' in result.output
 
-    def test_slack_status_fallback_when_no_client_channel(self, db_session: Session, _active_client: Client) -> None:
+    def test_slack_status_fallback_when_no_client_channel(self, db_session: Session) -> None:
         """No client channel set -> falls back to config.json or shows not configured."""
+        _active_client = _make_active_client(db_session)
         from unittest.mock import patch
 
         db_session.expire_all()
