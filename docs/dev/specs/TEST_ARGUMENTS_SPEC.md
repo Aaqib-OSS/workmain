@@ -43,6 +43,7 @@
 | 20261116 | Caliper | Existing defect, non-blocking: `tests/test_notes_log.py::TestNotesLogUnitOfWork::test_t17_a_failed_condensation_keeps_the_logged_notes` and `::test_t18_condense_repoints_the_existing_entry` both set `mock_generate.return_value` to `_SENTINEL_CONDENSED_SUMMARY`, but neither reaches the AI. The notes they log are dated today, so condensation writes the generic `Attended` summary (evidence in the row above). This is #141's cause showing up in tests. It could join #141 as a criterion: once #141 is fixed, both tests reach `ProviderManager.generate`. Checked by the AC1.2 command printing `reached ProviderManager.generate unpatched` for both when their patch is removed. Searched open issues for `test_notes_log`, `select_condensation_notes`, `condensation`, `created_date`, `mock_generate` and `notes log`, and read every result. Only #141 covers it. | Joined #141 as one criterion, Ray 20261116. |
 | 20261116 | Caliper | Pass at 2288370, changes since 9e7abd3: 18 items checked, 0 blocking, 2 non-blocking. | n/a |
 | 20261116 | Caliper | Pass at a0a72cc, changes since 2288370: 11 items checked, 0 blocking, 0 non-blocking. | n/a |
+| 20261116 | Caliper (post-implementation) | No findings. | n/a |
 
 ---
 
