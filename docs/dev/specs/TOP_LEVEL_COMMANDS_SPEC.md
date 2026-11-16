@@ -1,6 +1,6 @@
 # Top-Level Commands — Spec
 
-**Status:** Draft
+**Status:** Approved
 **Author:** Spanner (Role 1)
 **Date:** 20261116
 **Branch:** `hotfix/issue-206-interface-commands` (from `main`)
