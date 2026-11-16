@@ -17,13 +17,10 @@ An intelligent personal work management system that captures notes, tracks time,
 pip install -r requirements.txt
 pip install -e .
 
-# Initialize
-workmain init
-
 # Start using
-workmain note add "Completed security audit" #cr
-workmain track "Bug fix" 2h
-workmain report daily
+workmain notes add "Completed security audit" -t cr
+workmain time add "Bug fix" 2h -T 1430
+workmain reports preview daily_internal
 ```
 
 ## Documentation
