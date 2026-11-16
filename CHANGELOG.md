@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.58.6] - 2026-11-16
+
+`workmain init`, `workmain status` and `workmain today` printed fixed text that no longer described the system: a placeholder for a setup wizard, a phase table frozen at Phase 11, and a fixed list of commands. They are removed, and running one gives Click's `No such command` error with exit 2. `init` is replaced by the setup wizard in #42 and `status` by #256; `today` is retired. `README.md`'s Quick Start named four commands that do not exist and now shows ones that do (#206).
+
+### Removed
+
+- `workmain/cli/interface.py`: the `init`, `status` and `today` commands, and the module `console` and imports only they used.
+- `tests/test_status_command.py`, the one test of `status`.
+
+### Changed
+
+- `tests/test_cli_conventions.py`: `TOP_LEVEL` is `{"eod"}`, and `init` has left `EXISTING_EXCEPTIONS`.
+- `README.md`: the Quick Start shows `workmain notes add`, `workmain time add` and `workmain reports preview` in place of `workmain init`, `workmain note add`, `workmain track` and `workmain report daily`.
+- `docs/ARCHITECTURE.md` §2: `interface.py` holds the root `workmain` group.
+- `docs/standards/5-cli.md` §5.1: the parenthetical list of top-level commands is removed; the rule stays.
+
+Suite: 1707 passed, 0 failed, 0 skipped (baseline 1708 passed, 0 failed, 0 skipped).
+
 ## [1.58.5] - 2026-11-16
 
 The testing standard's rule for what a test takes as an argument named three fixtures, while 123 tests took others: pytest's own fixtures, fixtures in `tests/conftest.py`, names their `parametrize` marks supply, fixtures defined in their own files, and `@patch` decorator arguments. The rule now names the places an argument may come from, and the tests that took a fixture defined in their own file, or a `@patch` argument in a plain class, now build or patch what they need in their own body (#286).
