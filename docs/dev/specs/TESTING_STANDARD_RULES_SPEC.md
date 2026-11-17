@@ -40,17 +40,17 @@
 | 20261117 | Ray | A test seeds as models added to `db_session`, or into `fake_uow`'s store. It does not seed through repositories or services. | Adopted; Step 1, Step 3. |
 | 20261117 | Ray | "A test pins behaviour meant to stay" moves to `docs/standards/1-workflow.md` §1.3. | Adopted; Step 5. |
 | 20261117 | Ray | Config enforces what can be enforced: `--strict-markers` and `-rs`. Measured clean on 20261117: 1707 collected under `--strict-markers`, 0 skips in a full run, and no `pytest.skip(` or `mark.skip(` in `tests/`. | Adopted. Ray committed the `addopts` line himself at `8932582`, so Step 4 only deletes the comment line. AC3.3. |
-| 20261117 | Ray | #288's "Rule 4" maps to "A test is a method of a plain class, and it takes what it needs as arguments", because the two rules merged. Rule 5's wording changed but its requirement did not, so #287's open question on `autouse` and `usefixtures` is re-read against the new text. | Adopted; Step 5. Whether the requirement is unchanged is open (row below). |
+| 20261117 | Ray | #288's "Rule 4" maps to "A test is a method of a plain class, and it takes what it needs as arguments", because the two rules merged. Rule 5's requirement changed (corrected by Ray, 20261117, answering question 1): it no longer limits where a fixture is defined, and it still requires a test to take its fixtures as arguments. #287's `autouse` and `usefixtures` cases remain non-compliant under the new text, because their tests do not take those fixtures as arguments. | Adopted; Step 5. |
 | 20261117 | Ray | AC3.1 is the results artifact's table of where each old statement went (kept, moved with its new home, or deleted with its reason). AC4.1 reads the Command bullet. AC5.1 is deleted. AC7.1 adds `tests/conftest.py` and `tests/mocks/fake_unit_of_work.py`. New criteria: §6 has fewer words; `pytest` passes with the new `addopts`; `pytest --fixtures -v` shows the four fixtures' new docstrings; and no new or changed docstring gives an instruction. | Adopted; §5. |
 | 20261117 | Spanner | The design study has no Decision Log: `docs/standards/1-workflow.md` §1.5 gives design artifacts none. Ray's overrides are recorded in the study's §5 answers and §6 Disposition instead. | Adopted. |
 | 20261117 | Spanner | §1.3 has a run of bullets on opening an issue. The rule on narrowing behaviour goes after "An issue is opened when its body is written, it is on the board, and its dependencies are linked.", with its first sentence in bold like its neighbours. | Adopted; Step 5. |
-| 20261117 | Spanner | Ray's word counts are 1,872 old and 633 new. The 633 includes the three §6.3 lines; everything before `### 6.3` in the new file is 626 words. AC3.2 counts both files before `### 6.3`. | Adopted; AC3.2. |
+| 20261117 | Spanner | Ray's word counts are 1,872 old and 633 new. The 633 includes the three §6.3 lines; everything before `### 6.3` in the new file was 626 words, and is 663 with Ray's answers of 20261117. AC3.2 counts both files before `### 6.3`. | Adopted; AC3.2. |
 | 20261117 | Spanner | With no skips, `-rs` prints nothing, and pytest's last line leaves out a zero skip count. "Its summary shows the skip count" can only be shown on a run that skips. AC3.3 checks the config, and shows a forced skip reported with its reason. | Adopted; AC3.3. |
 | 20261117 | Spanner | #292's body called the rule "a principle for every test" in §6. It is a §6.2 rule. Corrected in #292's body, 20261117. | Done. |
-| 20261117 | Spanner | Ray's text, question 1: the old rule 5 limited where an argument may come from to a fixture pytest provides, a fixture in `tests/conftest.py`, or a `parametrize` mark. The new text, "A test takes its fixtures and `parametrize` values as arguments", doesn't say where a fixture may be defined, so a fixture defined in a test file now complies. That widens the requirement. Two such fixtures exist (`_no_writes`, `tests/test_ai_costs.py:750`; `_no_editor`, `tests/test_notes_log.py:200`), both #287's. **Option A:** the wider requirement is intended, and #287 is re-read against it. **Option B:** the text names where a fixture may come from, as rule 5 did. Recommendation: B. Ray recorded the requirement as unchanged, and #286 delivered against the narrower one. | Open: Ray. |
-| 20261117 | Spanner | Ray's text, question 2: "Printed text is read only by renderer tests" forbids what the old Command bullet allowed, "an `Error:` line on `result.stderr`". 22 assertions in 10 test files read that line, including command tests already in the converted form (`tests/test_clients_commands.py`, `tests/test_calendar.py`). No open issue would remove them. **Option A:** the Printed text bullet allows a command test the `Error:` line on `result.stderr`. **Option B:** the 22 become non-compliance, and an issue is opened to remove them. Recommendation: A. The error wiring is checked once in the renderer, and the command test checks only that it reached it. | Open: Ray. |
-| 20261117 | Spanner | Ray's text, question 3: `db_session`'s docstring says "get() and attribute access return those objects as they were when loaded". The fixture's sessionmaker keeps the default `expire_on_commit=True`, so after `db_session.commit()`, which the same docstring invites, or after `expire_all()`, attribute access reads the current row. A probe renamed a client from another session: before any expiry the attribute, `get()` and a query all returned the old name; after a commit, or after `expire_all()`, the attribute returned the new one. **Option A:** "…return those objects as they were when loaded, until db_session commits or expire_all() is called; after that, they are read from the rows again, as a query after expunge_all() is". **Option B:** keep the text as given. Recommendation: A. A docstring that is wrong about what the code does breaks `docs/standards/3-code.md` §3.1. | Open: Ray. |
-| 20261117 | Spanner | Ray's text, question 4: two tests reach a connection outside the test's: `tests/test_database_isolation.py::TestTestDatabaseBuild::test_the_build_empties_the_schema_and_upgrades_to_head` builds its own engine, and `::test_a_run_builds_the_database_before_its_first_test` also runs a child `pytest`, which connects and rebuilds the database. "Everything a test reaches stays on the test's connection" refuses both, and neither is temporary: the build can't run inside the transaction. **Option A:** §6.1 states that a test of the build itself reaches it on a connection of its own and leaves the schema as it found it. **Option B:** the tests move to a suite of their own, as non-application suites already are. **Option C:** leave the text, and the two tests stand as unstated non-compliance. Recommendation: A. It is one clause, and the build is the only code that must run outside the transaction. | Open: Ray. |
+| 20261117 | Spanner | Ray's text, question 1: the old rule 5 limited where an argument may come from to a fixture pytest provides, a fixture in `tests/conftest.py`, or a `parametrize` mark. The new text, "A test takes its fixtures and `parametrize` values as arguments", doesn't say where a fixture may be defined, so a fixture defined in a test file now complies. That widens the requirement. Two such fixtures exist (`_no_writes`, `tests/test_ai_costs.py:750`; `_no_editor`, `tests/test_notes_log.py:200`), both #287's. **Option A:** the wider requirement is intended, and #287 is re-read against it. **Option B:** the text names where a fixture may come from, as rule 5 did. Recommendation: B. Ray recorded the requirement as unchanged, and #286 delivered against the narrower one. | Ray, 20261117: Option A. The widening is intended. A fixture defined in a test file complies when the test takes it as an argument. |
+| 20261117 | Spanner | Ray's text, question 2: "Printed text is read only by renderer tests" forbids what the old Command bullet allowed, "an `Error:` line on `result.stderr`". 22 assertions in 10 test files read that line, including command tests already in the converted form (`tests/test_clients_commands.py`, `tests/test_calendar.py`). No open issue would remove them. **Option A:** the Printed text bullet allows a command test the `Error:` line on `result.stderr`. **Option B:** the 22 become non-compliance, and an issue is opened to remove them. Recommendation: A. The error wiring is checked once in the renderer, and the command test checks only that it reached it. | Ray, 20261117: Option A. The Printed text bullet allows a command test the `Error:` line on `result.stderr`; Step 1. |
+| 20261117 | Spanner | Ray's text, question 3: `db_session`'s docstring says "get() and attribute access return those objects as they were when loaded". The fixture's sessionmaker keeps the default `expire_on_commit=True`, so after `db_session.commit()`, which the same docstring invites, or after `expire_all()`, attribute access reads the current row. A probe renamed a client from another session: before any expiry the attribute, `get()` and a query all returned the old name; after a commit, or after `expire_all()`, the attribute returned the new one. **Option A:** "…return those objects as they were when loaded, until db_session commits or expire_all() is called; after that, they are read from the rows again, as a query after expunge_all() is". **Option B:** keep the text as given. Recommendation: A. A docstring that is wrong about what the code does breaks `docs/standards/3-code.md` §3.1. | Ray, 20261117: Option A, worded "until db_session commits or expire_all() is called, get() and attribute access return those objects as they were when loaded"; Step 3. |
+| 20261117 | Spanner | Ray's text, question 4: two tests reach a connection outside the test's: `tests/test_database_isolation.py::TestTestDatabaseBuild::test_the_build_empties_the_schema_and_upgrades_to_head` builds its own engine, and `::test_a_run_builds_the_database_before_its_first_test` also runs a child `pytest`, which connects and rebuilds the database. "Everything a test reaches stays on the test's connection" refuses both, and neither is temporary: the build can't run inside the transaction. **Option A:** §6.1 states that a test of the build itself reaches it on a connection of its own and leaves the schema as it found it. **Option B:** the tests move to a suite of their own, as non-application suites already are. **Option C:** leave the text, and the two tests stand as unstated non-compliance. Recommendation: A. It is one clause, and the build is the only code that must run outside the transaction. | Ray, 20261117: Option A, as the rule's reason, not an exception: tests of the database build are the only ones that run outside the test's connection, because the build comes before the transaction, and they undo what they change; Step 1. |
 
 ---
 
@@ -78,7 +78,7 @@ On `hotfix/issue-285-testing-standard-rules` at `8932582`, 20261117. Its `tests/
 
 | Claim | Evidence |
 | --- | --- |
-| `docs/standards/6-testing.md` is §6's opening (lines 1–13), §6.1 (15–35), §6.2 (37–76) and §6.3 (78–80). Everything before `### 6.3` is 1,872 words. Ray's replacement is 626 words before `### 6.3`. | `docs/standards/6-testing.md`; `sed '/^### 6.3/,$d' docs/standards/6-testing.md \| wc -w` |
+| `docs/standards/6-testing.md` is §6's opening (lines 1–13), §6.1 (15–35), §6.2 (37–76) and §6.3 (78–80). Everything before `### 6.3` is 1,872 words. Ray's replacement is 663 words before `### 6.3`. | `docs/standards/6-testing.md`; `sed '/^### 6.3/,$d' docs/standards/6-testing.md \| wc -w` |
 | Six tests fail a later scope after calling a function that writes an outside-action record, and each wraps the call in a `record_scope` spy: `tests/test_ai_costs.py::TestAiCostService::test_record_reply_survives_a_later_failed_scope` (`:627`, scope at `:645-648`, `spy.assert_called_once()`); `tests/test_gdrive.py::TestDriveUploadRecord::test_t18_record_survives_a_later_failed_scope` (`:261`, scope at `:272-275`, `spy.assert_called_once()`); `tests/test_slack.py::TestSlackPostRecord::test_t19_record_survives_a_later_failed_scope` (`:585`, scope at `:601-605`, `spy.assert_called_once()`); `tests/test_clockify_service.py::TestPush::test_s17_the_link_survives_a_later_failed_scope` (`:330`), `::TestPull::test_s26_a_link_survives_a_later_failed_scope` (`:497`) and `::TestPull::test_s28_an_import_survives_a_later_failed_scope` (`:557`), each calling `_fail_a_later_scope()` (`:107-112`) and asserting `spy.assert_called()`. Only the first has a docstring, and it describes the later scope. | `pytest --collect-only -q \| grep later_failed_scope`; `grep -n "_fail_a_later_scope\|later" tests/test_clockify_service.py tests/test_ai_costs.py tests/test_gdrive.py tests/test_slack.py` |
 | Under the fixture, failing a later scope can't change whether a record test passes. | design study F2 (probe) |
 | After Step 2, `tests/test_clockify_service.py` and `tests/test_gdrive.py` name `get_db` only in their import, apart from a string patch target (`tests/test_gdrive.py:236`). `tests/test_slack.py` still calls `get_db()` at `:414`, in a `TestCase` setup. | `grep -n "get_db" tests/test_clockify_service.py tests/test_gdrive.py tests/test_slack.py` |
@@ -138,7 +138,7 @@ In `docs/standards/6-testing.md`, replace everything from the line `## 6. Testin
 **Every test runs in `workmain_test`, inside one transaction that rolls back when the test ends.** The fixtures in `tests/conftest.py` build the database and hold the transaction, and `pytest --fixtures -v` shows how each one works.
 
 - **A test seeds and reads through `db_session`.** Every session the code under test opens through `get_db()` joins the same transaction, so the test and the code see each other's writes.
-- **Everything a test reaches stays on the test's connection.**
+- **Everything a test reaches stays on the test's connection.** Tests of the database build are the only ones that run outside it, because the build comes before the transaction, and they undo what they change.
 
 ### 6.2 Writing a test
 
@@ -147,7 +147,7 @@ In `docs/standards/6-testing.md`, replace everything from the line `## 6. Testin
 - **Behaviour** is tested at the service. The test calls the service function and asserts the result's fields or the exception it raises. A service that takes a unit of work gets `fake_uow`, a `FakeUnitOfWork`, and one that still takes a session gets `db_session`.
 - **SQL** is tested at the repository, on `db_session`. Each fake repository method is tested against the real one, in a class parametrized over both, so the fake answers as the database does. A method that loads related records with its rows (§4.3) has a test that its statement count stays the same as its rows grow, with each row seeded with related rows of its own and `db_session.expunge_all()` called before counting, so a lazy load shows in the count.
 - **A command** has one end-to-end test per path through it: each outcome of a flag, a prompt's answer or a pick. The test runs the command through `CliRunner` against the test's database, with a recording renderer, and asserts the exit code, what the renderer received, and the rows the path writes or leaves alone.
-- **Printed text** is read only by renderer tests, at a width the test sets.
+- **Printed text** is read only by renderer tests, at a width the test sets, and by a command test reading the `Error:` line on `result.stderr`.
 - **An outside-action record** (§4.3) is tested at the function that writes it: a spy shows the function opened `record_scope()`, and the record is read through `db_session`. The spy stands for the record surviving its caller's failure, which only production shows.
 
 Converting code to a new form replaces every test of it, in whichever file it is.
@@ -179,7 +179,7 @@ Where each old statement goes. The results artifact's §3 copies this table, wit
 | §6.1: hand application code a session only before it opens its own | Moved | `_isolated_database`'s docstring; §6.1, "Everything a test reaches stays on the test's connection." |
 | §6.1: a record committed inside another open transaction is discarded; the record test | Moved | §6.2, "An outside-action record" |
 | §6.1: inject a database failure; never rely on one | Deleted | §6.2, "A test's result depends only on what it sets up", covers it |
-| §6.1: leaving the transaction fails the test (`close()`, `SessionLocal`, own engine) | Moved | `_isolated_database`'s docstring; §6.1, "Everything a test reaches stays on the test's connection." The own-engine case is open (Decision Log, question 4). |
+| §6.1: leaving the transaction fails the test (`close()`, `SessionLocal`, own engine) | Moved | `_isolated_database`'s docstring; §6.1, "Everything a test reaches stays on the test's connection." The build's own tests are the one case outside it, and §6.1 gives the reason. |
 | §6.1: the exceptions for `tests/test_database_isolation.py` and `tests/test_unit_of_work.py` | Deleted | Without the ban there is nothing to except |
 | §6.1: a child process is outside the transaction | Deleted | §6.1, "Everything a test reaches stays on the test's connection." |
 | §6.1: database work stays on the test's thread | Deleted | The same |
@@ -188,7 +188,7 @@ Where each old statement goes. The results artifact's §3 copies this table, wit
 | §6.2 rule 2: one assertion focus | Kept, reworded | §6.2, "Each test checks one path" |
 | §6.2 rule 3: no manual cleanup | Deleted | §6.1's rollback, and "its changes stay inside `workmain_test` and its `tmp_path`" |
 | §6.2 rule 4: group in `class Test<Topic>` | Kept, merged | §6.2, "A test is a method of a plain class…": "Related tests share a `Test<Topic>` class." |
-| §6.2 rule 5: a plain class, and arguments | Kept, reworded | §6.2, the same rule. Whether the requirement is unchanged is open (Decision Log, question 1). |
+| §6.2 rule 5: a plain class, and arguments | Kept, reworded | §6.2, the same rule. Its requirement changed: it no longer limits where a fixture is defined (Decision Log, question 1). |
 | §6.2 rule 6: `tmp_path` | Kept, merged | §6.2, "A test's result depends only on what it sets up, and its changes stay inside `workmain_test` and its `tmp_path`." |
 | §6.2 rule 7: provider routing | Deleted | The same rule, which names `config/` |
 | §6.2 rule 8: pin behaviour meant to stay | Moved | `docs/standards/1-workflow.md` §1.3 |
@@ -197,9 +197,9 @@ Where each old statement goes. The results artifact's §3 copies this table, wit
 | §6.2: Service | Kept, reworded | §6.2, "Behaviour", with `fake_uow` |
 | §6.2: Repository fake | Moved | §6.2, "SQL" (tested against the real repository, parametrized over both), and `tests/mocks/fake_unit_of_work.py`'s module docstring (the store, `REPOSITORIES`, the signature check) |
 | §6.2: Repository loading | Kept, shortened | §6.2, "SQL". The step-by-step procedure is deleted. |
-| §6.2: Renderer | Kept, shortened | §6.2, "Printed text". The `Console` construction, the picker's input and `tests/test_output.py` are deleted. |
+| §6.2: Renderer | Kept, shortened | §6.2, "Printed text", which also takes the Command bullet's `Error:` line. The `Console` construction, the picker's input and `tests/test_output.py` are deleted. |
 | §6.2: Click parameter types | Deleted | §6.2's rule, "Each piece of logic is tested in the layer that owns it", covers it |
-| §6.2: Command | Kept, reworded | §6.2, "A command": one test per path. The `Error:` line on `result.stderr` is open (Decision Log, question 2). |
+| §6.2: Command | Kept, reworded | §6.2, "A command": one test per path. The `Error:` line on `result.stderr` moves to the Printed text bullet. |
 | §6.2: the `run_workmain` second entry path | Deleted | §6.2's rule, "Each piece of logic is tested in the layer that owns it", puts the step's handling in the workflow's own tests |
 
 ### Step 2 — record tests
@@ -256,7 +256,7 @@ In `tests/conftest.py`, by DR5:
     """
 ```
 
-- Replace the docstring of `db_session` with the text below. Its last paragraph is open (Decision Log, question 3).
+- Replace the docstring of `db_session` with:
 
 ```python
     """
@@ -266,9 +266,10 @@ In `tests/conftest.py`, by DR5:
     code it calls share one transaction and see each other's writes. Commit
     it freely; every write rolls back with the test.
 
-    Its identity map keeps every object it has loaded: get() and attribute
-    access return those objects as they were when loaded, and a query after
-    expunge_all() reads the rows as they are now.
+    Its identity map keeps every object it has loaded: until db_session
+    commits or expire_all() is called, get() and attribute access return
+    those objects as they were when loaded, and a query after expunge_all()
+    reads the rows as they are now.
     """
 ```
 
@@ -359,7 +360,7 @@ The issue's ACs are numbered in its order. AC1.1, AC2.1, AC6.1, AC6.2, AC7.1 and
 | AC1.1 | §6.2 states how a test of an outside-action record is written, and that form opens no session through `get_db()` | A stated reading by Ray of `docs/standards/6-testing.md` §6.2's Outside-action record bullet, for whether a test author knows from it alone how to write a record test |
 | AC2.1 | Every `get_db()` call in `tests/` either complies with §6.1, or is in a test an open issue converts | `git grep -n 'get_db()' tests/`, each hit matched in the results artifact's table to the §6.1 statement it complies with, the open issue that converts its test, or "not a call" (a docstring, or `def fake_get_db():`). The table is read by Ray. |
 | AC3.1 | Every statement of the old opening, §6.1 and §6.2 is accounted for: kept, moved with its new home, or deleted with its reason | A stated reading by Ray of the results artifact's table of where each old statement went |
-| AC3.2 | §6 says what it requires in fewer words | `sed '/^### 6.3/,$d' docs/standards/6-testing.md \| wc -w` printing fewer than 1,872 (626 expected) |
+| AC3.2 | §6 says what it requires in fewer words | `sed '/^### 6.3/,$d' docs/standards/6-testing.md \| wc -w` printing fewer than 1,872 (663 expected) |
 | AC3.3 | The suite refuses an unregistered marker, and reports every skip with its reason | `python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['tool']['pytest']['ini_options']['addopts'])"` printing `--strict-markers -rs`; and `ANTHROPIC_API_KEY= GOOGLE_API_KEY= pytest tests/test_ai_providers_live.py` reporting `5 skipped`, with a `SKIPPED` line and its reason for each |
 | AC3.4 | `pytest --fixtures -v` shows `_test_database`, `_isolated_database`, `db_session` and `fake_uow` with the docstrings Step 3 states | `pytest --fixtures -v -p no:cacheprovider` printing each fixture's name with the first line of its Step 3 docstring under it, recorded in the results artifact |
 | AC3.5 | No docstring Step 3 writes gives an instruction | A stated reading by Ray of the four fixture docstrings and the `tests/mocks/fake_unit_of_work.py` module docstring, against `docs/standards/3-code.md` §3.1 |
@@ -380,6 +381,6 @@ The issue's ACs are numbered in its order. AC1.1, AC2.1, AC6.1, AC6.2, AC7.1 and
 ## 7. Risks and rollback
 
 - **A citation of §6.1 or §6.2 by content no longer finds what it cites.** `docs/standards/4-database.md` is repointed (Step 5). Open issues that cite earlier forms keep their text, and their specs restate them (§2). Rollback: revert Step 1.
-- **Tests that don't meet the new text.** The suite has tests that don't, and §1 Out of scope names the issue that owns each kind. Questions 1, 2 and 4 in the Decision Log are the ones no issue owns.
+- **Tests that don't meet the new text.** The suite has tests that don't, and §1 Out of scope names the issue that owns each kind. #287 owns the fixtures its tests don't take as arguments.
 - **A record test loses what it checked.** AC7.2 shows that no assertion or spy changed. Rollback: revert Step 2.
 - **An issue body is blanked by a failed edit.** Step 5 reads each body to a file and checks it is non-empty before writing, and the results artifact keeps the diff, so the earlier body can be restored from it.
