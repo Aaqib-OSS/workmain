@@ -1,5 +1,6 @@
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--strict-markers -rs"
 filterwarnings = ["error::pytest.PytestReturnNotNoneWarning"]
 
 [tool.ruff]
