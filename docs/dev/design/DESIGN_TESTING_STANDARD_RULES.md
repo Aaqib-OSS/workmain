@@ -58,9 +58,10 @@ The first pass was measured on `hotfix/issue-285-testing-standard-rules` at `bd9
 | F12 | #254 says §6.1 and §6.2 carry rules that exist only because the EOD workflow runs commands as child processes: §6.1's child-process bullet and §6.2's `run_workmain` bullet. This restructure keeps both rules. #254 removes them when it removes that entry path. | #254 body; `docs/standards/6-testing.md:34`, `:76` | Low |
 | F13 | **The `get_db()` ban protects nothing today.** Before #136, its stated reason was the fixture of that time: "A CLI command invoked through `CliRunner` opens its *own* session and transaction, so rows flushed-but-uncommitted by `db_session` are never visible to it." #136 replaced that fixture with the transaction fixture, and in doing so deleted the reason and kept the ban (`c283f20`, 20261012). #136's spec says of the `TestCase` sessions: "Under this fixture those sessions join the test's transaction, so they are harmless until then." `db_session` is itself `get_db().get_session()` (`tests/conftest.py:176`), so a session a test opens through `get_db()` is the same kind of object, in the same transaction, with the same last-in, first-out duty. The one thing the ban still gives is a single way for a test to get its seeding session, and rule 5 already gives that: `db_session` is a fixture in `tests/conftest.py`, so a test takes it as an argument. | `git show c283f20 -- docs/DEVELOPMENT_STANDARDS.md`; `docs/archive/specs/TEST_DATABASE_ISOLATION_SPEC.md:25`, `:45`; `tests/conftest.py:170-181` | High |
 | F14 | **Every kind in F3 follows from one governing rule and rule 5.** The proposed rule is under § The governing rule for §6.1, below. Taking each kind in F3 in turn: (a) `tests/conftest.py` defines the fixtures, and rule 5 governs tests. (b) and (c) `tests/test_database_isolation.py` and `tests/test_unit_of_work.py` call `get_db()`, `session_scope()`, `record_scope()` and `close()` because those are the code under test, which is what every test does. `TestTestDatabaseBuild` builds its own engine because `build_test_database` runs outside any transaction. It meets the governing rule by undoing its changes before it ends (`DROP TABLE IF EXISTS rebuild_probe` in `finally`, and a rebuild to head). (d) After Q1, the record tests have no `get_db()` call. (e) The 17 `TestCase` setups break rule 5, not isolation: their sessions join the transaction. That is temporary non-compliance, which #208, #209, #212, #214 and #216 remove. (f) is not a call. | F3, F4, F13; `tests/test_database_isolation.py:103-125` | High |
-| F15 | **Tests that depend on something they don't set up.** The results are in § Measurement for Q3, below. Of 1707 tests, 24 changed outcome, or were shown by reading to depend on something outside them. 12 of those depend on terminal width, which #198 already tracks. 12 are tracked by no issue. | § Measurement for Q3 | High |
+| F15 | **Tests that depend on something they don't set up.** The results are in § Measurement for Q3, below. Of 1707 tests, 24 changed outcome, or were shown by reading to depend on something outside them. 12 of those depend on terminal width, which #198 already tracks. On 20261117, 12 were tracked by no issue. § Who removes each untracked dependence assigns each one. | § Measurement for Q3 | High |
 | F16 | **The bare suite makes billed calls.** `tests/test_ai_providers_live.py` calls the Anthropic and Google APIs whenever `ANTHROPIC_API_KEY` and `GOOGLE_API_KEY` are set, and `.env` sets both. Its docstring says so, and it skips when a key is absent. Five tests made outside connections on 20261117. | `tests/test_ai_providers_live.py:1-30`; probe network records | Medium |
 | F17 | **No branch type in `docs/standards/2-git.md` §2.2 fits a change to `tests/` that alters no application code.** `chore/*` lists `docs/**`, standards, `.claude/` and dev tooling. It admits `tests/**` only when the change is "mechanically proven behaviour-neutral (e.g. AST-equality)", and deleting a later-scope block (Q1) changes what four tests do. `hotfix/*` admits the change. §2.2 says "A merge carrying application code — from `dev` or `hotfix/*` — is a release", and is silent on a `hotfix/*` that carries none. `/closeout` applies the release to every `hotfix/*` regardless: P11 requires the bump, the `CHANGELOG.md` section and the tag on that branch type, `references/hotfix.md` step 1 bumps a patch, and §2.6 requires a service restart. In practice the release happened every time. #271, #273 and #286 changed only `tests/`, docs and `workmain/__version__.py`, and were released as v1.58.1, v1.58.2 and v1.58.5. No open issue covers the gap. | `docs/standards/2-git.md` §2.2, §2.6; `.claude/skills/closeout/SKILL.md` P11; `.claude/skills/closeout/references/hotfix.md` step 1; `git diff --name-only` of merges `f6dbee5`, `2d2f3f5`, `91102e0`; `gh issue list --search` for "branch type tests", "chore tests", "release version bump", "§2.2" | Medium |
+| F18 | **Two things every run leaves behind a test, on purpose.** **(a) A sequence position.** PostgreSQL doesn't roll back `nextval`, so each insert moves its table's sequence on for every later test in the run. A probe inserted a client in one test and another in the next: they got IDs 1 and 2, though the first insert was rolled back. The build from empty resets the sequences at the start of the next run. **(b) Its `tmp_path`.** pytest keeps the directories of the last three sessions (`tmp_path_retention_count`). `/tmp/pytest-of-<user>/` held `pytest-54` to `pytest-56` after the probe. §6.2 rule 6 already says so ("keeps only its last three runs"), and also says "the suite leaves nothing behind". A sequence position matters to another test only when that test reads a generated ID. Two of the width failures in § Measurement for Q3 do, and they already break the first half of the principle. | Probe output `A id 1`, `B id 2`; `pytest --help` (`tmp_path_retention_count`); `ls /tmp/pytest-of-$USER/`; `docs/standards/6-testing.md:63` | Medium |
 
 ### Measurement for Q3
 
@@ -103,29 +104,25 @@ No test wrote under `~/.workmain/` or `config/`.
 
 Answered: Option C. Each of the four record tests drops its later-scope block, and `tests/test_clockify_service.py` drops `_fail_a_later_scope`. §6.1 states that the fixture can't show a record surviving its caller's failure. The `record_scope` spy is therefore the evidence for that property, and the read through `db_session` is the evidence that the record was written.
 
-### The governing rule for §6.1
+### The principle for every test (Q3, Q6)
 
-- **Proposed rule:** *Nothing a test does outlives it, and nothing it sees was left by another test.*
-- **How every test meets it:** the fixture's transaction, rolled back at the end of each test. Every session opened through `get_db()` joins that transaction, so such a session meets the rule.
-- **What follows from the rule** (F13, F14):
-  - **Which session a test uses** is rule 5's question, not isolation's. `db_session` is a fixture in `tests/conftest.py`, so a test that seeds or reads takes it as an argument.
-  - **A test whose subject is the session machinery** calls that machinery: `get_db()`, `session_scope()`, `record_scope()`, `close()`. That is a test calling what it tests, so it is no exception.
-  - **A test whose subject runs outside any transaction** (the build) meets the rule by undoing its own changes before it ends.
-  - **The rule is broken by:** closing the connection, replacing the session factory, building an engine the test does not dispose of with its changes undone, reaching a child process, and doing database work on another thread. Each one leaves the transaction, so each is refused or patched, as §6.1 says today.
-  - **A record test** can't show survival in the fixture (Q1).
-  - **The 17 `TestCase` setups** keep the rule, and are non-compliance with rule 5 that #208, #209, #212, #214 and #216 remove.
+**Ray, 20261117: §6's opening states one principle for every test,** *A test's result depends only on what it sets up, and nothing it does outlives it.* §6.1 states how the database meets it: the transaction rolled back after each test, and the build from empty. It does not state a governing rule of its own. Provider routing, the Renderer's width and the database isolation all follow from the one principle.
+
+What follows from it for `get_db()` (F13, F14):
+
+- **Which session a test uses** is rule 5's question. `db_session` is a fixture in `tests/conftest.py`, so a test that seeds or reads takes it as an argument.
+- **A test whose subject is the session machinery** calls that machinery: `get_db()`, `session_scope()`, `record_scope()`, `close()`. That is a test calling what it tests, so it is no exception.
+- **A test whose subject runs outside any transaction** (the build) meets the principle by undoing its own changes before it ends.
+- **The principle is broken by:** closing the connection, replacing the session factory, building an engine whose changes are not undone, reaching a child process, and doing database work on another thread. Each one leaves the transaction, so each is refused or patched.
+- **A record test** can't show survival in the fixture (Q1).
+- **The 17 `TestCase` setups** meet the principle, because their sessions join the transaction. They don't meet rule 5, and #208, #209, #212, #214 and #216 remove them.
 - **Rewritten second criterion** (Ray, 20261117): every `get_db()` call in `tests/` either complies with §6.1, or is in a test that an open issue converts. The results table names that issue for each such hit.
+
+**"Nothing it does outlives it" is broken by two things the suite does on purpose (F18), so the wording is Q7.**
 
 ### Defect-fix rule (Q2)
 
 Answered: Option A. The rule moves to §6's opening, next to the rule on recorded test evidence.
-
-### Provider routing (Q3)
-
-Ray, 20261117: Option A in principle, after measurement. The measurement above shows compliance is wide.
-
-- **The rule goes in as stated:** *A test's result depends only on what the test sets up.* Provider routing and the Renderer's written width become recipes for it.
-- **Its untracked violations become one new issue,** under Ray's design rule above. The issue's opening is proposed in § The issue for the untracked violations, below.
 
 ### Table coverage (Q4)
 
@@ -133,29 +130,36 @@ Answered: Option A.
 
 ### Branch type (Q5)
 
-F17: §2.2 has no type that fits this change, and Ray asked for that to be raised as a §2.2 gap rather than resolved here. #285 itself still needs a type before the spec. Two remain:
+Answered: Option A, `hotfix/*` with the patch release. The §2.2 gap is opened as #291.
 
-- **Option A — `hotfix/*`, as cut.** It is the one type whose rules admit a change to `tests/` that is not behaviour-neutral. `/closeout` releases it: a patch bump, a `CHANGELOG.md` section, a tag, a Release, and a service restart for application code that hasn't changed. This is the practice #271, #273 and #286 followed.
-- **Option B — `chore/*`.** It needs the spec to argue that deleting a test step is "behaviour-neutral" under the `tests/**` exception. AST-equality, the exception's own example of a proof, can't show that, so the argument would stretch the exception to fit. Defeated.
+### Who removes each untracked dependence
 
-**Recommendation: A.** It is what §2.2 and `/closeout` give today. The release it produces is the gap, which belongs to the §2.2 issue, not to #285.
+Ray, 20261117: each test that depends on something it doesn't set up goes to the one issue that will remove the dependence. Where an open issue already rewrites the test or owns the behaviour, that issue's body states the dependence and how its replacement test sets up what it needs, and the issue is linked as blocked by #285. A new issue takes only the tests no open issue owns.
 
-### The issue for the §2.2 gap
+| Test | Depends on | Issue | Why that issue |
+| --- | --- | --- | --- |
+| `tests/test_notification_engine.py::TestCoverageCheck::test_low_hours_flagged` | `WORKMAIN_EXPECTED_HOURS` from `.env` | #292 | #261 moves the inspection engine, but its criterion keeps these tests "passing unchanged". No other open issue touches the file. |
+| `tests/test_database_isolation.py::TestTestDatabaseGuard::test_a_run_naming_another_database_stops_before_any_test` | the `.env` file (`DB_NAME`, through `dotenv_values`) | #292 | #106 owns the defaults in `workmain/database/connection.py`, not this test's read of `.env`. |
+| `tests/test_ai_providers_live.py::test_claude_generation` | network, credentials, the live service | #292 | No open issue owns where the live tests run. #124 adds live tests to this file and follows #292's decision. #288 moves four of these five into classes, which leaves the dependence as it is. |
+| `tests/test_ai_providers_live.py::test_gemini_generation` | the same | #292 | the same |
+| `tests/test_ai_providers_live.py::test_provider_available[claude]` | the same | #292 | the same |
+| `tests/test_ai_providers_live.py::test_provider_available[gemini]` | the same | #292 | the same |
+| `tests/test_ai_providers_live.py::test_integrated_generation` | the same | #292 | the same |
+| `tests/test_provider_foundation.py::test_ollama_provider_generate_raises_unavailable` | nothing listening on `127.0.0.1:11434` | #288 | #288 rewrites the test, moving it into a class. #152 owns Ollama's availability behaviour, but is blocked by #122, so #288 reaches the test first. Its body now says each moved test sets up the unavailability itself. |
+| `tests/test_provider_foundation.py::test_ollama_provider_test_connection_returns_false` | the same | #288 | the same |
+| `tests/test_provider_foundation.py::test_ollama_provider_check_availability_returns_unavailable` | the same | #288 | the same |
+| `tests/test_slack_channel_config.py::TestSlackSetWorkspace::test_slack_set_workspace_shows_config` | `~/.workmain/integrations/slack/config.json` | #214 | #214 replaces every slack command test, and its criteria already include "No slack test reads the live Slack config file". Its body now records the measurement and says the replacement sets up the config under `tmp_path`. |
+| `tests/test_slack_channel_config.py::TestSlackSetWorkspace::test_slack_set_workspace_no_writes` | the same | #214 | the same |
+| `tests/test_gdrive.py::TestGDocsCLI::test_10_upload_all_dry_run` | `~/.workmain/integrations/gdrive/` (and width, which #198 tracks) | #207 | #207 replaces every gdocs command test. Its body now states the dependence and says the replacement sets up the authentication state under `tmp_path`. |
 
-- **Defect or gap:** gap. §2.2 doesn't say which branch type takes a change to `tests/` that is not behaviour-neutral and changes no application code, or whether its merge is a release. `/closeout` releases every `hotfix/*`. Three such merges were released (F17).
-- **Criteria it would need:**
-  - §2.2 states the branch type for that change, and whether its merge is a release. Checked by a stated reading by Ray of §2.2.
-  - `/closeout`'s preconditions and steps for that type agree with §2.2. Checked by a stated reading by Ray of P11 and the type's reference.
-- **An open issue it could join:** none was found.
+#207, #214 and #288 are linked as blocked by #285. #292 is blocked by #285 and #288: its network criterion holds only once #288's Ollama tests set up their own unavailability.
 
-### The issue for the untracked violations
+#292 carries both of Ray's changes to the earlier write-up:
 
-- **Defect or gap:** defect, once Q3's rule is in, because the standard will say every test depends only on what it sets up. The 12 untracked tests in § Measurement for Q3 each depend on one of five things: an environment value, `~/.workmain/`, the `.env` file, a local port, or the live provider services.
-- **Criteria it would need:**
-  - No test's outcome changes when `HOME` is an empty directory, when each `.env` value other than `DB_*` is changed, or when `.env` is absent. Checked by `pytest` reporting 0 failed under each change.
-  - No test reaches a network address other than the test database. Checked by a run with outside connections refused, reporting 0 failed.
-- **For that issue to decide:** whether the live provider tests (F16) leave the application suite for a suite of their own, reached by their own path, as `docs/standards/6-testing.md`'s opening already allows.
-- **An open issue it could join:** none was found. #198 covers width only.
+- **The `.env`-absent criterion supplies `DB_*` through the environment.** The other option, keeping only "each value other than `DB_*` changed", couldn't see the guard test's dependence, which is on the file and not on a value.
+- **A criterion for the database's time zone differing from the process's.**
+
+It carries `gap`, not `defect`: no document claimed these tests were independent of their surroundings until #285 states the principle.
 
 ## 5. Open questions
 
@@ -163,10 +167,11 @@ F17: §2.2 has no type that fits this change, and Ray asked for that to be raise
 | --- | --- | --- |
 | Q1 | F2 shows that, under the test fixture, failing a later scope can't change whether a record test passes. Should §6.1's record test drop the later scope, keeping the spy and the read through `db_session`, with each of the four record tests deleting its later-scope block (Option C)? That also makes the issue's first criterion wrong, so the spec restates it. Options A and B keep a step that proves nothing. Recommendation: C. | Ray, 20261117: Option C. `tests/test_clockify_service.py` also drops `_fail_a_later_scope`. §6.1 states that the fixture can't show a record surviving its caller's failure, so the spy is the evidence for that property and the `db_session` read is the evidence that the record was written. The spec restates the issue's first criterion, and the issue body is edited at close-out. |
 | Q2 | Does the defect-fix rule (§6.2 rule 9) stay in §6, moved into its opening next to the rule on recorded test evidence (Option A)? Or does it move to `docs/standards/1-workflow.md` §1.1 (Option B)? Recommendation: A. | Ray, 20261117: Option A. |
-| Q3 | §6.2 rule 7 (provider routing) is a recipe in the issue's list, but no rule in §6.2 is one it meets (F7). Should §6.2 add a rule for every test, "A test's result depends only on what the test sets up", with provider routing and the Renderer's width as recipes for it (Option A)? Or should provider routing stay a rule scoped to tests that build a `ProviderManager` (Option B)? A is a new rule and needs your approval. Recommendation: A. | Ray, 20261117: Option A in principle, after measurement. The measurement is § Measurement for Q3. Compliance is wide: 24 of 1707 tests showed a dependence, 12 of them on width, which #198 tracks. Awaiting Ray's approval of the rule, and his decision on opening the issue for the other 12 (§4 The issue for the untracked violations). |
+| Q3 | §6.2 rule 7 (provider routing) is a recipe in the issue's list, but no rule in §6.2 is one it meets (F7). Should §6.2 add a rule for every test, "A test's result depends only on what the test sets up", with provider routing and the Renderer's width as recipes for it (Option A)? Or should provider routing stay a rule scoped to tests that build a `ProviderManager` (Option B)? A is a new rule and needs your approval. Recommendation: A. | Ray, 20261117: Option A in principle, after measurement. The measurement is § Measurement for Q3. Then, Ray, 20261117: approved, as part of the one principle in Q6. Each untracked test goes to the one issue that removes its dependence (§4 Who removes each untracked dependence). #207, #214 and #288 take five, and #292 is opened for the other seven. |
 | Q4 | Does §6.2's table carry rows only for the forms it states today, each labelled with its layer, leaving any other layer to the principle (Option A)? Or does it carry a row for every layer in `docs/ARCHITECTURE.md` §1 (Option B)? Recommendation: A. | Ray, 20261117: Option A. |
-| Q5 | No branch type in `docs/standards/2-git.md` §2.2 fits a change to `tests/` that alters no application code (F17). Does #285 stay `hotfix/*` and take the patch release `/closeout` gives every `hotfix/*` (Option A)? `chore/*` (Option B) would stretch its `tests/**` exception. And is the §2.2 gap opened as its own issue (§4 The issue for the §2.2 gap)? Recommendation: A, and open the gap issue. | |
-| Q6 | Is §6.1's governing rule "Nothing a test does outlives it, and nothing it sees was left by another test", with the derivations in §4 The governing rule for §6.1? Under it, the `get_db()` ban becomes rule 5's guidance on which session a test takes, and nothing in `tests/` is an exception. Recommendation: yes. | |
+| Q5 | No branch type in `docs/standards/2-git.md` §2.2 fits a change to `tests/` that alters no application code (F17). Does #285 stay `hotfix/*` and take the patch release `/closeout` gives every `hotfix/*` (Option A)? `chore/*` (Option B) would stretch its `tests/**` exception. And is the §2.2 gap opened as its own issue? Recommendation: A, and open the gap issue. | Ray, 20261117: Option A, `hotfix/*` with the patch release. The gap is opened as #291. |
+| Q6 | Is §6.1's governing rule "Nothing a test does outlives it, and nothing it sees was left by another test", with the derivations in §4 The governing rule for §6.1? Under it, the `get_db()` ban becomes rule 5's guidance on which session a test takes, and nothing in `tests/` is an exception. Recommendation: yes. | Ray, 20261117: approved in substance, and merged with Q3 into one principle for every test in §6's opening (§4 The principle for every test). Its wording is Q7. |
+| Q7 | The principle Ray stated, "A test's result depends only on what it sets up, and nothing it does outlives it", has a second half that every run breaks on purpose, in two ways (F18): a sequence position, which no rollback undoes, and the `tmp_path` directories pytest keeps for three sessions. Ray's suggested widening, "left by anything but the suite's build", fixes the half about what a test sees, but not this one. Should the second half name what a test may change instead (Option A): "*A test's result depends only on what it sets up, and it changes nothing outside the suite's own database and temporary directories*"? Under A, the per-test rollback follows from the first half, since another test's leftover rows are something a test didn't set up. The build from empty does too. The second half forbids `~/.workmain/`, `config/`, the live database and outside services. A sequence position is inside the suite's database, and harmless unless a result reads it, which the first half forbids. Option B keeps "outlives it", and §6.1 explains the sequence and §6.2 the retained directories. That is two stated exceptions to the principle, which Ray's design rule refuses. Recommendation: A. | |
 
 ## 6. Disposition
 
