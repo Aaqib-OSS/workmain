@@ -1,6 +1,6 @@
 # Testing Standard Rules — Spec
 
-**Status:** Draft
+**Status:** Approved
 **Author:** Spanner (Role 1)
 **Date:** 20261117
 **Branch:** `hotfix/issue-285-testing-standard-rules` (from `main`)
