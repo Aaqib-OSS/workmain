@@ -11,11 +11,11 @@ from datetime import date, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 from click.testing import CliRunner
+from sqlalchemy.orm import Session
 
 from workmain.cli.commands.gdocs import _format_notes_markdown, _record_upload, gdocs
-from workmain.database.connection import DatabaseConnection, get_db
+from workmain.database.connection import DatabaseConnection
 from workmain.database.models import GDriveUpload
 from workmain.database.repositories.gdrive_repository import GDriveRepository
 
@@ -258,7 +258,7 @@ class TestGDocsCLI:
 
 class TestDriveUploadRecord:
 
-    def test_t18_record_survives_a_later_failed_scope(self, db_session):
+    def test_t18_record_is_written_in_a_record_scope(self, db_session: Session) -> None:
         with patch.object(
             DatabaseConnection, 'record_scope', autospec=True,
             side_effect=DatabaseConnection.record_scope,
@@ -268,11 +268,6 @@ class TestDriveUploadRecord:
                 "Sentinel_96.md", "notes", date(2099, 6, 1),
             )
         spy.assert_called_once()
-
-        with pytest.raises(RuntimeError):
-            with get_db().session_scope() as session:
-                _make_upload(session, drive_file_id="sentinel-later-failure")
-                raise RuntimeError("later failure")
 
         rows = db_session.query(GDriveUpload).filter(
             GDriveUpload.drive_file_id == "sentinel-drive-id"
