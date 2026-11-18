@@ -1,10 +1,10 @@
 # clients_service and tasks_service on the unit of work — Implementation Results
 
-**Status:** Active
+**Status:** Shipped
 **Author:** Anvil (Role 3)
 **Date:** 20261117
 **Spec:** `../specs/CLIENTS_TASKS_UNIT_OF_WORK_SPEC.md`
-**Released as:** set by `/closeout`
+**Released as:** v1.59.0 (tag v1.59.0)
 
 ---
 
