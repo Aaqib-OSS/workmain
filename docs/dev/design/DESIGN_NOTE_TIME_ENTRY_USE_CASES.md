@@ -69,25 +69,20 @@ Not read: the bodies of the other `ActionExecutor` handlers beyond what reposito
 
 The question is real. Today the summary, the condensed note and the linked entry are written as one unit (F6). The use case cannot run inside the scope that holds the condenser's write (§4.1), so one of the two writes has to move. Calling the condenser from inside the use case is not an option: it would make this issue the first provider-calling conversion, which #258 left to #262, and the condenser needs a session that a unit of work does not expose (F9).
 
-#### Option A — The caller commits the summary, then calls the use case
-
-- **Approach:** the condenser is unchanged. The command commits its scope after `condense_meeting` returns, which writes the summary. It closes the scope and calls a use case that writes the condensed note and links the entry.
-- **Pros:** no change to `workmain/ai/note_condenser.py` or `MeetingsRepository`. Smallest diff.
-- **Cons:** it splits one unit into two. If the use case fails, the meeting keeps a `condensed_summary` with no condensed note and no linked entry. EOD then stops offering it for condensation (F7), so its entry is never linked unless someone runs `meetings condense` by hand. That is a behaviour regression the issue does not ask for.
-
-#### Option B — The use case writes the summary with the note and the entry
+#### The only valid option — the use case writes the summary with the note and the entry
 
 - **Approach:** `condense_meeting` stops writing. It returns the summary it computed, and the rest of its return value is unchanged. The command closes its scope, which by then has only read, and calls one use case with the meeting id, the summary and its tags. That use case writes `condensed_summary` and `condensed_at`, creates the condensed note and links the entry, in one unit of work. The write goes through `MeetingsRepository`, which owns the meetings table: either `update` gains the two fields or a new method writes them. The spec names which. Its fake gets a contract class.
-- **Pros:** it keeps today's grouping, all three or none, on every surface (F6). It is the alternative the issue body names ("or moves that write into the use case"). It removes a write from a capability, the direction the known deficiency assigned to #208 points (F8). It does not do #208's work: the condenser still queries through the session it is handed. The command's scope holds no write across the provider call, as today.
-- **Cons:** it changes `workmain/ai/note_condenser.py`. No test asserts that the condenser writes the summary. The one assertion on it, `tests/test_note_condenser.py:338`, checks that a refused condensation leaves it unwritten, which still holds. It adds a repository change and one more fake method with its contract tests.
-
-**Recommendation:** Option B. The project's rule for a unit of work is that the use case decides once, for every surface, which writes commit together (#258's study, § The transaction belongs to the use case). Option A breaks a grouping that holds today, and its failure is silent: EOD stops offering the meeting. Option B is the only one that keeps the grouping, and it costs one repository method, which the meetings table's owner gains.
+- **Why it is the only one:**
+  - **The grouping belongs to the use case.** Under #258's direction, a use case decides once, for every surface, which writes commit together (`docs/archive/design/DESIGN_UNIT_OF_WORK.md` § The transaction belongs to the use case). Committing the summary in the command first would put that decision back in the caller, which is what this conversion removes. It would also split a unit that holds today (F6), and the resulting failure is silent: EOD stops offering the meeting (F7).
+  - **It matches the converted form.** A capability returns plain values, and the application layer writes them through the repository that owns the table (`docs/ARCHITECTURE.md` §1 Capabilities and Data). The condenser's write moves out of a capability, the direction the known deficiency assigned to #208 points (F8). Leaving the write in place would be code #208 then removes. #208's own work is not done here: the condenser still queries through the session it is handed.
+  - **It can be tested in the standard form.** "The summary, note and entry commit together" becomes a property of one use case, tested at the service on `fake_uow`, with the repository method under a contract class (`docs/standards/6-testing.md` §6.2). With the write in the command, no test owns that property.
+- **What it costs:** a change to `workmain/ai/note_condenser.py`. No test asserts that the condenser writes the summary. The one assertion on it, `tests/test_note_condenser.py:338`, checks that a refused condensation leaves it unwritten, which still holds. One repository change, and its fake method with contract tests. The command's scope holds no write across the provider call, as today.
 
 ## 5. Open questions
 
 | Q | Question | Answer |
 | --- | --- | --- |
-| Q1 | Where is the condensed summary written: does the command commit it before the use case, splitting it from the note and entry (Option A)? Or does the condenser stop writing, so the use case writes the summary, the condensed note and the linked entry as one unit of work (Option B)? | |
+| Q1 | Does the condenser stop writing, so that one use case writes the condensed summary, the condensed note and the linked entry in a single unit of work (§4 Q1, the only valid option)? | |
 
 ## 6. Disposition
 
