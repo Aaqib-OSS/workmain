@@ -1,6 +1,6 @@
 # clients_service and tasks_service on the unit of work — Spec
 
-**Status:** Draft
+**Status:** Approved
 **Author:** Spanner (Role 1)
 **Date:** 20261116
 **Branch:** `feature/issue-279-clients-tasks-unit-of-work` (from `dev`)
