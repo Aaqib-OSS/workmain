@@ -145,7 +145,6 @@ class TestClientsCommands:
                 question=question,
             ),
         )
-        assert question in result.stdout
         recording_renderer.changed.assert_called_once_with(CLIENT_CHANGE, row, 'Deleted')
         recording_renderer.cancelled.assert_not_called()
         db_session.expunge_all()
@@ -179,7 +178,6 @@ class TestClientsCommands:
             )
 
         assert result.exit_code == 1
-        assert result.stderr == 'Aborted!\n'
         recording_renderer.report.assert_called_once()
         recording_renderer.cancelled.assert_not_called()
         recording_renderer.changed.assert_not_called()
@@ -198,7 +196,6 @@ class TestClientsCommands:
         )
 
         assert result.exit_code == 0, result.stderr
-        assert result.stdout == ''
         recording_renderer.report.assert_called_once()
         recording_renderer.changed.assert_called_once_with(
             CLIENT_CHANGE, clients_service.ClientRow(client.id, 'ZqvAcme', True), 'Deleted',

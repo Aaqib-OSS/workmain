@@ -93,6 +93,14 @@ class TestTasksList:
         assert page.filters == (
             ('status', 'completed'), ('search', 'zqvmatch'), ('created', date(2099, 1, 5)),
         )
+        db_session.expunge_all()
+        stored = {
+            ts.note_id: ts.status
+            for ts in db_session.query(TaskStatus).filter(TaskStatus.note_id.in_(ids))
+        }
+        assert stored == {
+            note_id: status for note_id, (_, status, _) in zip(ids, seeds)
+        }
 
     def test_all_removes_the_cap_whatever_limit_says(
         self, db_session: Session, recording_renderer: NonCallableMagicMock
@@ -127,6 +135,14 @@ class TestTasksList:
         assert view is TASK_LIST
         assert [row.note_id for row in page.rows] == [ids[2], ids[1], ids[0]]
         assert page.total == 3
+        db_session.expunge_all()
+        stored = {
+            ts.note_id: ts.status
+            for ts in db_session.query(TaskStatus).filter(TaskStatus.note_id.in_(ids))
+        }
+        assert stored == {
+            note_id: status for note_id, (_, status, _) in zip(ids, seeds)
+        }
 
 
 class TestTasksToday:
@@ -160,6 +176,14 @@ class TestTasksToday:
         assert view is TASK_TODAY
         assert [row.note_id for row in page.rows] == [ids[0]]
         assert page.filters == (('status', 'active'), ('created', today), ('search', 'zqvtoday'))
+        db_session.expunge_all()
+        stored = {
+            ts.note_id: ts.status
+            for ts in db_session.query(TaskStatus).filter(TaskStatus.note_id.in_(ids))
+        }
+        assert stored == {
+            note_id: status for note_id, (_, status, _) in zip(ids, seeds)
+        }
 
 
 class TestTasksShow:
@@ -188,6 +212,9 @@ class TestTasksShow:
             ),
         )
         recording_renderer.cancelled.assert_not_called()
+        db_session.expunge_all()
+        stored = db_session.query(TaskStatus).filter(TaskStatus.note_id == note.id).one()
+        assert (stored.status, stored.completed_at) == ('active', None)
 
     def test_show_with_the_pick_cancelled_records_nothing(
         self, db_session: Session, recording_renderer: NonCallableMagicMock
