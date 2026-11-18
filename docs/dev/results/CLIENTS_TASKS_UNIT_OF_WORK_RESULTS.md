@@ -25,7 +25,7 @@ Complete. Every public function of `clients_service` and `tasks_service` takes a
 
 ## 3. Acceptance criteria
 
-All checks run at `ddc565b`.
+All checks run at `2644cfb`.
 
 | AC | Status | Evidence |
 | --- | --- | --- |
@@ -37,7 +37,7 @@ All checks run at `ddc565b`.
 | AC5.1 | Met | `python3 automation/architecture_check.py` printed `New findings: 0`. |
 | AC6.1 | Met | `pytest tests/test_output.py::TestRecordingRenderer`: 4 passed, 0 failed, 0 skipped. `test_is_a_renderer_so_pass_renderer_keeps_it` asserts `isinstance(recording_renderer, Renderer)`. `test_every_public_method_records_its_call_and_prints_nothing` calls each public `Renderer` method found by `inspect` and asserts the call is in `mock_calls` and `capsys` captured nothing. |
 | AC7.1 | Met | Ray, 20261117: Reviewed `docs/standards/5-cli.md` §5.6's converted-command bullet and its preview and outside-action sub-bullets. |
-| AC8.1 | Met | `pytest`: 1787 passed, 0 failed, 0 skipped. |
+| AC8.1 | Met | `pytest` at `2644cfb`: 1787 passed, 0 failed, 0 skipped. |
 | AC8.2 | Met | `pytest tests/test_task_lifecycle.py::TestQueries`: 8 passed, 0 failed, 0 skipped, including `test_get_filtered_statement_count_does_not_grow_with_rows`. With `contains_eager(TaskStatus.note)` removed from `get_filtered` it failed. |
 
 ## 4. Deviations and decisions
@@ -180,7 +180,7 @@ New tests with no predecessor: `tests/test_tasks_commands.py::TestTasksList::tes
 
 ## 5. Verification
 
-- **Test suite:** 1787 passed, 0 failed, 0 skipped (baseline at `b63ccac`: 1707 passed, 0 failed, 0 skipped) — form per `docs/standards/6-testing.md` §6.
+- **Test suite:** 1787 passed, 0 failed, 0 skipped at `2644cfb` (baseline at `b63ccac`: 1707 passed, 0 failed, 0 skipped) — form per `docs/standards/6-testing.md` §6.
 - **Defect shown before the fix:** n/a; no defect fix.
 - **Live verification:** none run. The spec names no live check.
 - **Daemon restart:** close-out's (`docs/standards/2-git.md` §2.6).
