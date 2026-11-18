@@ -1,6 +1,6 @@
 # Paid Providers Require Their Rate Keys — Implementation Results
 
-**Status:** Active
+**Status:** Shipped
 **Author:** Anvil (Role 3)
 **Date:** 20261118
 **Spec:** `../specs/REQUIRED_RATE_KEYS_SPEC.md`
@@ -65,7 +65,7 @@ None.
   - Step 1(d), after: 8 passed (with (iii)–(vi), 14 passed).
 - **Existing tests before the fixture change:** after DR1–DR5 and before Step 1(c), the suite was 14 failed, 1781 passed. The 14 were the spec's 18 less the four `TestProviderManagerPolicyLoading` tests that assert a bare `ConfigurationError` (`test_policy_error_absent_file`, `_unparseable`, `_missing_required_key`, `_does_not_land_in_disabled`), which passed on the rate refusal, as the spec's §2 and §7 predicted. After the fixture change, running that class's `_run` with each fake loader raises the policy error itself: `payload policy file is missing`, `is not valid JSON`, and `is missing required key(s): thinking`.
 - **Checks:** `automation/architecture_check.py`: 0 new findings, PASS. `automation/style_check.py`: 0 violations, PASS.
-- **Live verification:** none run. The live `config/ai_settings.json` carries both rate keys on both enabled paid providers (the spec's §2).
+- **Live verification:** at close-out, 20261118, on this branch: `workmain providers list` against the live `config/ai_settings.json` exited 0. `ProviderManager` loaded under the new rate key check, and Claude, Gemini and Ollama all show `available`. The live config carries both rate keys on both enabled paid providers (the spec's §2). The close-out preflight suite: 1801 passed, 0 failed, 0 skipped.
 - **Daemon restart:** close-out's (`docs/standards/2-git.md` §2.6).
 
 ## 6. Follow-ups

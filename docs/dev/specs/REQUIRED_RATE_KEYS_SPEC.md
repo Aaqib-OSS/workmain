@@ -1,6 +1,6 @@
 # Paid Providers Require Their Rate Keys — Spec
 
-**Status:** Approved
+**Status:** Shipped
 **Author:** Spanner (Role 1)
 **Date:** 20261118
 **Branch:** `feature/issue-155-required-rate-keys` (from `dev`)
