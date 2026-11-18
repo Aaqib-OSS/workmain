@@ -1,6 +1,6 @@
 # Paid Providers Require Their Rate Keys — Spec
 
-**Status:** Draft
+**Status:** Approved
 **Author:** Spanner (Role 1)
 **Date:** 20261118
 **Branch:** `feature/issue-155-required-rate-keys` (from `dev`)
@@ -25,6 +25,7 @@
 | 20261118 | Caliper | 8 and 3, spec defect, non-blocking: the spec contradicts itself on which new tests run before the fix and what they show. Step 1(a) says to run all the new tests and that the tests of AC1.1, AC1.2 and AC1.4 fail. §6 says tests (iii), (v) and (vi) "need DR1, DR2 or DR4 to exist and are run only after". Tests (iv) and (v) both patch `missing_config_keys` with `patch.object`. That method does not exist before DR2, so both stop with `AttributeError` before any assertion runs. Test (iv) therefore shows no defect, and nothing distinguishes it from (v). Tests (iii) and (vi) do not need DR1, DR2 or DR4: with today's code, a disabled provider with no rate keys loads (`provider_manager.py:462-464`), and `estimate_cost` prices at the configured rates (`claude.py:224-226`, `gemini.py:262-264`), so both pass before the fix. The implementer has to guess what to run and record in Step 1(a), and the results artifact's "before" runs depend on that guess. | **Accepted.** Step 1(a) writes and runs only (i) and (ii), the tests that show the defect. Step 1(d) writes (iii)–(vi) after the fix. §6 states the same, with the reason each of (iii)–(vi) shows no defect. |
 | 20261118 | Caliper | 3, spec defect, non-blocking: it is unclear whether DR7 covers existing tests. DR7 says "A test of pricing uses rates unlike any built-in rate DR5 removes". §2 lists existing pricing tests that use those exact rates: `_offline_claude_config` (0.003 / 0.015), `_offline_gemini_config` (0.00015 / 0.0006), and the expectations at `tests/test_ai_providers_offline.py:664` and `:685`. Neither §1 nor Step 1 says to change them, and DR6 says only the 18 listed tests' fixtures change. The implementer has to guess whether DR7 means changing those two shared fixtures, which many other offline tests use, or applies only to new test (vi). | **Accepted.** DR7 covers only test (vi). The existing fixtures and expectations are not changed: once DR5 removes the built-in rates, the values they use can come only from their own config. §2's fixture lines are corrected to 369-379. |
 | 20261118 | Caliper | Pass at 1525d15, full: 36 items checked, 0 blocking, 3 non-blocking. | n/a |
+| 20261118 | Caliper | Pass at fe88949, changes since 1525d15: 14 items checked, 0 blocking, 0 non-blocking. | n/a |
 
 ---
 
