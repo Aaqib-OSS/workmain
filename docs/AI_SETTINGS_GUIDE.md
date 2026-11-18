@@ -45,14 +45,14 @@ Each key under `providers` is a `ProviderType` value (`workmain/ai/base_provider
 | `cost_structure` | string | Human-readable pricing label displayed by `providers list`. Update here if pricing changes — purely informational. |
 | `accepts` | list | Required on every provider, enabled or not. The `instructions` values this provider can serve. Absent, empty, or holding an unknown value refuses to load. See § Which providers can serve a call. |
 
-**Cost values are Ray's.** `cost_structure` and every `cost_per_1k_*` field are set by Ray whenever a model changes. A spec step that changes a model changes `model`, `notes` and `last_updated`, then stops and reports the expected cost values, citing the vendor's live pricing page and the date it was read, never a cached table. Ray makes the cost edit.
+**Cost values are Ray's.** `cost_structure` and every `cost_per_1k_*` field are set by Ray whenever a model changes. A spec step that changes a model changes `model`, `notes` and `last_updated`, then stops and reports the expected cost values, citing the vendor's live pricing page and the date it was read, never a cached table. Ray makes the cost edit. Each enabled paid provider's entry must carry `cost_per_1k_prompt_tokens` and `cost_per_1k_completion_tokens`. When either is missing, `ProviderManager` refuses to load and names the missing key as `providers.<name>.<key>`. Rates are set by hand in the entry. WorkmAIn never fetches them from the vendor, and a provider has no rate of its own to fall back on.
 
 ### Claude-Specific Fields
 
 | Field | Description |
 |-------|-------------|
-| `cost_per_1k_prompt_tokens` | USD cost per 1,000 prompt tokens — used by `estimate_cost()` |
-| `cost_per_1k_completion_tokens` | USD cost per 1,000 completion tokens: every output token the provider bills, thinking included |
+| `cost_per_1k_prompt_tokens` | **Required.** USD cost per 1,000 prompt tokens — used by `estimate_cost()` |
+| `cost_per_1k_completion_tokens` | **Required.** USD cost per 1,000 completion tokens: every output token the provider bills, thinking included |
 | `rate_limit_rpm` | Requests per minute cap (informational) |
 | `timeout_seconds` | API call timeout |
 | `retry_attempts` | How many times to retry a failed API call |
@@ -188,7 +188,7 @@ Adding a provider requires five steps — no other code changes needed:
    ```
    workmain/ai/providers/<name>.py
    ```
-   Implement all five abstract methods from `BaseProvider` (generate, estimate_cost, validate_config, count_tokens, check_availability). See `providers/claude.py` for a complete example. Set `provider_type = ProviderType.<NAME>` on the class and use `self.provider_type` wherever the class names itself. If `generate()` reads any policy key, declare those keys in a `REQUIRED_POLICY_KEYS` class attribute so an incomplete policy is refused at construction rather than failing at request time.
+   Implement all five abstract methods from `BaseProvider` (generate, estimate_cost, validate_config, count_tokens, check_availability). See `providers/claude.py` for a complete example. Set `provider_type = ProviderType.<NAME>` on the class and use `self.provider_type` wherever the class names itself. If `generate()` reads any policy key, declare those keys in a `REQUIRED_POLICY_KEYS` class attribute so an incomplete policy is refused at construction rather than failing at request time. Declare in a `REQUIRED_CONFIG_KEYS` class attribute every key the provider requires from its `providers.<name>` entry, so an incomplete entry is refused at load. A paid provider declares both `cost_per_1k_prompt_tokens` and `cost_per_1k_completion_tokens`, and reads each with no fallback value.
 
 3. **Add the class to the tuple in `providers/__init__.py`.** `PROVIDER_REGISTRY` is built from each class's `provider_type`:
    ```python
@@ -208,6 +208,8 @@ Adding a provider requires five steps — no other code changes needed:
        "model": "<model-id>",
        "accepts": ["<instructions value>"],
        "api_key_env": "<API_KEY_ENV_VAR>",
+       "cost_per_1k_prompt_tokens": "<USD per 1,000 prompt tokens>",
+       "cost_per_1k_completion_tokens": "<USD per 1,000 completion tokens>",
        "cost_structure": "$X/MTok prompt, $Y/MTok completion"
      }
    }
