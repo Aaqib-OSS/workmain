@@ -10,7 +10,7 @@
 
 ## 1. Summary
 
-Complete. Everything before `### 6.3 Placement` in `docs/standards/6-testing.md` is Ray's text, verbatim. The six record tests no longer fail a later scope, and each is renamed for what it checks. The fixtures' mechanics are in their docstrings, and `fake_uow` is added. The `pyproject.toml` comment that cited §6.2 is gone. The two rules that left §6 have their homes, and no live document or open issue cites a §6 rule by number. The suite is unchanged at 1707 tests, all passing. Five criteria are Ray's readings and await him.
+Complete. Everything before `### 6.3 Placement` in `docs/standards/6-testing.md` is Ray's text, verbatim. The six record tests no longer fail a later scope, and each is renamed for what it checks. The fixtures' mechanics are in their docstrings, and `fake_uow` is added. The `pyproject.toml` comment that cited §6.2 is gone. The two rules that left §6 have their homes, and no live document or open issue cites a §6 rule by number. The suite is unchanged at 1707 tests, all passing.
 
 ## 2. What shipped, by step
 
@@ -27,14 +27,14 @@ Complete. Everything before `### 6.3 Placement` in `docs/standards/6-testing.md`
 
 | AC | Status | Evidence |
 | --- | --- | --- |
-| AC1.1 | **Not met** | Awaiting Ray: his reading of §6.2's Outside-action record bullet. The mechanical half is shown: no line of the six tests' bodies names `get_db` (§5 Record test bodies). |
-| AC2.1 | **Not met** | Awaiting Ray: his reading of the table in §5 `get_db()` census, which matches all 45 hits of `git grep -n 'get_db()' tests/` to a Step 6 category. |
-| AC3.1 | **Not met** | Awaiting Ray: his reading of the table in §5 Where each old statement went. |
+| AC1.1 | Met | Ray, 20261117: §6.2 states how a test of an outside-action record is written, and that form opens no session through `get_db()`. The mechanical half is shown: no line of the six tests' bodies names `get_db` (§5 Record test bodies). |
+| AC2.1 | Met | Ray, 20261117: Every `get_db()` call in `tests/` either complies with §6.1, or is in a test an open issue converts. Table in §5 `get_db()` census, which matches all 45 hits of `git grep -n 'get_db()' tests/` to a Step 6 category. |
+| AC3.1 | Met | Ray, 20261117: Every statement of the old opening, §6.1 and §6.2 is accounted for: kept, moved with its new home, or deleted with its reason and table in §5 Where each old statement went. |
 | AC3.2 | Met | `sed '/^### 6.3/,$d' docs/standards/6-testing.md \| wc -w` printed `660` (was 1,872). |
 | AC3.3 | Met | The `tomllib` command printed `--strict-markers -rs`. `ANTHROPIC_API_KEY= GOOGLE_API_KEY= pytest tests/test_ai_providers_live.py` reported `5 skipped`, with five `SKIPPED [1] tests/test_ai_providers_live.py:<line>: <key> not set` lines (§5 AC3.3 run). |
 | AC3.4 | Met | The comparison script in §5 AC3.4 printed `equal` for `_test_database` (8 lines), `_isolated_database` (18), `db_session` (10) and `fake_uow` (4), exit 0. |
-| AC3.5 | **Not met** | Awaiting Ray: his reading of the four fixture docstrings and the `tests/mocks/fake_unit_of_work.py` module docstring against `docs/standards/3-code.md` §3.1. |
-| AC4.1 | **Not met** | Awaiting Ray: his reading of §6.2's Command bullet. |
+| AC3.5 | Met | Ray, 20261117: No docstring Step 3 writes gives an instruction |
+| AC4.1 | Met | Ray, 20261117: §6.2 states how a command branch that skips or changes a service call is tested, as a path through the command |
 | AC6.1 | Met | `grep -nE '^[0-9]+\. ' docs/standards/6-testing.md` and the spec's `grep -rnE … \| grep -v …` both printed nothing. |
 | AC6.2 | Met | The filter in §5 AC6.2 printed nothing, run after the Step 5 edits. |
 | AC6.3 | Met | The first `grep` printed one line, `docs/standards/1-workflow.md:102`; the second printed one line, `.claude/skills/session-start/references/anvil.md:43`. |
