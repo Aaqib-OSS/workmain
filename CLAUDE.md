@@ -147,13 +147,13 @@ Different fields, different write paths. **Never conflate them.**
 
 ### Note Write-Path Convergence - Source of Truth
 
-All note and paired-TimeEntry creation goes through the service layer:
+All note and paired-TimeEntry creation in `workmain/` goes through the service layer:
 
 - `notes_service.create_note()` - pure-note writes; also the first half of every paired write.
 - `time_entry_service.create_time_entry()` - task-shaped paired write (`source='task'`, meeting_id never reaches the Note - intentional).
 - `time_entry_service.create_paired_time_entry()` - the TimeEntry half of a meeting/condensed/Clockify pair; derives meeting_id and client_id from the created Note.
 
-No file outside `notes_service.py` calls `TaskStatusRepository.ensure_active` or `.set_dismissed_by_tag_removal` directly. The CF→TaskStatus hook fires from `notes_service.apply_cf_hook_on_create()` and `apply_cf_hook_on_tag_update()` (any tag-mutating update, e.g. `notes edit`). No direct `NotesRepository.create()` or `TimeEntriesRepository.create()` call exists outside those two service modules.
+No file under `workmain/` outside `notes_service.py` calls `TaskStatusRepository.ensure_active` or `.set_dismissed_by_tag_removal` directly. The CF→TaskStatus hook fires from `notes_service.apply_cf_hook_on_create()` and `apply_cf_hook_on_tag_update()` (any tag-mutating update, e.g. `notes edit`). No direct `NotesRepository.create()` or `TimeEntriesRepository.create()` call exists in `workmain/` outside those two service modules.
 
 ### Client Reference
 

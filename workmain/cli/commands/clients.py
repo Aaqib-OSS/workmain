@@ -16,8 +16,8 @@ from workmain.cli.output import (
     WorkmAInGroup,
     pass_renderer,
 )
-from workmain.database.connection import get_db
 from workmain.services import clients_service
+from workmain.services.unit_of_work import UnitOfWork
 
 CLIENT_LIST = CollectionView(
     "clients",
@@ -92,8 +92,7 @@ def clients_add(renderer, name: str):
       workmain clients add "Acme Corp"
       workmain clients add ACME
     """
-    with get_db().session_scope() as session:
-        row = clients_service.add_client(session, name)
+    row = clients_service.add_client(UnitOfWork(), name)
     renderer.changed(CLIENT_CHANGE, row, "Created")
 
 
@@ -110,8 +109,7 @@ def clients_list(renderer):
     Examples:
       workmain clients list
     """
-    with get_db().session_scope() as session:
-        page = clients_service.list_clients(session)
+    page = clients_service.list_clients(UnitOfWork())
     renderer.collection(CLIENT_LIST, page)
 
 
@@ -132,8 +130,7 @@ def clients_show(renderer, id_or_name: str):
       workmain clients show ACME
       workmain clients show 1
     """
-    with get_db().session_scope() as session:
-        detail = clients_service.get_client(session, id_or_name)
+    detail = clients_service.get_client(UnitOfWork(), id_or_name)
     renderer.record(CLIENT_RECORD, detail)
 
 
@@ -157,14 +154,12 @@ def clients_delete(renderer, id_or_name: str, force: bool):
       workmain clients delete "Acme Corp"
       workmain clients delete 2 --force
     """
-    with get_db().session_scope() as session:
-        preview = clients_service.preview_delete(session, id_or_name, force)
+    preview = clients_service.preview_delete(UnitOfWork(), id_or_name, force)
     renderer.report(DELETE_PREVIEW, preview)
     if not force and not click.confirm(preview.question, default=False):
         renderer.cancelled()
         return
-    with get_db().session_scope() as session:
-        row = clients_service.delete_client(session, preview.client.client_id)
+    row = clients_service.delete_client(UnitOfWork(), preview.client.client_id)
     renderer.changed(CLIENT_CHANGE, row, "Deleted")
 
 
@@ -191,8 +186,7 @@ def clients_set_active(renderer, name: str):
       workmain clients set active ACME
       workmain clients set active internal
     """
-    with get_db().session_scope() as session:
-        status = clients_service.set_active(session, name)
+    status = clients_service.set_active(UnitOfWork(), name)
     renderer.report(STATUS, status)
 
 
@@ -209,8 +203,7 @@ def clients_status(renderer):
     Examples:
       workmain clients status
     """
-    with get_db().session_scope() as session:
-        status = clients_service.get_status(session)
+    status = clients_service.get_status(UnitOfWork())
     renderer.report(STATUS, status)
 
 

@@ -4,11 +4,12 @@ single lines and the group wiring. Every renderer is built over a Console
 with a width the test names, so COLUMNS cannot change an outcome.
 """
 
+import inspect
 import io
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Optional, Tuple
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 import click
 import pytest
@@ -694,3 +695,45 @@ class TestWiring:
         assert "Error: RuntimeError: boom" in result.stderr
         assert "Traceback" not in result.stderr
         assert "Traceback" not in result.stdout
+
+
+class TestRecordingRenderer:
+    """The recording_renderer fixture stands in for Renderer and never prints."""
+
+    def test_is_a_renderer_so_pass_renderer_keeps_it(self, recording_renderer: Renderer) -> None:
+        seen = []
+
+        @click.command()
+        @pass_renderer
+        def cmd(renderer: Renderer) -> None:
+            seen.append(renderer)
+
+        CliRunner().invoke(cmd, [], obj=recording_renderer)
+        assert isinstance(recording_renderer, Renderer)
+        assert seen == [recording_renderer]
+
+    def test_every_public_method_records_its_call_and_prints_nothing(
+        self, recording_renderer: Renderer, capsys: pytest.CaptureFixture
+    ) -> None:
+        names = [
+            name for name, _ in inspect.getmembers(Renderer, inspect.isfunction)
+            if not name.startswith("_")
+        ]
+        assert names
+        for name in names:
+            parameters = list(inspect.signature(getattr(Renderer, name)).parameters)[1:]
+            kwargs = {
+                parameter: Page((), 0) if (name, parameter) == ("pick", "page") else None
+                for parameter in parameters
+            }
+
+            getattr(recording_renderer, name)(**kwargs)
+
+            assert getattr(call, name)(**kwargs) in recording_renderer.mock_calls, name
+        assert capsys.readouterr() == ("", "")
+
+    @pytest.mark.parametrize("rows, expected", [(("first", "second"), "first"), ((), None)])
+    def test_pick_returns_the_first_row_or_none(
+        self, recording_renderer: Renderer, rows: Tuple[str, ...], expected: Optional[str]
+    ) -> None:
+        assert recording_renderer.pick(None, Page(rows, len(rows))) == expected

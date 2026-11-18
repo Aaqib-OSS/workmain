@@ -17,8 +17,8 @@ from workmain.cli.output import (
     pass_renderer,
 )
 from workmain.cli.params import DateParamType
-from workmain.database.connection import get_db
 from workmain.services import tasks_service
+from workmain.services.unit_of_work import UnitOfWork
 from workmain.utils.tag_utils import format_tags, format_tags_short
 
 VALID_STATUSES = ('active', 'completed', 'dismissed', 'all')
@@ -99,10 +99,9 @@ def task_list(renderer, status_filter: str, show_all: bool, search: Optional[str
       workmain tasks list --all --date 2026-04-30
     """
     # --all is a pure row-cap override, independent of --status
-    with get_db().session_scope() as session:
-        page = tasks_service.list_tasks(
-            session, status_filter, search, created, 0 if show_all else limit
-        )
+    page = tasks_service.list_tasks(
+        UnitOfWork(), status_filter, search, created, 0 if show_all else limit
+    )
     renderer.collection(TASK_LIST, page)
 
 
@@ -118,15 +117,13 @@ def task_today(renderer, search: Optional[str]):
       workmain tasks today
       workmain tasks today --search "splunk"
     """
-    with get_db().session_scope() as session:
-        page = tasks_service.list_today(session, search, date.today())
+    page = tasks_service.list_today(UnitOfWork(), search, date.today())
     renderer.collection(TASK_TODAY, page)
 
 
 def _pick_task(renderer, identifier: str):
     """Find the candidates for IDENTIFIER and return the chosen row, or None."""
-    with get_db().session_scope() as session:
-        page = tasks_service.find_tasks(session, identifier)
+    page = tasks_service.find_tasks(UnitOfWork(), identifier)
     return renderer.pick(TASK_LIST, page)
 
 
@@ -148,8 +145,7 @@ def task_show(renderer, identifier: str):
     if row is None:
         renderer.cancelled()
         return
-    with get_db().session_scope() as session:
-        detail = tasks_service.get_task(session, row.note_id)
+    detail = tasks_service.get_task(UnitOfWork(), row.note_id)
     renderer.record(TASK_RECORD, detail)
 
 
@@ -171,8 +167,7 @@ def task_complete(renderer, identifier: str):
     if row is None:
         renderer.cancelled()
         return
-    with get_db().session_scope() as session:
-        done = tasks_service.complete_task(session, row.note_id)
+    done = tasks_service.complete_task(UnitOfWork(), row.note_id)
     renderer.changed(TASK_RECORD, done, "Completed")
 
 
@@ -194,8 +189,7 @@ def task_dismiss(renderer, identifier: str):
     if row is None:
         renderer.cancelled()
         return
-    with get_db().session_scope() as session:
-        gone = tasks_service.dismiss_task(session, row.note_id)
+    gone = tasks_service.dismiss_task(UnitOfWork(), row.note_id)
     renderer.changed(TASK_RECORD, gone, "Dismissed")
 
 
