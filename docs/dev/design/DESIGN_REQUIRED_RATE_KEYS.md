@@ -23,6 +23,8 @@ Read, at `origin/main` 87491bf:
 - `docs/AI_SETTINGS_GUIDE.md`, all of it.
 - `config/ai_settings.json` `providers`.
 - Every tracked file outside `docs/archive/` that names `cost_per_1k`, or one of the four built-in rate literals.
+- `docs/ARCHITECTURE.md` in full; `docs/standards/1-workflow.md`, `docs/standards/3-code.md`.
+- Every `config.get(...)` in `workmain/ai/providers/`, and the open issues covering provider config defaults (#114, #125, #152).
 - The full test suite, run with a probe plugin kept outside the repository, which logged every `ClaudeProvider` and `GeminiProvider` construction whose config lacked a rate key.
 
 Not read: `workmain/ai/providers/ollama.py` beyond its constructor calls in tests, because the issue puts Ollama out of scope. Files under `scripts/baseline/` match the census search. #188 restricts them, and this study neither reads nor cites them.
@@ -37,10 +39,13 @@ Not read: `workmain/ai/providers/ollama.py` beyond its constructor calls in test
 | F4 | The guide no longer carries rate values. Commit ac083c4 (20261009) removed the stale Gemini rates that the issue cites. § Gemini-Specific Fields now reads "Same fields as Claude." The guide does not say the keys are required, or that rates are never fetched from the vendor. § Common Fields says "every `cost_per_1k_*` field [is] set by Ray". | `docs/AI_SETTINGS_GUIDE.md:48`, `:54-55`, `:61-63` | Medium |
 | F5 | The guide's § How to add a new provider, step 4, shows a config section for a new provider with no rate keys. A paid provider added from it would fail construction once rates are required. | `docs/AI_SETTINGS_GUIDE.md:205-214` | Medium |
 | F6 | **The `providers test` misreport described in the issue is already fixed.** Commit 978d538 (#225, closed 20261015, after #155 was opened on 20261001) records a construction failure only in `_disabled_reasons`. `is_disabled` is then False, `get_provider` raises with the reason, and `test_provider` prints it to stderr and exits 3. Existing tests cover both halves of the issue's fourth criterion. One shows the construction error and no disabled message for an enabled provider with its API key unset. The other shows the enable instruction for a provider with `enabled: false`. | `provider_manager.py:111-112`, `:132-140`, `:153-155`, `:468-477`; `providers.py:145-154`, `:201-208`; `tests/test_provider_foundation.py::TestFailedConstruction::test_providers_test_reports_construction_error`, `::test_providers_test_config_disabled_exits_0` | — |
-| F7 | `ProviderManager` handles a missing required config value in two ways. **Fatal at load:** a call type's `max_tokens` (`_parse_call_config` → `_require_positive_int`) and the payload policy file (`_load_provider_policy`, deliberately run before construction "so an unusable policy raises out of here rather than being recorded as a construction failure") both raise out of `_load_config`, and no command can build the manager. **Per-provider construction failure:** any exception from a provider's constructor is caught and recorded in `_disabled_reasons`. That covers a missing API key and a missing `model` (each provider's `validate_config`). The provider is unavailable, and every other provider works. | `provider_manager.py:410-427`, `:466-477`, `:532-534`, `:607-618`; `claude.py:238-242`, `gemini.py:276-280` | — |
+| F7 | `ProviderManager` reads `config/ai_settings.json` and enforces its authored content at load. A missing or invalid value raises `ConfigurationError` out of `_load_config`, and no command can build the manager. This covers every provider's `accepts` (enabled or not), each call type's `max_tokens` and `instructions`, provider names, and a call type declared in both blocks. The payload policy file, which it also owns, is checked the same way, before construction. The `_load_provider_policy` docstring states why: the failure "must reach the caller rather than being recorded as a construction failure by the blanket except in `_load_config`". Anything a provider's constructor raises is caught and recorded in `_disabled_reasons`, which makes that provider unavailable while the others work. What the constructors raise today is the environment (the API key read from `.env`, the SDK client) and one authored value, `model` (F12). | `provider_manager.py:410-427`, `:455-477`, `:479-500`, `:532-534`, `:580-593`, `:607-618`; `claude.py:74-84`, `:238-242`; `gemini.py:75-88`, `:276-280` | — |
 | F8 | `ConfigurationError` and `ProviderUnavailableError` are both `ProviderError`. `ProviderManager.generate` catches `ProviderError` from the primary provider. With `fallback_mode: auto`, the fallback provider answers and the returned `FallbackNotice` carries the reason. All five call types in the live config use `auto`. `ReportGenerator` stores the reason as the report's `fallback_reason`, and condensation from `notes` prints it. Whether every other entry path shows the notice was not traced. | `base_provider.py:260`, `:272`; `provider_manager.py:280-311`; `config/ai_settings.json:56`, `:65`, `:74`, `:83`, `:94`; `report_generator.py:188`, `:208`; `cli/commands/notes.py:670-671` | — |
 | F9 | `BaseProvider` already has a declared-key mechanism for the payload policy. A subclass sets `REQUIRED_POLICY_KEYS`, `missing_policy_keys()` computes the gap, and `BaseProvider.__init__` refuses construction naming the missing keys. There is no equivalent for `config`. | `base_provider.py:117-125`, `:146-153` | — |
 | F10 | Suite baseline: 1787 passed (run 20261118). Thirteen tests build a Claude or Gemini provider from a config with neither rate key. The table below lists them. Each depends on construction getting past the point where a rate check would sit, or on which error it raises first. | Probe run, 20261118 | — |
+| F11 | `docs/ARCHITECTURE.md` §2 names `workmain/ai/provider_manager.py` as the owner of `config/ai_settings.json`. §1 Configuration files says a configuration file is read only by the module that owns it. §2 names `workmain/ai/base_provider.py` as the owner of "the provider contract", and `workmain/ai/providers/<name>.py` as "one AI provider each". Today a provider receives its `providers.<name>` section as a dict from the manager (`provider_manager.py:470`). | `docs/ARCHITECTURE.md` §1, §2 | — |
+| F12 | **Outside scope.** A missing `model` is the one authored `ai_settings.json` value that a provider rejects itself, in `validate_config`, so it becomes a construction failure and not a load refusal. | `claude.py:241-242`, `gemini.py:279-280` | Low |
+| F13 | **Outside scope.** The rates are not the only authored provider values that a built-in default silently replaces. Claude and Gemini: `retry_attempts` (3), `retry_delay_seconds` (1.0), `api_key_env` (`ANTHROPIC_API_KEY` / `GOOGLE_API_KEY`). Ollama: `host` (`localhost`), `port` (11434), `model` (`mistral`), `timeout` (30). #125 and #152 discuss `retry_attempts`, and #114 and #152 the timeout key, but none of them asks for the default to be removed. No open issue covers `api_key_env` or Ollama's `host`, `port` and `model` defaults. | `claude.py:69-70`, `:74`; `gemini.py:70-71`, `:75`; `ollama.py:28-31` | Medium |
 
 Tests from F10. Each builds a provider with no rate keys:
 
@@ -60,44 +65,62 @@ Tests from F10. Each builds a provider with no rate keys:
 
 ## 4. Options
 
-### Q1 — How a missing rate key surfaces through `ProviderManager`
+The two questions are linked: where the refusal happens decides who must know which keys a provider requires.
 
-#### Option A — Per-provider construction failure
+### Q1 — Which module refuses a config entry that lacks a rate key
 
-- **Approach:** The provider's constructor raises `ConfigurationError` naming the key. `ProviderManager` records it in `_disabled_reasons`, as it does a missing `model` or API key (F7). No change to `provider_manager.py`.
-- **Pros:** Nothing is priced at a wrong rate: the provider does not run. The reason is visible through `providers list` (`error`), `providers test` (F6), `get_provider`, and the fallback reason on reports (F8). A typo in one provider's rate does not stop commands that never use it. That includes the daemon's Ollama intent parsing. A required value in a provider's own config entry is handled the same way as the other required values in that entry (`model`, API key). The application files are `claude.py` and `gemini.py`, so the work stays inside `hotfix/*`.
-- **Cons:** With `fallback_mode: auto`, a call type whose primary provider lacks a rate key is answered by its fallback. The operator learns of it from a fallback notice, not from a refusal.
+#### Option A — The provider refuses, as a construction failure
 
-#### Option B — Fatal at manager load
+- **Approach:** `ClaudeProvider.__init__` and `GeminiProvider.__init__` read each rate key with no default and raise `ConfigurationError` naming it. `ProviderManager` catches the error and records it in `_disabled_reasons`. The provider is unavailable, and the others work.
+- **Pros:** No request is priced at a rate that is not in config. A typo in one provider's rates stops only that provider.
+- **Cons:**
+  - Validity of `config/ai_settings.json` content would be decided outside its owner (F11). The manager's blanket `except` would turn an authoring defect into the same state as a missing API key. That is the conversion `_load_provider_policy` exists to prevent (F7).
+  - Every call type in the live config uses `fallback_mode: auto` (F8). A rate typo on a primary provider would move its call type to the fallback. The routing the operator wrote in `report_types` would be overridden by a typo elsewhere in the file. The operator would see it only as a fallback reason.
+  - It extends F12's inconsistency instead of following the file's own rule.
 
-- **Approach:** `ProviderManager._load_config` checks each enabled paid provider's rate keys before construction, as `_load_provider_policy` checks the policy, and raises out of `_load_config`. The constructor still refuses as well, so the issue's first criterion holds for direct construction.
-- **Pros:** Matches the wording "the way `ProviderManager` already refuses a missing `max_tokens`". Nothing can run until the config is fixed.
-- **Cons:** One provider's typo stops every command and the daemon. The check is written twice, in the manager and in the constructor, or it needs a new declared-key mechanism for `BaseProvider` to share. The policy precedent was fatal for a reason that does not apply here. A policy typo would have *silently* sent the wrong request. A missing rate key under Option A sends nothing and says why. At least `provider_manager.py` joins the file set, plus `base_provider.py` with a shared mechanism. That makes four application files, which escalates to `feature/*` (`docs/standards/2-git.md` §2.2).
+#### Option B — `ProviderManager` refuses at load
 
-**Recommendation: Option A.** The defect is silent mispricing. Option A ends it, and the failure stays visible on every surface that already reports a construction failure. It treats a required key in a provider's config entry the same as that entry's other required keys, so it adds no second path. Option B reaches a stricter outcome by adding a manager-side check that the defect does not need, and it widens the effect of one typo to every command.
+- **Approach:** When `_load_config` reaches an enabled provider, it checks that provider's config entry for the keys the provider requires, before constructing it. A missing key raises `ConfigurationError` naming `providers.<name>.<key>` out of `_load_config`, as `_load_provider_policy` does for the payload policy. The provider's constructor also refuses, so direct construction cannot bypass the requirement (the issue's first criterion constructs the provider directly).
+- **Pros:**
+  - The owner of `config/ai_settings.json` decides the validity of its content (F11), as it does for every other authored key in the file (F7).
+  - An authoring defect reaches the operator as an error naming the key. It does not become a silent change of provider.
+  - It is what the issue's direction names: refused "the way `ProviderManager` already refuses a missing `max_tokens`".
+- **Cons:** Until the key is fixed, every command that builds the manager refuses, and so does the daemon. That includes work that never uses the provider. The same is true today of a missing `max_tokens` or `accepts`, or an absent policy file.
 
-### Q2 — Where the check is written
+**Recommendation: Option B.** `docs/ARCHITECTURE.md` gives the file one owner, and that owner already refuses every other authored defect in it at load. The code states why a config defect must not become a construction failure (F7), and with automatic fallback, Option A's construction failure silently re-routes work (F8). Option A trades a contained failure for a second rule about what a bad `ai_settings.json` does.
 
-#### Option C — Each paid provider's constructor
+### Q2 — Where the requirement "this provider needs these keys" is stated (needed under Option B)
 
-- **Approach:** `ClaudeProvider.__init__` and `GeminiProvider.__init__` read each rate key without a default, and raise `ConfigurationError` naming the key when it is absent. The check is written once in each of the two files.
-- **Pros:** It is the issue's own direction, and it adds no mechanism the issue did not name. It matches how each provider already refuses a missing `model` (F7).
-- **Cons:** The same two-key check is written in two places. A future paid provider must remember to add it. The guide's § How to add a new provider, step 2, would say so.
+Under Option B the manager must know which keys each provider requires. Ollama has no rates by design (issue #155), so the answer differs by provider.
 
-#### Option D — Declared config keys on `BaseProvider`
+#### Option C — The manager names them
 
-- **Approach:** A `REQUIRED_CONFIG_KEYS` class attribute, with a check in `BaseProvider.__init__` that mirrors `REQUIRED_POLICY_KEYS` (F9). Claude and Gemini declare both rate keys, and Ollama declares none.
-- **Pros:** One check, and a new paid provider declares its keys instead of writing the check.
-- **Cons:** It adds a public class attribute and behaviour to `BaseProvider`, a mechanism the issue did not ask for (`.claude/skills/session-start/references/spanner.md` § Working rules, "Build only what the issue asks for"). It adds `base_provider.py` to the file set, making three application files, which is still `hotfix/*`. Required keys would then live in two places: the declared set, and the `model` / API key checks in `validate_config`.
+- **Approach:** `ProviderManager` holds which providers need rate keys.
+- **Defeated:** what a provider requires is part of the provider contract, owned by `workmain/ai/base_provider.py` and stated by each provider (F11). Putting it in the manager gives one fact a second home (`docs/ARCHITECTURE.md` §1, One fact, one home). The next paid provider would need an edit in a module that does not own it.
 
-**Recommendation: Option C.** The issue asks for the refusal, not for a mechanism, and two providers do not justify a new public contract on `BaseProvider`. If a third paid provider is added, a declared-key mechanism can be proposed as its own issue.
+#### Option D — Each provider class declares its required config keys in the provider contract
+
+- **Approach:** `BaseProvider` gains a class attribute naming required `providers.<name>` keys, with a classmethod that returns the missing ones. This mirrors `REQUIRED_POLICY_KEYS` and `missing_policy_keys` (F9). `ClaudeProvider` and `GeminiProvider` declare both rate keys, and `OllamaProvider` declares none. `ProviderManager._load_config` calls the classmethod before construction, as `_load_provider_policy` does. `BaseProvider.__init__` refuses direct construction with a missing key, as it does for the policy.
+- **Pros:** Each fact stays with its owner: the provider says what it requires, the contract defines how that is said, and the file's owner enforces it. It extends an existing owner and an existing pattern instead of adding a parallel path (`docs/ARCHITECTURE.md`, opening paragraph). A future paid provider states its rate keys where it states its policy keys.
+- **Cons:** It adds a public attribute and classmethod to the provider contract. The issue does not name that mechanism, so Ray decides it.
+
+**Recommendation: Option D.** It is the only option that keeps the requirement with the provider and the enforcement with the file's owner. Option C is set aside under `docs/ARCHITECTURE.md`'s ownership rule, not as a preference.
+
+### Q3 — Enabled providers only, or every provider (under Option B)
+
+- **Enabled only.** The manager checks an entry only when it constructs the provider. This matches the payload policy check, which runs only for enabled providers (F7). A disabled provider prices nothing: `ProviderManager.estimate_cost` goes through `get_provider`, which refuses a disabled provider (`provider_manager.py:136-140`, `:383`).
+- **Every provider.** This matches `accepts`. But `accepts` is checked for every provider because routing eligibility reads it whether or not the provider is enabled (`eligible_provider_names`, `provider_manager.py:642-661`). Nothing reads a disabled provider's rates.
+
+**Recommendation: enabled only.** The reason `accepts` is checked for every provider does not apply to rates.
 
 ## 5. Open questions
 
 | Q | Question | Answer |
 | --- | --- | --- |
-| Q1 | When a paid provider's config entry lacks a rate key, should that provider alone be unavailable (Option A: recorded as a construction failure, other providers and the fallback keep working), or should `ProviderManager` refuse to load so that no command runs (Option B)? | |
-| Q2 | Is the check written in each paid provider's constructor (Option C), or declared once on `BaseProvider` as `REQUIRED_CONFIG_KEYS` (Option D)? | |
+| Q1 | When a paid provider's entry in `config/ai_settings.json` lacks a rate key, does `ProviderManager` refuse to load (Option B), or does that provider alone fail construction (Option A)? | |
+| Q2 | Under Option B, does each provider class declare its required config keys in the provider contract on `BaseProvider`, mirroring `REQUIRED_POLICY_KEYS` (Option D)? | |
+| Q3 | Under Option B, is the check run for enabled providers only, or for every provider? | |
+| Q4 | F12 and F13 are outside this issue. Should each become an issue of its own, join #155, or be dropped? | |
 
 ## 6. Disposition
 
