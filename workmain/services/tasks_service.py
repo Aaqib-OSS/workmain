@@ -1,7 +1,10 @@
 """
-Service layer for the task lifecycle (carry-forward notes). Shared by the
-tasks CLI group. Functions take a session and return frozen dataclasses;
-none opens, commits or rolls back a session.
+Service layer for the task lifecycle (carry-forward notes).
+
+Shared by the tasks CLI group. Each public function is a use case: it takes
+a UnitOfWork not yet entered, enters it once, and returns frozen dataclasses
+built inside it. _task_for_note is an operation on an entered unit of work,
+and never enters one.
 """
 
 from dataclasses import dataclass
@@ -9,10 +12,9 @@ from datetime import date, datetime
 from typing import Optional, Tuple
 
 from workmain.database.models import Note, TaskStatus
-from workmain.database.repositories.notes_repo import NotesRepository
-from workmain.database.repositories.task_status_repo import TaskStatusRepository
 from workmain.services.exceptions import NotATaskError, TaskNotFoundError
 from workmain.services.results import Page
+from workmain.services.unit_of_work import UnitOfWork
 
 FIND_LIMIT = 10
 
@@ -60,22 +62,22 @@ def _page(rows, total: int, filters) -> Page[TaskRow]:
 
 
 def list_tasks(
-    session,
+    uow: UnitOfWork,
     status: str,
     search: Optional[str],
     created: Optional[date],
     limit: int,
 ) -> Page[TaskRow]:
-    """Return tasks matching the filters, newest first.
+    """
+    Return tasks matching the filters, newest first.
 
     Args:
-        session: SQLAlchemy session (caller manages lifecycle).
+        uow: A unit of work not yet entered; this function enters it.
         status: 'active', 'completed', 'dismissed' or 'all'.
         search: Keyword matched against note content, or None.
         created: Note creation date, or None.
         limit: Maximum rows; 0 means no cap.
     """
-    repo = TaskStatusRepository(session)
     filters = []
     if status != "all":
         filters.append(("status", status))
@@ -83,26 +85,28 @@ def list_tasks(
         filters.append(("search", search))
     if created:
         filters.append(("created", created))
-    rows = repo.get_filtered(
-        status=status, search=search, date_filter=created, limit=limit
-    )
-    total = repo.count_filtered(status=status, search=search, date_filter=created)
-    return _page(rows, total, filters)
+    with uow:
+        repo = uow.task_status
+        rows = repo.get_filtered(
+            status=status, search=search, date_filter=created, limit=limit
+        )
+        total = repo.count_filtered(status=status, search=search, date_filter=created)
+        return _page(rows, total, filters)
 
 
-def list_today(session, search: Optional[str], today: date) -> Page[TaskRow]:
+def list_today(uow: UnitOfWork, search: Optional[str], today: date) -> Page[TaskRow]:
     """Return the active tasks created on `today`."""
-    repo = TaskStatusRepository(session)
     filters = [("status", "active"), ("created", today)]
     if search:
         filters.append(("search", search))
-    rows = repo.get_filtered(
-        status="active", search=search, date_filter=today, limit=0
-    )
-    return _page(rows, len(rows), filters)
+    with uow:
+        rows = uow.task_status.get_filtered(
+            status="active", search=search, date_filter=today, limit=0
+        )
+        return _page(rows, len(rows), filters)
 
 
-def find_tasks(session, identifier: str) -> Page[TaskRow]:
+def find_tasks(uow: UnitOfWork, identifier: str) -> Page[TaskRow]:
     """Resolve an identifier to candidate tasks.
 
     A digit string is a note ID. Anything else searches tasks in every
@@ -112,67 +116,72 @@ def find_tasks(session, identifier: str) -> Page[TaskRow]:
         TaskNotFoundError: No note has the ID, or no task matches the text.
         NotATaskError: The note exists but has no task_status row.
     """
-    repo = TaskStatusRepository(session)
-    if identifier.isdigit():
-        note_id = int(identifier)
-        note = NotesRepository(session).get_by_id(note_id)
-        if note is None:
-            raise TaskNotFoundError(f"No note found with ID {note_id}.")
-        ts = repo.get_by_note_id(note_id)
-        if ts is None:
-            raise NotATaskError(note_id)
-        return _page([ts], 1, ())
+    with uow:
+        repo = uow.task_status
+        if identifier.isdigit():
+            note_id = int(identifier)
+            note = uow.notes.get_by_id(note_id)
+            if note is None:
+                raise TaskNotFoundError(f"No note found with ID {note_id}.")
+            ts = repo.get_by_note_id(note_id)
+            if ts is None:
+                raise NotATaskError(note_id)
+            return _page([ts], 1, ())
 
-    rows = repo.get_filtered(status="all", search=identifier, limit=FIND_LIMIT)
-    if not rows:
-        raise TaskNotFoundError(f"No tasks found matching '{identifier}'.")
-    total = repo.count_filtered(status="all", search=identifier)
-    return _page(rows, total, (("search", identifier),))
+        rows = repo.get_filtered(status="all", search=identifier, limit=FIND_LIMIT)
+        if not rows:
+            raise TaskNotFoundError(f"No tasks found matching '{identifier}'.")
+        total = repo.count_filtered(status="all", search=identifier)
+        return _page(rows, total, (("search", identifier),))
 
 
-def _task_for_note(session, note_id: int) -> TaskStatus:
-    note = NotesRepository(session).get_by_id(note_id)
+def _task_for_note(uow: UnitOfWork, note_id: int) -> TaskStatus:
+    """Return the note's task; uow is already entered."""
+    note = uow.notes.get_by_id(note_id)
     if note is None:
         raise TaskNotFoundError(f"No note found with ID {note_id}.")
-    ts = TaskStatusRepository(session).get_by_note_id(note_id)
+    ts = uow.task_status.get_by_note_id(note_id)
     if ts is None:
         raise NotATaskError(note_id)
     return ts
 
 
-def get_task(session, note_id: int) -> TaskDetail:
+def get_task(uow: UnitOfWork, note_id: int) -> TaskDetail:
     """Return one task's detail.
 
     Raises:
         TaskNotFoundError: No note has the ID.
         NotATaskError: The note has no task_status row.
     """
-    ts = _task_for_note(session, note_id)
-    note: Note = ts.note
-    meeting = note.meeting
-    return TaskDetail(
-        note_id=note.id,
-        status=ts.status,
-        created_at=note.created_at,
-        completed_at=ts.completed_at if ts.status == "completed" else None,
-        dismissed_at=ts.completed_at if ts.status == "dismissed" else None,
-        forwarding_note_id=ts.forwarding_note_id,
-        tags=tuple(note.tags or ()),
-        meeting_id=meeting.id if meeting else None,
-        meeting_title=meeting.title if meeting else None,
-        content=note.content or "",
-    )
+    with uow:
+        ts = _task_for_note(uow, note_id)
+        note: Note = ts.note
+        meeting = note.meeting
+        return TaskDetail(
+            note_id=note.id,
+            status=ts.status,
+            created_at=note.created_at,
+            completed_at=ts.completed_at if ts.status == "completed" else None,
+            dismissed_at=ts.completed_at if ts.status == "dismissed" else None,
+            forwarding_note_id=ts.forwarding_note_id,
+            tags=tuple(note.tags or ()),
+            meeting_id=meeting.id if meeting else None,
+            meeting_title=meeting.title if meeting else None,
+            content=note.content or "",
+        )
 
 
-def complete_task(session, note_id: int) -> TaskRow:
+def complete_task(uow: UnitOfWork, note_id: int) -> TaskRow:
     """Mark a task completed and return it."""
-    _task_for_note(session, note_id)
-    ts = TaskStatusRepository(session).set_completed(note_id)
-    return _row(ts)
+    with uow:
+        _task_for_note(uow, note_id)
+        ts = uow.task_status.set_completed(note_id)
+        return _row(ts)
 
 
-def dismiss_task(session, note_id: int) -> TaskRow:
+def dismiss_task(uow: UnitOfWork, note_id: int) -> TaskRow:
     """Mark a task dismissed and return it."""
-    _task_for_note(session, note_id)
-    ts = TaskStatusRepository(session).set_dismissed(note_id)
-    return _row(ts)
+    with uow:
+        _task_for_note(uow, note_id)
+        ts = uow.task_status.set_dismissed(note_id)
+        return _row(ts)

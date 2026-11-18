@@ -1,37 +1,32 @@
 """
-Tests for the task_status repository, eager creation hooks and tasks commands.
+Tests for the task_status repository, eager creation hooks and the tasks group.
 
 Covers TaskStatusRepository's create_active, ensure_active, set_completed,
 set_dismissed, set_dismissed_by_tag_removal, get_by_note_id, get_filtered and
-count_filtered, and the tasks command group: each command's arguments, the
-service call it makes, and the view and result it hands the renderer.
+count_filtered, including that get_filtered loads each row's note with it,
+and the tasks group's help, removed names and root wiring. Each tasks
+command's paths are tested end to end in tests/test_tasks_commands.py.
 
 Uses db_session fixture from conftest.py for full transaction isolation.
 Tests use fixed dates in 2099 (2099-xx-xx).
 """
 
 from datetime import date, datetime
-from unittest.mock import ANY, Mock, patch
+from unittest.mock import patch
 
 import click
 import pytest
 from click.testing import CliRunner
+from sqlalchemy import event
+from sqlalchemy.orm import Session
 
-from workmain.cli.commands.tasks import (
-    TASK_LIST,
-    TASK_RECORD,
-    TASK_TODAY,
-    task_list,
-    tasks,
-)
+from workmain.cli.commands.tasks import task_list, tasks
 from workmain.cli.interface import cli
 from workmain.cli.output import Renderer
 from workmain.database.repositories.notes_repo import NotesRepository
 from workmain.database.repositories.task_status_repo import TaskStatusRepository
 from workmain.services import tasks_service
-from workmain.services.exceptions import NotATaskError, TaskNotFoundError
 from workmain.services.results import Page
-from workmain.services.tasks_service import TaskDetail, TaskRow
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -273,177 +268,37 @@ class TestQueries:
         results = repo.get_filtered(status='active', limit=2)
         assert len(results) <= 2
 
+    def test_get_filtered_statement_count_does_not_grow_with_rows(
+        self, db_session: Session
+    ) -> None:
+        """get_filtered() loads each row's note with it: no query per row."""
+        def count(day: int, n: int) -> int:
+            repo = TaskStatusRepository(db_session)
+            for i in range(n):
+                note = _make_cf_note(db_session, f"Sentinel load {day}-{i} 2099",
+                                     created_at=datetime(2099, 6, day, 9, i))
+                repo.create_active(note.id)
+            db_session.flush()
+            db_session.expunge_all()
+            seen = []
+            conn = db_session.connection()
 
-# ---------------------------------------------------------------------------
-# Commands — arguments, service calls and what the renderer receives
-# ---------------------------------------------------------------------------
+            def listener(*args: object) -> None:
+                seen.append(1)
 
-def _row(note_id: int = 42) -> TaskRow:
-    return TaskRow(note_id, "active", date(2099, 1, 1), (), "content")
+            event.listen(conn, "before_cursor_execute", listener)
+            try:
+                rows = TaskStatusRepository(db_session).get_filtered(
+                    status='active', date_filter=date(2099, 6, day), limit=0,
+                )
+                for ts in rows:
+                    (ts.note.id, ts.note.content, ts.note.tags, ts.note.created_date)
+            finally:
+                event.remove(conn, "before_cursor_execute", listener)
+            assert len(rows) == n
+            return len(seen)
 
-
-def _detail(note_id: int = 42) -> TaskDetail:
-    return TaskDetail(note_id, "active", None, None, None, None, (), None, None, "content")
-
-
-def _run(args, renderer, **patches):
-    """Run `tasks <args>` with each named tasks_service function patched."""
-    runner = CliRunner(mix_stderr=False)
-    mocks = {}
-    stack = []
-    try:
-        for name, kwargs in patches.items():
-            p = patch.object(tasks_service, name, autospec=True, **kwargs)
-            mocks[name] = p.start()
-            stack.append(p)
-        result = runner.invoke(tasks, args, obj=renderer)
-    finally:
-        for p in stack:
-            p.stop()
-    return result, mocks
-
-
-def _renderer(pick=None):
-    renderer = Mock(spec=Renderer)
-    renderer.pick.return_value = _row() if pick is None else pick
-    return renderer
-
-
-class TestTasksListCommand:
-    def test_defaults(self):
-        renderer = _renderer()
-        page = Page((), 0)
-        result, m = _run(["list"], renderer, list_tasks={"return_value": page})
-        assert result.exit_code == 0
-        m["list_tasks"].assert_called_once_with(ANY, "active", None, None, 20)
-        renderer.collection.assert_called_once_with(TASK_LIST, page)
-
-    def test_every_option(self):
-        renderer = _renderer()
-        result, m = _run(
-            ["list", "--all", "--status", "all", "-s", "x", "-d", "2099-01-01"],
-            renderer,
-            list_tasks={"return_value": Page((), 0)},
-        )
-        assert result.exit_code == 0
-        m["list_tasks"].assert_called_once_with(ANY, "all", "x", date(2099, 1, 1), 0)
-
-    def test_bad_status_is_a_usage_error(self):
-        result, m = _run(
-            ["list", "--status", "bogus"], _renderer(),
-            list_tasks={"return_value": Page((), 0)},
-        )
-        assert result.exit_code == 2
-        m["list_tasks"].assert_not_called()
-
-    def test_bad_date_is_a_usage_error(self):
-        result, m = _run(
-            ["list", "-d", "notadate"], _renderer(),
-            list_tasks={"return_value": Page((), 0)},
-        )
-        assert result.exit_code == 2
-        m["list_tasks"].assert_not_called()
-
-
-class TestTasksTodayCommand:
-    def test_today(self):
-        renderer = _renderer()
-        page = Page((), 0)
-        result, m = _run(["today", "-s", "x"], renderer, list_today={"return_value": page})
-        assert result.exit_code == 0
-        m["list_today"].assert_called_once_with(ANY, "x", date.today())
-        renderer.collection.assert_called_once_with(TASK_TODAY, page)
-
-
-class TestTasksShowCommand:
-    def test_show_finds_picks_gets_and_records(self):
-        renderer = _renderer(pick=_row(42))
-        page = Page((_row(42),), 1)
-        detail = _detail()
-        result, m = _run(
-            ["show", "42"], renderer,
-            find_tasks={"return_value": page}, get_task={"return_value": detail},
-        )
-        assert result.exit_code == 0
-        m["find_tasks"].assert_called_once_with(ANY, "42")
-        renderer.pick.assert_called_once_with(TASK_LIST, page)
-        m["get_task"].assert_called_once_with(ANY, 42)
-        renderer.record.assert_called_once_with(TASK_RECORD, detail)
-
-    def test_cancelled_pick_exits_zero_and_gets_nothing(self):
-        renderer = _renderer()
-        renderer.pick.return_value = None
-        result, m = _run(
-            ["show", "x"], renderer,
-            find_tasks={"return_value": Page((), 0)},
-            get_task={"return_value": _detail()},
-        )
-        assert result.exit_code == 0
-        m["get_task"].assert_not_called()
-        renderer.cancelled.assert_called_once_with()
-
-    def test_service_error_reaches_stderr_with_exit_1(self):
-        result, _ = _run(
-            ["show", "x"], _renderer(),
-            find_tasks={"side_effect": TaskNotFoundError("No tasks found matching 'x'.")},
-        )
-        assert result.exit_code == 1
-        assert result.stderr == "Error: No tasks found matching 'x'.\n"
-
-
-class TestTasksCompleteDismissCommand:
-    def test_complete(self):
-        renderer = _renderer()
-        done = _row()
-        result, m = _run(
-            ["complete", "42"], renderer,
-            find_tasks={"return_value": Page((_row(),), 1)},
-            complete_task={"return_value": done},
-        )
-        assert result.exit_code == 0
-        m["complete_task"].assert_called_once_with(ANY, 42)
-        renderer.changed.assert_called_once_with(TASK_RECORD, done, "Completed")
-
-    def test_dismiss(self):
-        renderer = _renderer()
-        gone = _row()
-        result, m = _run(
-            ["dismiss", "42"], renderer,
-            find_tasks={"return_value": Page((_row(),), 1)},
-            dismiss_task={"return_value": gone},
-        )
-        assert result.exit_code == 0
-        m["dismiss_task"].assert_called_once_with(ANY, 42)
-        renderer.changed.assert_called_once_with(TASK_RECORD, gone, "Dismissed")
-
-    def test_cancelled_pick_changes_nothing(self):
-        renderer = _renderer()
-        renderer.pick.return_value = None
-        result, m = _run(
-            ["complete", "x"], renderer,
-            find_tasks={"return_value": Page((), 0)},
-            complete_task={"return_value": _row()},
-        )
-        assert result.exit_code == 0
-        m["complete_task"].assert_not_called()
-
-    def test_service_error_on_change(self):
-        result, _ = _run(
-            ["complete", "42"], _renderer(),
-            find_tasks={"return_value": Page((_row(),), 1)},
-            complete_task={"side_effect": NotATaskError(42)},
-        )
-        assert result.exit_code == 1
-        assert "Error: Note 42 exists but is not tracked as a task." in result.stderr
-
-    def test_dismiss_with_find_error_dismisses_nothing(self):
-        result, m = _run(
-            ["dismiss", "42"], _renderer(),
-            find_tasks={"side_effect": NotATaskError(42)},
-            dismiss_task={"return_value": _row()},
-        )
-        assert result.exit_code == 1
-        m["dismiss_task"].assert_not_called()
+        assert count(7, 1) == count(8, 5)
 
 
 class TestTasksGroup:
