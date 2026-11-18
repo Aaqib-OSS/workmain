@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.59.0] - 2026-11-17
+
+`clients_service` and `tasks_service` took a session, so every test of them needed the database, and #198 could not retire the session-taking form. Both now take a unit of work. Each `clients` and `tasks` command builds one for each service call, and the services' tests run on an in-memory fake with no database. The fake repositories are checked against the real ones, and each command path runs end to end against the test database with a recording renderer (#279).
+
+### Changed
+
+- `workmain/services/clients_service.py`, `workmain/services/tasks_service.py`: every public function takes a `UnitOfWork`, enters it once, and returns its result from inside it. Their arguments, results and errors are unchanged.
+- `workmain/cli/commands/clients.py`, `workmain/cli/commands/tasks.py`: each command builds a `UnitOfWork` for each service call and opens no `session_scope()`. `clients delete` previews and deletes with separate units of work.
+- `docs/standards/5-cli.md` §5.6: the converted-command bullet and its preview sub-bullet state the unit-of-work form beside the session-taking form, and the outside-action sub-bullet applies to the session-taking form.
+- `CLAUDE.md` § Note Write-Path Convergence: its three statements are scoped to `workmain/`.
+- The service tests run on `fake_uow`. The `clients` and `tasks` command tests run each path end to end with nothing patched, except `click.confirm` in the `clients delete` abort test. The tasks command tests move to `tests/test_tasks_commands.py`. The `TaskStatusRepository.get_filtered` loading test moves to `tests/test_task_lifecycle.py`.
+
+### Added
+
+- `tests/mocks/fake_unit_of_work.py`: fakes of the 16 `ClientRepository`, `NotesRepository` and `TaskStatusRepository` methods the two services call, each with its row shapes in its docstring. Contract tests in `tests/test_fake_unit_of_work.py` run each against both the real repository and the fake, and the parity test compares signatures with `eval_str=True`.
+- `tests/conftest.py`: the `recording_renderer` fixture, `create_autospec(Renderer, instance=True)`.
+
+Suite: 1787 passed, 0 failed, 0 skipped (baseline 1707 passed, 0 failed, 0 skipped).
+
 ## [1.58.7] - 2026-11-17
 
 The testing standard listed a test form for each case without the rule each one followed from, so two of its rules contradicted each other and each new case added another exception. §6.1 banned `get_db()` in tests, while its own record-test bullet needed it to fail a later scope. §6 is rewritten to state its rules once each. The fixtures' mechanics move into the fixtures' docstrings, which `pytest --fixtures -v` shows (#285).
