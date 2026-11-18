@@ -1,6 +1,6 @@
 # Testing Standard Rules — Implementation Results
 
-**Status:** Active
+**Status:** Shipped
 **Author:** Anvil (Role 3)
 **Date:** 20261117
 **Spec:** `../specs/TESTING_STANDARD_RULES_SPEC.md`
@@ -63,7 +63,7 @@ None.
 
 ## 5. Verification
 
-- **Test suite:** 1707 passed, 0 failed, 0 skipped (baseline: 1707 passed, 0 failed, 0 skipped). The bare `pytest` run included `tests/test_ai_providers_live.py` with keys from `.env`.
+- **Test suite:** 1707 passed, 0 failed, 0 skipped (baseline: 1707 passed, 0 failed, 0 skipped). The bare `pytest` run included `tests/test_ai_providers_live.py` with keys from `.env`. Re-run at close-out, `df3af28`: 1707 passed, 0 failed, 0 skipped.
 - **Live verification:** none. No application code changed.
 - **Daemon restart** (`docs/standards/2-git.md` §2.6): at close-out.
 
