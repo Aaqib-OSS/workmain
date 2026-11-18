@@ -147,7 +147,7 @@ Different fields, different write paths. **Never conflate them.**
 
 ### Note Write-Path Convergence - Source of Truth
 
-All note and paired-TimeEntry creation goes through the service layer:
+All note and paired-TimeEntry creation in `workmain/` goes through the service layer:
 
 - `notes_service.create_note()` - pure-note writes; also the first half of every paired write.
 - `time_entry_service.create_time_entry()` - task-shaped paired write (`source='task'`, meeting_id never reaches the Note - intentional).
