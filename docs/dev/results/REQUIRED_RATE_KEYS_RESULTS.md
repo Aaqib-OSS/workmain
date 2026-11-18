@@ -10,7 +10,7 @@
 
 ## 1. Summary
 
-Complete. `BaseProvider` declares `REQUIRED_CONFIG_KEYS` and `missing_config_keys()`, and refuses construction when a declared key is absent, before the policy check and before any vendor client exists. `ClaudeProvider` and `GeminiProvider` declare both rate keys and read them with no fallback, so no rate value remains in provider code. `ProviderManager._load_config` refuses an enabled provider whose entry lacks a declared key, naming `providers.<name>.<key>`, before the policy load and outside the construction `try/except`. A disabled provider is not checked. `docs/AI_SETTINGS_GUIDE.md` states that rates are required, set by hand and never fetched. AC3.1 awaits Ray's reading.
+Complete. `BaseProvider` declares `REQUIRED_CONFIG_KEYS` and `missing_config_keys()`, and refuses construction when a declared key is absent, before the policy check and before any vendor client exists. `ClaudeProvider` and `GeminiProvider` declare both rate keys and read them with no fallback, so no rate value remains in provider code. `ProviderManager._load_config` refuses an enabled provider whose entry lacks a declared key, naming `providers.<name>.<key>`, before the policy load and outside the construction `try/except`. A disabled provider is not checked. `docs/AI_SETTINGS_GUIDE.md` states that rates are required, set by hand and never fetched.
 
 ## 2. What shipped, by step
 
@@ -31,7 +31,7 @@ Complete. `BaseProvider` declares `REQUIRED_CONFIG_KEYS` and `missing_config_key
 | AC1.5 | Met | `pytest tests/test_provider_foundation.py::TestProviderConfigContract -k estimate_cost_uses_configured_rates`: 2 passed, with rates 0.0021 / 0.0137. |
 | AC1.6 | Met | `pytest` on the 18 node IDs the spec's §2 lists: 18 passed. `git diff dev -- tests/test_provider_foundation.py tests/test_ai_providers_offline.py`: every removed line is a fixture line that gains rate keys; no assertion is removed or changed. See §5 for the four policy tests. |
 | AC2.1 | Met | `/usr/bin/grep -rn "get(\s*['\"]cost_per_1k_\|0\.00015\|0\.0006\|0\.003\|0\.015" workmain/ai/providers/`: zero hits, exit 1. Before Step 1 it returned the four lines `claude.py:71-72`, `gemini.py:72-73`. AC1.1 shows a missing key reaches no fallback. |
-| AC3.1 | Not met | Awaiting Ray |
+| AC3.1 | Met | Ray, 20261118: Reviewed the `docs/AI_SETTINGS_GUIDE.md` for § Common Fields, § Claude-Specific Fields and § How to add a new provider steps 2 and 4: would someone adding or editing a paid provider know the rates are required, where they go and that nothing fetches them. |
 | AC4.1 | Met | `pytest tests/test_provider_foundation.py::TestFailedConstruction::test_providers_test_reports_construction_error tests/test_provider_foundation.py::TestFailedConstruction::test_providers_test_config_disabled_exits_0`: 2 passed. |
 | AC5.1 | Met | Bare `pytest`: 1801 passed, 0 failed, 0 skipped (1787 + 14). |
 
