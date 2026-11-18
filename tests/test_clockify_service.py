@@ -14,8 +14,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 from sqlalchemy import event
+from sqlalchemy.orm import Session
 
-from workmain.database.connection import DatabaseConnection, get_db
+from workmain.database.connection import DatabaseConnection
 from workmain.database.models import Client, Project, TimeEntry
 from workmain.database.repositories.system_state_repository import SystemStateRepository
 from workmain.database.repositories.task_status_repo import TaskStatusRepository
@@ -102,14 +103,6 @@ def _set_active_client(session, name):
     session.flush()
     SystemStateRepository(session).set_int("active_client_id", client.id)
     return client.id
-
-
-def _fail_a_later_scope():
-    with pytest.raises(RuntimeError):
-        with get_db().session_scope() as session:
-            session.add(Client(name="Sentinel later failure 2099-96", is_active=False))
-            session.flush()
-            raise RuntimeError("later failure")
 
 
 def _record_scope_spy():
@@ -327,7 +320,7 @@ class TestPush:
         assert isinstance(result.error, ServiceValidationError)
         assert not isinstance(result.error, IntegrationError)
 
-    def test_s17_the_link_survives_a_later_failed_scope(self, db_session):
+    def test_s17_the_link_is_written_in_a_record_scope(self, db_session: Session) -> None:
         entry_id = _seed_entry(db_session, "s17 push record")
         client = MagicMock()
         client.create_time_entry.return_value = {'id': 'clockify-push-id'}
@@ -335,7 +328,6 @@ class TestPush:
 
         with _record_scope_spy() as spy:
             result = push(plan, client=client)
-        _fail_a_later_scope()
 
         assert result.error is None
         spy.assert_called()
@@ -494,13 +486,12 @@ class TestPull:
 
         assert second.kind == "new"
 
-    def test_s26_a_link_survives_a_later_failed_scope(self, db_session):
+    def test_s26_a_link_is_written_in_a_record_scope(self, db_session: Session) -> None:
         local = _seed_entry(db_session, "s26 local")
         item = classify(db_session, _remote("clockify-link-id"))
 
         with _record_scope_spy() as spy:
             outcome = apply_pull(item, PullAnswer("link", None))
-        _fail_a_later_scope()
 
         assert outcome.result == "linked" and outcome.entry_id == local
         spy.assert_called()
@@ -554,12 +545,11 @@ class TestPull:
         assert task_status is not None
         assert task_status.status == 'active'
 
-    def test_s28_an_import_survives_a_later_failed_scope(self, db_session):
+    def test_s28_an_import_is_written_in_a_record_scope(self, db_session: Session) -> None:
         with _record_scope_spy() as spy:
             outcome = apply_pull(
                 _item(_remote("clockify-import-id", "s28 import")), PullAnswer("import", ""),
             )
-        _fail_a_later_scope()
 
         spy.assert_called()
         entry = db_session.query(TimeEntry).filter(

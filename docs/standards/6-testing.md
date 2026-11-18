@@ -1,79 +1,40 @@
 ## 6. Testing Standards
 
 - pytest is the exclusive runner.
-- **The application suite is a bare `pytest` from the repository root.** `testpaths` in `pyproject.toml` is what resolves it to `tests/`. No other invocation stands in for it unless a spec names the alternative and states why. That covers a path subset, a `-k` or `-m` filter, and an environment variable that changes what runs.
-- Non-application suites, such as `pytest automation/`, are reached by their own path. Each is a separate suite, not an alternative to this one. §7 owns test placement.
-- **A test reports what actually happened.** Passed means it ran and its assertions held. Failed means it ran and did not — an error, a timeout or a wrong answer. Skipped means it did not run because a precondition declared with `@pytest.mark.skipif` was absent; that is the only way a test is skipped, and it is decided before the test exercises anything. A test never reports passed without having run, which is what an early `return` does, and never reports skipped after it has run. A skip is never added to turn a red suite green.
-- **Recorded test evidence states all three counts, in the form `<passed> passed, <failed> failed, <skipped> skipped`, and writes each one even when it is zero.** pytest counts a skipped test separately from a passed one, so a record without the skipped count can't show whether a run did less than the full suite.
-
-  ```bash
-  pytest                              # full suite
-  pytest -v                           # verbose
-  pytest tests/test_x.py::TestClass::test_name
-  ```
+- **The application suite is a bare `pytest` from the repository root.** Any other run offered as the suite's result names the alternative and states why.
+- Non-application suites, such as `pytest automation/`, are separate suites, each reached by its own path.
+- **A test reports what actually happened.**
+  - Passed means it ran to its end and its assertions held.
+  - Failed means it ran and raised an error, timed out or gave a wrong answer.
+  - Skipped means a precondition declared with `@pytest.mark.skipif` was absent, decided before the test exercises anything.
+- **Recorded test evidence states all three counts, in the form `<passed> passed, <failed> failed, <skipped> skipped`, and writes each one even when it is zero**, so the record shows whether the whole suite ran.
 
 ### 6.1 Test isolation from the database
 
-- **The suite runs on its own database, `workmain_test`, and builds it from empty at the start of every run.** Before the first test, `tests/conftest.py` drops every object the application's user owns in it and builds the schema again with `alembic upgrade head` (§4.5), run as a child process. The rest of the connection comes from `.env`. A run against any other database is refused: `conftest.py` sets `DB_NAME` to `workmain_test` when it is unset, and stops the run, before any test, when it names another database. `workmain_test` is created once, by the server's administrator, owned by the application's user.
-- **Every test runs inside one database transaction that is rolled back when it ends.** The autouse fixture `_isolated_database` in `tests/conftest.py` binds the application's session factory (`DatabaseConnection.SessionLocal`) to a connection the fixture owns, inside a transaction it began, with SQLAlchemy's `join_transaction_mode="create_savepoint"`. No test requests it and no test can opt out of it.
-- Every session any code opens through `get_db()` joins that transaction: the test's own, a command run through `CliRunner`, and application code the test reaches without naming it. They share one connection, so each sees what the others wrote.
+**Every test runs in `workmain_test`, inside one transaction that rolls back when the test ends.** The fixtures in `tests/conftest.py` build the database and hold the transaction, and `pytest --fixtures -v` shows how each one works.
 
-| Action | Effect |
-| --- | --- |
-| `commit()` anywhere | Releases a savepoint. The rows stay visible to every session in the test; nothing reaches the database. |
-| `rollback()` anywhere | Discards that session's writes since its last commit, and every commit a session opened after it made in the meantime. Rows written before it began survive. |
-| Test ends | The transaction rolls back; every write is discarded. |
-| Process killed mid-test | The transaction was never committed; PostgreSQL discards it when the connection drops. |
-
-- **A test that seeds or reads takes `db_session`.** It is a session from the same factory, so a command or service the test then calls sees what the test seeded. Commit it freely. Never call `get_db()` or `db.get_session()` in a test.
-- **Hand application code a session only before that code opens its own.** Sessions sharing the connection must finish last-in, first-out, because releasing a savepoint also releases every savepoint opened after it. A test that builds an application object on `db_session` and then runs a command that opens its own session fails with `InvalidSavepointSpecification` at the command's commit. Let the command build the object from the session it opens, as `tests/test_cost_display.py`'s `TestMeetingsCondenseTokenLine` does.
-- **A record committed inside another session's open transaction is discarded by that session's rollback in a test**, though in production it is on its own connection and survives. Test an outside-action record (§4.3) at the function that writes it: call it, fail a later scope, and assert the record through `db_session`.
-- **Inject a database failure; never rely on one.** Patch the module's `get_db` to raise, as `tests/test_ai_costs.py` does.
-- **Leaving the transaction fails the test.** During a test `DatabaseConnection.close()` raises, and replacing `SessionLocal` fails the test at teardown. Code that builds its own engine is outside the fixture, and no test may reach it.
-- `tests/test_database_isolation.py` tests the fixture and the build themselves, so its tests may call `get_db()` and build their own engine. Whatever such a test does outside the fixture's transaction is undone before it ends. `tests/test_unit_of_work.py` tests the scope state and the unit of work, so its tests may call `get_db()` to open a `session_scope()`.
-- **A child process is outside the transaction.** A test that reaches code which launches `workmain` (`workmain/utils/self_invoke.py`, `workmain/workflows/eod_workflow.py`) patches the launch.
-- **Every session in a test shares one connection, so database work stays on the test's thread.** A test that reaches a step thread replaces `threading.Thread`, as `tests/test_orchestration.py` does.
+- **A test seeds and reads through `db_session`.** Every session the code under test opens through `get_db()` joins the same transaction, so the test and the code see each other's writes.
+- **Everything a test reaches stays on the test's connection.** Tests of the database build are the only ones that run outside it, because the build comes before the transaction, and they undo what they change.
 
 ### 6.2 Writing a test
 
-  ```python
-  """
-  <Feature> tests.
-  """
+**Each piece of logic is tested in the layer that owns it** (`docs/ARCHITECTURE.md` §1).
 
-  import pytest
-  from workmain.database.repositories.<repo> import <Repo>
+- **Behaviour** is tested at the service. The test calls the service function and asserts the result's fields or the exception it raises. A service that takes a unit of work gets `fake_uow`, a `FakeUnitOfWork`, and one that still takes a session gets `db_session`.
+- **SQL** is tested at the repository, on `db_session`. Each fake repository method is tested against the real one, in a class parametrized over both, so the fake answers as the database does. A method that loads related records with its rows (§4.3) has a test that its statement count stays the same as its rows grow, with each row seeded with related rows of its own and `db_session.expunge_all()` called before counting, so a lazy load shows in the count.
+- **A command** has one end-to-end test per path through it: each outcome of a flag, a prompt's answer or a pick. The test runs the command through `CliRunner` against the test's database, with a recording renderer, and asserts the exit code, what the renderer received, and the rows the path writes or leaves alone.
+- **Printed text** is read only by renderer tests, at a width the test sets, and by a command test reading the `Error:` line on `result.stderr`.
+- **An outside-action record** (§4.3) is tested at the function that writes it: a spy shows the function opened `record_scope()`, and the record is read through `db_session`. The spy stands for the record surviving its caller's failure, which only production shows.
 
-
-  class Test<Feature>:
-      """<What this class tests>."""
-
-      def test_<scenario>(self, db_session):
-          repo = <Repo>(db_session)
-          # arrange, act, assert — no cleanup needed
-  ```
+Converting code to a new form replaces every test of it, in whichever file it is.
 
 Rules:
 
-1. Take `db_session` for any session the test uses (§6.1).
-2. One assertion focus per test. Prefer several small tests over one large one.
-3. No manual cleanup; §6.1's rollback discards every write.
-4. Group related tests in `class Test<Topic>` so `-k TestTopic` works.
-5. **A test is a method of a plain class, and it takes what it needs as arguments.** An argument is a fixture pytest itself provides, a fixture in `tests/conftest.py`, or a name a `parametrize` mark on the test or its class supplies; anything else, the test builds in its own body. pytest hands a fixture only to a test that names it as an argument, so this is the one form in which every test can reach every fixture.
-6. **A test's directory is `tmp_path`.** pytest creates it for the test and keeps only its last three runs, so a test has no directory to clean up and the suite leaves nothing behind.
-7. **A test that builds a real `ProviderManager` states the routing it needs.** It passes the primary and fallback of every call type it exercises, and never relies on the routing in `config/ai_settings.json`, which `workmain providers set default` changes in ordinary use. A provider the test does not stub must not be reachable: `tests/mocks/stub_providers.py`'s `stubbed_manager` takes the routing as a required argument and makes every unstubbed provider raise.
-8. **A test pins behaviour meant to stay.** It never exercises a path an open issue is about to remove or narrow; it proves the same property with inputs that issue leaves valid. Opening an issue that narrows behaviour includes rewriting the open criteria and tests that exercise the narrowed path, and both issues say why.
-9. **A defect fix's test is seen to fail first.** The implementer runs the test that shows the defect before the fix, where it fails, and again after, where it passes. The results artifact records both runs.
-
-**Each layer has one kind of test.** A command group's tests take this form when the group is converted to a service (#198). Converting a group replaces every test of its commands, in whichever file it is; editing a test for any other reason does not convert it or its file. A new test is always the kind this section states.
-
-- **Service.** All behaviour is tested here. The test takes `db_session`, seeds the rows it needs, calls the service function, and asserts the result's fields or the exception it raises. A service that takes a unit of work is tested with a fake one, and its test needs no `db_session`. The fake unit of work is `tests/mocks/fake_unit_of_work.py`'s `FakeUnitOfWork`.
-- **Repository fake.** A fake repository goes in `tests/mocks/fake_unit_of_work.py` (§7). It takes the fake unit of work's store, keeps its rows under its table's name, and is added to `FakeUnitOfWork.REPOSITORIES` under the same attribute name as in `UnitOfWork.REPOSITORIES`. A test asserts that each fake method exists on the real repository with an equal signature, and each fake method's behaviour tests run in one class parametrized over the real repository on `db_session` and the fake.
-- **Repository loading.** A method that loads related records with its rows (§4.3) has a test in its repository's test file that counts SQL statements. The test seeds one row on one value of the method's filter and five rows on another. Each of the five points at its own related rows, because a lazy many-to-one costs one query per distinct related row, so five rows sharing one would count the same as one with no loading at all. For a one-to-many, each of the five parents has at least one child. A method with no filter is counted twice, after seeding one row and again after seeding four more. The test calls `db_session.expunge_all()` after seeding, so no related row is already in the session. It then counts with a `before_cursor_execute` listener on `db_session.connection()`, around the method call and a read, on each row, of every relationship the method loads, and the count is equal for one and for five. Every session in a test shares that connection (§6.1), so an outside-action record (§4.3) on the path is patched out of the count. That record keeps its own test at the function that writes it.
-- **Renderer.** These are the only tests that read printed text, and they are in `tests/test_output.py`. The test builds a view and a result by hand and renders them through `Renderer(console=Console(file=io.StringIO(), width=N))`, with the width written in the test, so `COLUMNS` cannot change the outcome. A picker test feeds its answers through `CliRunner().isolation(input=...)`.
-- **Click parameter types** are tested in `tests/test_cli_params.py`, by calling `convert` and by a usage-error exit through `CliRunner`.
-- **Command.** One end-to-end test per command, a group with its subcommand such as `clients list` (a group on its own has none), and one more for each flag that makes the command call a different service function. The test runs the command through `CliRunner(mix_stderr=False).invoke(group, args, obj=renderer)` with nothing patched, so the real service runs against the test's database (§6.1). `renderer` is a recording renderer: a fake in `tests/` with `Renderer`'s methods, which keeps what each one is handed instead of printing it. The test asserts the exit code and the values the renderer received. It reads no printed text except an `Error:` line on `result.stderr`. Edge cases are tested at the service, and the error wiring once, in `tests/test_output.py`'s `TestWiring`.
-- **A command the EOD workflow runs as a child process has a second entry path, `run_workmain`.** §6.1 has a test patch the launch, so the command test covers only the `CliRunner` path. The EOD step that runs the command is covered by that step's own test in `tests/test_eod_workflow.py`, which asserts what the step does with the command's exit code and output.
+- **A test's name says what it checks, and is its description.**
+- **A test's result depends only on what it sets up, and its changes stay inside `workmain_test` and its `tmp_path`.** Anything it needs from `config/`, `.env`, `~/.workmain/`, the terminal's width or the network, it sets up itself.
+- **A test seeds the rows it needs**: on `db_session` for the database, or into `fake_uow`'s store, in the row shape its fake repository's docstring describes.
+- **A test is a method of a plain class, and it takes what it needs as arguments.** Related tests share a `Test<Topic>` class. A test takes its fixtures and `parametrize` values as arguments and builds everything else in its own body.
+- **Each test checks one path**, with as many assertions as that path needs.
 
 ### 6.3 Placement
 

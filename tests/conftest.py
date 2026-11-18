@@ -7,10 +7,14 @@ import subprocess
 import sys
 from collections.abc import Iterator
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
 from dotenv import load_dotenv
+
+if TYPE_CHECKING:
+    from tests.mocks.fake_unit_of_work import FakeUnitOfWork
 
 TEST_DB_NAME = "workmain_test"
 
@@ -110,21 +114,40 @@ def build_test_database() -> None:
 
 @pytest.fixture(scope="session")
 def _test_database() -> None:
-    """Build the test database once, before the run's first test."""
+    """
+    Build the test database once, before the run's first test.
+
+    Every object the application's user owns in workmain_test is dropped, and
+    the schema is built again by `alembic upgrade head` in a child process.
+    pytest_configure has already pointed DB_NAME at workmain_test, and the run
+    stops before the first test when DB_NAME names another database.
+    workmain_test is created once by the database server's administrator,
+    owned by the application's user.
+    """
     build_test_database()
 
 
 @pytest.fixture(autouse=True)
 def _isolated_database(monkeypatch: pytest.MonkeyPatch, _test_database: None) -> Iterator[None]:
     """
-    Run every test inside one database transaction that is rolled back.
+    Run every test inside one database transaction, rolled back at teardown.
 
     The application's session factory is bound to a connection this fixture
-    owns, inside a transaction it began. Every session any code opens through
-    get_db() joins that transaction: a commit() releases a savepoint, a
-    rollback() returns to one, and nothing reaches the database. Rolling the
-    transaction back at teardown discards every write, and a run killed
-    mid-test leaves nothing because the transaction was never committed.
+    owns, inside a transaction it began, with
+    join_transaction_mode="create_savepoint". Every session opened through
+    get_db() joins that transaction: commit() releases a savepoint and
+    rollback() returns to one, so all sessions in a test see each other's
+    writes, and the rollback at teardown discards them all. A run killed
+    mid-test leaves the transaction open, and PostgreSQL rolls it back when
+    the connection drops.
+
+    Sessions on this one connection finish last-in, first-out: an object a
+    test builds on db_session and hands to code that opens its own session
+    fails at that code's commit.
+
+    DatabaseConnection.close() raises during a test, and a test that replaces
+    the session factory fails at teardown, because either would move the
+    test's code to a connection outside this transaction.
     """
     load_dotenv()
 
@@ -169,7 +192,13 @@ def db_session():
     A session for the test's own seeding and reads.
 
     It comes from the same factory application code uses, so the test and the
-    code it calls share one transaction. Commit it freely; nothing persists.
+    code it calls share one transaction and see each other's writes. Commit
+    it freely; every write rolls back with the test.
+
+    Its identity map keeps every object it has loaded: until db_session
+    commits, rolls back or expire_all() is called, get() and attribute
+    access return those objects as they were when loaded, and a query after
+    expunge_all() reads the rows as they are now.
     """
     from workmain.database.connection import get_db
 
@@ -178,6 +207,19 @@ def db_session():
         yield session
     finally:
         session.close()
+
+
+@pytest.fixture
+def fake_uow() -> "FakeUnitOfWork":
+    """
+    A FakeUnitOfWork over a fresh, empty store, for a service test.
+
+    A second unit of work over the same rows is
+    FakeUnitOfWork(store=fake_uow.store).
+    """
+    from tests.mocks.fake_unit_of_work import FakeUnitOfWork
+
+    return FakeUnitOfWork()
 
 
 @pytest.fixture
