@@ -63,6 +63,7 @@
 | 20261117 | Caliper | Pass at c2f0118, full: 42 items checked, 3 blocking, 6 non-blocking. | n/a |
 | 20261117 | Caliper | 3, Spec defect, non-blocking: Step 6's second category ("A test whose code under test is the connection or the session machinery: `get_db()`, `session_scope()`, `record_scope()`, `DatabaseConnection.close()` or the connection's URL") justifies itself with "The call is that code." That is not true of five hits: `tests/test_unit_of_work.py:195`, `:222`, `:234`, `:246` and `:252`. In each, the `get_db().session_scope()` call is setup. It opens a scope so the test can check whether `UnitOfWork` is refused or enters (`TestUnitOfWork::test_refused_by_open_scope_check_enters_after_scope_closes`, `test_refused_in_open_scope_opens_no_session`, and `TestOpenScopeCheck`). The code under test is `UnitOfWork`, which the category's list doesn't name. No other category fits: no open issue names `tests/test_unit_of_work.py`, and these are not tests of the build. The implementer would place these five hits under category 2 even though its stated reason doesn't hold for them. The rest of the category's reasoning does hold: the scope joins the transaction (§6.1's first bullet). | Accepted. Step 6's second category names `UnitOfWork`'s check for an open scope, and says the call is either the code under test or the scope that check's test opens. |
 | 20261117 | Caliper | Pass at 6596651, changes since c2f0118: 24 items checked, 0 blocking, 1 non-blocking. | n/a |
+| 20261117 | Caliper (post-implementation) | No findings. | n/a |
 
 ---
 
