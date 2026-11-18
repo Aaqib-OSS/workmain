@@ -1,6 +1,6 @@
 # clients_service and tasks_service on the unit of work — Spec
 
-**Status:** Approved
+**Status:** Draft
 **Author:** Spanner (Role 1)
 **Date:** 20261116
 **Branch:** `feature/issue-279-clients-tasks-unit-of-work` (from `dev`)
@@ -123,6 +123,7 @@ Read on this branch at `100e50c`, rebased onto `origin/dev` `1f64500` (#285 merg
 
 - **DR5 — Storage.** A fake repository is built on the fake unit of work's store, as `FakeSystemStateRepository` is. It keeps rows as dicts keyed by id, under `store['<table name>']`, a dict created on the first write. The table names are `clients`, `notes`, `meetings`, `task_status`, `projects`, `report_recipients`, `reports` and `time_entries`. A method that returns a model builds a new `Client`, `Note`, `Meeting` or `TaskStatus` from the row on every call, with no session, and never stores it. DR6 states each table's row shape.
 - **DR6 — Row shapes.** `docs/standards/6-testing.md` §6.2 has a test seed into `fake_uow`'s store "in the row shape its fake repository's docstring describes", so every table a fake reads has its row shape stated in a fake repository's class docstring. Every row holds every key of its shape, and a test writes the whole shape.
+
   Each table has one shape, stated in one docstring. Another fake that reads the table cites that docstring.
   - `FakeNotesRepository` states `notes` (`id`, `content`, `tags`, `created_at`, `meeting_id`, `client_id`) and `meetings` (`id`, `title`, `client_id`).
   - `FakeClientRepository` states `clients` (`id`, `name`, `is_active`, `created_at`), and `projects`, `report_recipients`, `reports` and `time_entries` (`id`, `client_id`). It reads `notes` and `meetings` rows in `FakeNotesRepository`'s shapes, which hold `client_id`.
