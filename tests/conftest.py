@@ -8,7 +8,7 @@ import sys
 from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING
-from unittest.mock import patch
+from unittest.mock import NonCallableMagicMock, patch
 
 import pytest
 from dotenv import load_dotenv
@@ -220,6 +220,36 @@ def fake_uow() -> "FakeUnitOfWork":
     from tests.mocks.fake_unit_of_work import FakeUnitOfWork
 
     return FakeUnitOfWork()
+
+
+@pytest.fixture
+def recording_renderer() -> NonCallableMagicMock:
+    """
+    A Renderer that records every call and prints nothing, for a command test.
+
+    It is create_autospec(Renderer, instance=True): it passes the
+    isinstance(obj, Renderer) test pass_renderer makes, so a command run with
+    obj=recording_renderer uses it rather than a real, printing Renderer, and
+    it refuses a call that does not match the real method's signature. Read
+    what was rendered from its recorded calls (mock_calls, or each method's
+    call_args).
+
+    pick returns the page's first row, or None when the page has no rows:
+    what the real pick returns without asking, for one candidate or none. A
+    test that needs another choice sets recording_renderer.pick.side_effect.
+    """
+    from unittest.mock import create_autospec
+
+    from workmain.cli.output import Renderer
+    from workmain.services.results import Page
+
+    renderer = create_autospec(Renderer, instance=True)
+
+    def first_row(view: object, page: Page) -> object:
+        return page.rows[0] if page.rows else None
+
+    renderer.pick.side_effect = first_row
+    return renderer
 
 
 @pytest.fixture

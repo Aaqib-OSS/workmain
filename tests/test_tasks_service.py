@@ -1,222 +1,393 @@
 """
 Tests for workmain.services.tasks_service.
 
-Covers list, find, get, complete and dismiss, plus the statement-count
-guarantee of the tasks list path.
-
-Uses db_session for full transaction isolation. Each test seeds its own
-rows on a fixed date in 2099.
+Covers list, today, find, get, complete and dismiss. Every test runs a use
+case on fake_uow, its store seeded in the row shapes
+tests/mocks/fake_unit_of_work.py's fake repositories state.
 """
 
-import uuid
 from datetime import date, datetime
 
 import pytest
-from sqlalchemy import event
 
-from workmain.database.models import Meeting
-from workmain.database.repositories.notes_repo import NotesRepository
-from workmain.database.repositories.task_status_repo import TaskStatusRepository
+from tests.mocks.fake_unit_of_work import FakeUnitOfWork
 from workmain.services import tasks_service
 from workmain.services.exceptions import NotATaskError, TaskNotFoundError
 
-
-def _note(db_session, content, day, tags=None, meeting_id=None):
-    return NotesRepository(db_session).create(
-        content=content,
-        tags=tags or ["carry-forward"],
-        source="task",
-        meeting_id=meeting_id,
-        created_at=datetime(2099, 1, day, 9, 0),
-    )
-
-
-def _task(db_session, content, day, status="active", **kwargs):
-    note = _note(db_session, content, day, **kwargs)
-    repo = TaskStatusRepository(db_session)
-    repo.create_active(note.id)
-    if status == "completed":
-        repo.set_completed(note.id)
-    elif status == "dismissed":
-        repo.set_dismissed(note.id)
-    return note
-
-
-def _marker():
-    return f"mk{uuid.uuid4().hex[:12]}"
+SEEDED = datetime(2099, 1, 1, 8, 0)
 
 
 class TestListTasks:
-    def test_limit_caps_rows_and_total_counts_all(self, db_session):
-        for i in range(25):
-            _task(db_session, f"task {i}", 2)
-        page = tasks_service.list_tasks(db_session, "active", None, date(2099, 1, 2), 20)
+    def test_limit_caps_rows_and_total_counts_all(self, fake_uow: FakeUnitOfWork) -> None:
+        fake_uow.store['notes'] = {
+            i: {
+                'id': i, 'content': f'task {i}', 'tags': ['carry-forward'],
+                'created_at': datetime(2099, 1, 2, 9, i), 'meeting_id': None, 'client_id': None,
+            }
+            for i in range(1, 26)
+        }
+        fake_uow.store['task_status'] = {
+            i: {
+                'id': i, 'note_id': i, 'status': 'active', 'completed_at': None,
+                'forwarding_note_id': None, 'created_at': SEEDED, 'updated_at': SEEDED,
+            }
+            for i in range(1, 26)
+        }
+
+        page = tasks_service.list_tasks(fake_uow, 'active', None, date(2099, 1, 2), 20)
+
         assert len(page.rows) == 20
         assert page.total == 25
 
-    def test_limit_zero_returns_every_row(self, db_session):
-        for i in range(25):
-            _task(db_session, f"task {i}", 3)
-        page = tasks_service.list_tasks(db_session, "active", None, date(2099, 1, 3), 0)
+    def test_limit_zero_returns_every_row(self, fake_uow: FakeUnitOfWork) -> None:
+        fake_uow.store['notes'] = {
+            i: {
+                'id': i, 'content': f'task {i}', 'tags': ['carry-forward'],
+                'created_at': datetime(2099, 1, 3, 9, i), 'meeting_id': None, 'client_id': None,
+            }
+            for i in range(1, 26)
+        }
+        fake_uow.store['task_status'] = {
+            i: {
+                'id': i, 'note_id': i, 'status': 'active', 'completed_at': None,
+                'forwarding_note_id': None, 'created_at': SEEDED, 'updated_at': SEEDED,
+            }
+            for i in range(1, 26)
+        }
+
+        page = tasks_service.list_tasks(fake_uow, 'active', None, date(2099, 1, 3), 0)
+
         assert len(page.rows) == 25
         assert page.total == 25
 
-    def test_status_all_returns_every_status(self, db_session):
-        _task(db_session, "a", 4, "active")
-        _task(db_session, "b", 4, "completed")
-        _task(db_session, "c", 4, "dismissed")
-        page = tasks_service.list_tasks(db_session, "all", None, date(2099, 1, 4), 0)
-        assert {r.status for r in page.rows} == {"active", "completed", "dismissed"}
+    def test_status_all_returns_every_status(self, fake_uow: FakeUnitOfWork) -> None:
+        statuses = {1: 'active', 2: 'completed', 3: 'dismissed'}
+        fake_uow.store['notes'] = {
+            i: {
+                'id': i, 'content': status, 'tags': ['carry-forward'],
+                'created_at': datetime(2099, 1, 4, 9, i), 'meeting_id': None, 'client_id': None,
+            }
+            for i, status in statuses.items()
+        }
+        fake_uow.store['task_status'] = {
+            i: {
+                'id': i, 'note_id': i, 'status': status, 'completed_at': None,
+                'forwarding_note_id': None, 'created_at': SEEDED, 'updated_at': SEEDED,
+            }
+            for i, status in statuses.items()
+        }
 
-    def test_status_filter_narrows(self, db_session):
-        _task(db_session, "a", 5, "active")
-        done = _task(db_session, "b", 5, "completed")
-        page = tasks_service.list_tasks(db_session, "completed", None, date(2099, 1, 5), 0)
-        assert [r.note_id for r in page.rows] == [done.id]
+        page = tasks_service.list_tasks(fake_uow, 'all', None, date(2099, 1, 4), 0)
 
-    def test_row_fields_equal_seeded(self, db_session):
-        note = _task(db_session, "seeded content", 6, tags=["carry-forward", "both"])
-        page = tasks_service.list_tasks(db_session, "active", None, date(2099, 1, 6), 0)
-        row = page.rows[0]
-        assert row.note_id == note.id
-        assert row.status == "active"
-        assert row.created_date == date(2099, 1, 6)
-        assert set(row.tags) == {"carry-forward", "both"}
-        assert row.content == "seeded content"
+        assert {r.status for r in page.rows} == {'active', 'completed', 'dismissed'}
 
-    def test_statement_count_does_not_grow_with_rows(self, db_session):
-        def count(day, n):
-            for i in range(n):
-                _task(db_session, f"t{i}", day)
-            db_session.flush()
-            db_session.expunge_all()
-            seen = []
-            conn = db_session.connection()
+    def test_status_filter_narrows(self, fake_uow: FakeUnitOfWork) -> None:
+        statuses = {1: 'active', 2: 'completed'}
+        fake_uow.store['notes'] = {
+            i: {
+                'id': i, 'content': status, 'tags': ['carry-forward'],
+                'created_at': datetime(2099, 1, 5, 9, i), 'meeting_id': None, 'client_id': None,
+            }
+            for i, status in statuses.items()
+        }
+        fake_uow.store['task_status'] = {
+            i: {
+                'id': i, 'note_id': i, 'status': status, 'completed_at': None,
+                'forwarding_note_id': None, 'created_at': SEEDED, 'updated_at': SEEDED,
+            }
+            for i, status in statuses.items()
+        }
 
-            def listener(*args):
-                seen.append(1)
+        page = tasks_service.list_tasks(fake_uow, 'completed', None, date(2099, 1, 5), 0)
 
-            event.listen(conn, "before_cursor_execute", listener)
-            try:
-                tasks_service.list_tasks(
-                    db_session, "active", None, date(2099, 1, day), 0
-                )
-            finally:
-                event.remove(conn, "before_cursor_execute", listener)
-            return len(seen)
+        assert [r.note_id for r in page.rows] == [2]
 
-        assert count(7, 1) == count(8, 5)
+    def test_row_fields_equal_seeded(self, fake_uow: FakeUnitOfWork) -> None:
+        fake_uow.store['notes'] = {7: {
+            'id': 7, 'content': 'seeded content', 'tags': ['both', 'carry-forward'],
+            'created_at': datetime(2099, 1, 6, 9, 0), 'meeting_id': None, 'client_id': None,
+        }}
+        fake_uow.store['task_status'] = {1: {
+            'id': 1, 'note_id': 7, 'status': 'active', 'completed_at': None,
+            'forwarding_note_id': None, 'created_at': SEEDED, 'updated_at': SEEDED,
+        }}
 
-    def test_filters_hold_only_narrowing_filters(self, db_session):
+        page = tasks_service.list_tasks(fake_uow, 'active', None, date(2099, 1, 6), 0)
+
+        assert page.rows == (
+            tasks_service.TaskRow(
+                7, 'active', date(2099, 1, 6), ('both', 'carry-forward'), 'seeded content',
+            ),
+        )
+
+    def test_filters_hold_only_narrowing_filters(self, fake_uow: FakeUnitOfWork) -> None:
         d = date(2099, 1, 9)
-        page = tasks_service.list_tasks(db_session, "active", "x", d, 0)
-        assert page.filters == (("status", "active"), ("search", "x"), ("created", d))
-        page = tasks_service.list_tasks(db_session, "all", None, None, 0)
+
+        page = tasks_service.list_tasks(fake_uow, 'active', 'x', d, 0)
+        assert page.filters == (('status', 'active'), ('search', 'x'), ('created', d))
+        page = tasks_service.list_tasks(FakeUnitOfWork(store=fake_uow.store), 'all', None, None, 0)
         assert page.filters == ()
 
 
 class TestListToday:
-    def test_active_tasks_on_the_date_only(self, db_session):
+    def test_active_tasks_on_the_date_only(self, fake_uow: FakeUnitOfWork) -> None:
+        seeds = {
+            1: ('live', 'active', datetime(2099, 1, 10, 9, 0)),
+            2: ('done', 'completed', datetime(2099, 1, 10, 10, 0)),
+            3: ('yesterday', 'active', datetime(2099, 1, 9, 9, 0)),
+        }
+        fake_uow.store['notes'] = {
+            i: {
+                'id': i, 'content': content, 'tags': ['carry-forward'],
+                'created_at': created_at, 'meeting_id': None, 'client_id': None,
+            }
+            for i, (content, _, created_at) in seeds.items()
+        }
+        fake_uow.store['task_status'] = {
+            i: {
+                'id': i, 'note_id': i, 'status': status, 'completed_at': None,
+                'forwarding_note_id': None, 'created_at': SEEDED, 'updated_at': SEEDED,
+            }
+            for i, (_, status, _) in seeds.items()
+        }
         d = date(2099, 1, 10)
-        live = _task(db_session, "live", 10, "active")
-        _task(db_session, "done", 10, "completed")
-        page = tasks_service.list_today(db_session, None, d)
-        assert [r.note_id for r in page.rows] == [live.id]
-        assert page.filters == (("status", "active"), ("created", d))
+
+        page = tasks_service.list_today(fake_uow, None, d)
+
+        assert [r.note_id for r in page.rows] == [1]
+        assert page.total == 1
+        assert page.filters == (('status', 'active'), ('created', d))
+
+    def test_search_narrows_and_is_a_filter(self, fake_uow: FakeUnitOfWork) -> None:
+        seeds = {1: 'Splunk alert', 2: 'Other work'}
+        fake_uow.store['notes'] = {
+            i: {
+                'id': i, 'content': content, 'tags': ['carry-forward'],
+                'created_at': datetime(2099, 1, 10, 9, i), 'meeting_id': None, 'client_id': None,
+            }
+            for i, content in seeds.items()
+        }
+        fake_uow.store['task_status'] = {
+            i: {
+                'id': i, 'note_id': i, 'status': 'active', 'completed_at': None,
+                'forwarding_note_id': None, 'created_at': SEEDED, 'updated_at': SEEDED,
+            }
+            for i in seeds
+        }
+        d = date(2099, 1, 10)
+
+        page = tasks_service.list_today(fake_uow, 'splunk', d)
+
+        assert [r.note_id for r in page.rows] == [1]
+        assert page.filters == (('status', 'active'), ('created', d), ('search', 'splunk'))
 
 
 class TestFindTasks:
-    def test_digit_string_is_a_note_id(self, db_session):
-        note = _task(db_session, "by id", 11)
-        page = tasks_service.find_tasks(db_session, str(note.id))
-        assert [r.note_id for r in page.rows] == [note.id]
-        assert page.filters == ()
+    def test_digit_string_is_a_note_id(self, fake_uow: FakeUnitOfWork) -> None:
+        fake_uow.store['notes'] = {7: {
+            'id': 7, 'content': 'by id', 'tags': ['carry-forward'],
+            'created_at': datetime(2099, 1, 11, 9, 0), 'meeting_id': None, 'client_id': None,
+        }}
+        fake_uow.store['task_status'] = {1: {
+            'id': 1, 'note_id': 7, 'status': 'active', 'completed_at': None,
+            'forwarding_note_id': None, 'created_at': SEEDED, 'updated_at': SEEDED,
+        }}
 
-    def test_unknown_id_raises(self, db_session):
-        with pytest.raises(TaskNotFoundError):
-            tasks_service.find_tasks(db_session, "2000000000")
+        page = tasks_service.find_tasks(fake_uow, '7')
 
-    def test_note_without_task_raises(self, db_session):
-        note = _note(db_session, "plain", 12, tags=["internal-only"])
-        with pytest.raises(NotATaskError):
-            tasks_service.find_tasks(db_session, str(note.id))
+        assert [r.note_id for r in page.rows] == [7]
+        assert (page.total, page.filters) == (1, ())
 
-    def test_search_finds_tasks_only(self, db_session):
-        mk = _marker()
-        task = _task(db_session, f"{mk} a task", 13)
-        _note(db_session, f"{mk} not a task", 13, tags=["internal-only"])
-        page = tasks_service.find_tasks(db_session, mk)
-        assert [r.note_id for r in page.rows] == [task.id]
+    def test_unknown_id_raises(self, fake_uow: FakeUnitOfWork) -> None:
+        with pytest.raises(TaskNotFoundError) as e:
+            tasks_service.find_tasks(fake_uow, '2000000000')
 
-    def test_search_covers_every_status(self, db_session):
-        mk = _marker()
-        for status in ("active", "completed", "dismissed"):
-            _task(db_session, f"{mk} {status}", 14, status)
-        page = tasks_service.find_tasks(db_session, mk)
-        assert {r.status for r in page.rows} == {"active", "completed", "dismissed"}
+        assert str(e.value) == 'No note found with ID 2000000000.'
 
-    def test_search_is_capped_at_ten(self, db_session):
-        mk = _marker()
-        for i in range(12):
-            _task(db_session, f"{mk} {i}", 15)
-        page = tasks_service.find_tasks(db_session, mk)
+    def test_note_without_task_raises(self, fake_uow: FakeUnitOfWork) -> None:
+        fake_uow.store['notes'] = {7: {
+            'id': 7, 'content': 'plain', 'tags': ['internal-only'],
+            'created_at': datetime(2099, 1, 12, 9, 0), 'meeting_id': None, 'client_id': None,
+        }}
+
+        with pytest.raises(NotATaskError) as e:
+            tasks_service.find_tasks(fake_uow, '7')
+
+        assert str(e.value) == str(NotATaskError(7))
+
+    def test_search_finds_tasks_only(self, fake_uow: FakeUnitOfWork) -> None:
+        fake_uow.store['notes'] = {
+            i: {
+                'id': i, 'content': content, 'tags': tags,
+                'created_at': datetime(2099, 1, 13, 9, i), 'meeting_id': None, 'client_id': None,
+            }
+            for i, content, tags in (
+                (1, 'marker a task', ['carry-forward']),
+                (2, 'marker not a task', ['internal-only']),
+            )
+        }
+        fake_uow.store['task_status'] = {1: {
+            'id': 1, 'note_id': 1, 'status': 'active', 'completed_at': None,
+            'forwarding_note_id': None, 'created_at': SEEDED, 'updated_at': SEEDED,
+        }}
+
+        page = tasks_service.find_tasks(fake_uow, 'marker')
+
+        assert [r.note_id for r in page.rows] == [1]
+
+    def test_search_covers_every_status(self, fake_uow: FakeUnitOfWork) -> None:
+        statuses = {1: 'active', 2: 'completed', 3: 'dismissed'}
+        fake_uow.store['notes'] = {
+            i: {
+                'id': i, 'content': f'marker {status}', 'tags': ['carry-forward'],
+                'created_at': datetime(2099, 1, 14, 9, i), 'meeting_id': None, 'client_id': None,
+            }
+            for i, status in statuses.items()
+        }
+        fake_uow.store['task_status'] = {
+            i: {
+                'id': i, 'note_id': i, 'status': status, 'completed_at': None,
+                'forwarding_note_id': None, 'created_at': SEEDED, 'updated_at': SEEDED,
+            }
+            for i, status in statuses.items()
+        }
+
+        page = tasks_service.find_tasks(fake_uow, 'marker')
+
+        assert {r.status for r in page.rows} == {'active', 'completed', 'dismissed'}
+
+    def test_search_is_capped_at_ten(self, fake_uow: FakeUnitOfWork) -> None:
+        fake_uow.store['notes'] = {
+            i: {
+                'id': i, 'content': f'marker {i}', 'tags': ['carry-forward'],
+                'created_at': datetime(2099, 1, 15, 9, i), 'meeting_id': None, 'client_id': None,
+            }
+            for i in range(1, 13)
+        }
+        fake_uow.store['task_status'] = {
+            i: {
+                'id': i, 'note_id': i, 'status': 'active', 'completed_at': None,
+                'forwarding_note_id': None, 'created_at': SEEDED, 'updated_at': SEEDED,
+            }
+            for i in range(1, 13)
+        }
+
+        page = tasks_service.find_tasks(fake_uow, 'marker')
+
         assert len(page.rows) == 10
         assert page.total == 12
-        assert page.filters == (("search", mk),)
+        assert page.filters == (('search', 'marker'),)
 
-    def test_no_match_raises(self, db_session):
-        with pytest.raises(TaskNotFoundError):
-            tasks_service.find_tasks(db_session, _marker())
+    def test_no_match_raises(self, fake_uow: FakeUnitOfWork) -> None:
+        with pytest.raises(TaskNotFoundError) as e:
+            tasks_service.find_tasks(fake_uow, 'nothing')
+
+        assert str(e.value) == "No tasks found matching 'nothing'."
 
 
 class TestGetTask:
-    def test_completed_task_with_meeting_and_forwarding_note(self, db_session):
-        meeting = Meeting(
-            title="Sentinel sync",
-            start_time=datetime(2099, 1, 16, 9, 0),
-            end_time=datetime(2099, 1, 16, 10, 0),
+    def test_completed_task_with_meeting_and_forwarding_note(
+        self, fake_uow: FakeUnitOfWork
+    ) -> None:
+        done_at = datetime(2099, 1, 16, 12, 0)
+        fake_uow.store['meetings'] = {5: {'id': 5, 'title': 'Sentinel sync', 'client_id': None}}
+        fake_uow.store['notes'] = {
+            7: {
+                'id': 7, 'content': 'done', 'tags': ['carry-forward'],
+                'created_at': datetime(2099, 1, 16, 9, 0), 'meeting_id': 5, 'client_id': None,
+            },
+            8: {
+                'id': 8, 'content': 'target', 'tags': ['internal-only'],
+                'created_at': datetime(2099, 1, 16, 10, 0), 'meeting_id': None,
+                'client_id': None,
+            },
+        }
+        fake_uow.store['task_status'] = {1: {
+            'id': 1, 'note_id': 7, 'status': 'completed', 'completed_at': done_at,
+            'forwarding_note_id': 8, 'created_at': SEEDED, 'updated_at': done_at,
+        }}
+
+        detail = tasks_service.get_task(fake_uow, 7)
+
+        assert detail == tasks_service.TaskDetail(
+            note_id=7, status='completed', created_at=datetime(2099, 1, 16, 9, 0),
+            completed_at=done_at, dismissed_at=None, forwarding_note_id=8,
+            tags=('carry-forward',), meeting_id=5, meeting_title='Sentinel sync',
+            content='done',
         )
-        db_session.add(meeting)
-        db_session.flush()
-        target = _note(db_session, "target", 16, tags=["internal-only"])
-        note = _task(db_session, "done", 16, "completed", meeting_id=meeting.id)
-        repo = TaskStatusRepository(db_session)
-        repo.set_forwarding_note(repo.get_by_note_id(note.id).id, target.id)
-        detail = tasks_service.get_task(db_session, note.id)
-        assert detail.completed_at is not None
-        assert detail.dismissed_at is None
-        assert detail.forwarding_note_id == target.id
-        assert detail.meeting_id == meeting.id
-        assert detail.meeting_title == "Sentinel sync"
 
-    def test_dismissed_task_sets_dismissed_at(self, db_session):
-        note = _task(db_session, "gone", 17, "dismissed")
-        detail = tasks_service.get_task(db_session, note.id)
-        assert detail.dismissed_at is not None
-        assert detail.completed_at is None
+    def test_dismissed_task_sets_dismissed_at(self, fake_uow: FakeUnitOfWork) -> None:
+        gone_at = datetime(2099, 1, 17, 12, 0)
+        fake_uow.store['notes'] = {7: {
+            'id': 7, 'content': 'gone', 'tags': ['carry-forward'],
+            'created_at': datetime(2099, 1, 17, 9, 0), 'meeting_id': None, 'client_id': None,
+        }}
+        fake_uow.store['task_status'] = {1: {
+            'id': 1, 'note_id': 7, 'status': 'dismissed', 'completed_at': gone_at,
+            'forwarding_note_id': None, 'created_at': SEEDED, 'updated_at': gone_at,
+        }}
 
-    def test_note_without_task_raises(self, db_session):
-        note = _note(db_session, "plain", 18, tags=["internal-only"])
+        detail = tasks_service.get_task(fake_uow, 7)
+
+        assert (detail.dismissed_at, detail.completed_at) == (gone_at, None)
+        assert (detail.meeting_id, detail.meeting_title) == (None, None)
+
+    def test_note_without_task_raises(self, fake_uow: FakeUnitOfWork) -> None:
+        fake_uow.store['notes'] = {7: {
+            'id': 7, 'content': 'plain', 'tags': ['internal-only'],
+            'created_at': datetime(2099, 1, 18, 9, 0), 'meeting_id': None, 'client_id': None,
+        }}
+
         with pytest.raises(NotATaskError):
-            tasks_service.get_task(db_session, note.id)
+            tasks_service.get_task(fake_uow, 7)
+
+    def test_unknown_note_raises(self, fake_uow: FakeUnitOfWork) -> None:
+        with pytest.raises(TaskNotFoundError) as e:
+            tasks_service.get_task(fake_uow, 99)
+
+        assert str(e.value) == 'No note found with ID 99.'
 
 
 class TestChangeTask:
-    def test_complete_task(self, db_session):
-        note = _task(db_session, "c", 19)
-        row = tasks_service.complete_task(db_session, note.id)
-        stored = TaskStatusRepository(db_session).get_by_note_id(note.id)
-        assert row.status == stored.status == "completed"
-        assert stored.completed_at is not None
+    @pytest.mark.parametrize('change, status', [
+        (tasks_service.complete_task, 'completed'),
+        (tasks_service.dismiss_task, 'dismissed'),
+    ])
+    def test_change_sets_the_status_and_returns_the_row(
+        self, fake_uow: FakeUnitOfWork, change: object, status: str
+    ) -> None:
+        fake_uow.store['notes'] = {7: {
+            'id': 7, 'content': 'c', 'tags': ['carry-forward'],
+            'created_at': datetime(2099, 1, 19, 9, 0), 'meeting_id': None, 'client_id': None,
+        }}
+        fake_uow.store['task_status'] = {1: {
+            'id': 1, 'note_id': 7, 'status': 'active', 'completed_at': None,
+            'forwarding_note_id': None, 'created_at': SEEDED, 'updated_at': SEEDED,
+        }}
 
-    def test_dismiss_task(self, db_session):
-        note = _task(db_session, "d", 20)
-        row = tasks_service.dismiss_task(db_session, note.id)
-        stored = TaskStatusRepository(db_session).get_by_note_id(note.id)
-        assert row.status == stored.status == "dismissed"
-        assert stored.completed_at is not None
+        row = change(fake_uow, 7)
 
-    def test_complete_note_without_task_raises(self, db_session):
-        note = _note(db_session, "plain", 21, tags=["internal-only"])
+        assert row == tasks_service.TaskRow(
+            7, status, date(2099, 1, 19), ('carry-forward',), 'c',
+        )
+        assert fake_uow.committed is True
+        stored = fake_uow.store['task_status'][1]
+        assert stored['status'] == status
+        assert stored['completed_at'] is not None
+
+    def test_complete_note_without_task_raises(self, fake_uow: FakeUnitOfWork) -> None:
+        fake_uow.store['notes'] = {7: {
+            'id': 7, 'content': 'plain', 'tags': ['internal-only'],
+            'created_at': datetime(2099, 1, 21, 9, 0), 'meeting_id': None, 'client_id': None,
+        }}
+
         with pytest.raises(NotATaskError):
-            tasks_service.complete_task(db_session, note.id)
+            tasks_service.complete_task(fake_uow, 7)
+
+        assert fake_uow.committed is False
+
+    def test_complete_unknown_note_raises(self, fake_uow: FakeUnitOfWork) -> None:
+        with pytest.raises(TaskNotFoundError) as e:
+            tasks_service.complete_task(fake_uow, 99)
+
+        assert str(e.value) == 'No note found with ID 99.'

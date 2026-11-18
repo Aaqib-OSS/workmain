@@ -1,298 +1,310 @@
 """
-clients_service tests — listing, targeting, adding, deleting and the active
-client context. Every test takes db_session and seeds its own clients.
+clients_service tests — listing, targeting, adding, deleting and the active client context.
+
+Every test runs a use case on fake_uow, its store seeded in
+the row shapes tests/mocks/fake_unit_of_work.py's fake repositories state.
 """
 
-from datetime import date, datetime, time
+from datetime import datetime, timezone
 
 import pytest
 
-from workmain.database.models import (
-    Client,
-    Meeting,
-    Note,
-    Project,
-    Report,
-    ReportRecipient,
-    TimeEntry,
-)
-from workmain.database.repositories.client_repository import ClientRepository
-from workmain.database.repositories.system_state_repository import SystemStateRepository
+from tests.mocks.fake_unit_of_work import FakeUnitOfWork
 from workmain.services import clients_service
 from workmain.services.exceptions import (
     ActiveClientDeleteError,
     ClientNotFoundError,
     InvalidClientNameError,
 )
-from workmain.services.results import Summary
+from workmain.services.results import Page, Summary
 
-
-def _seed_linked(session, name):
-    """Seed a client with one meeting, two notes, one project, one report
-    recipient, one report and one time entry, and a second client with one
-    note. Returns the first client, the second, and the first's rows."""
-    repo = ClientRepository(session)
-    client = repo.create(name)
-    other = repo.create(f"{name}_Other")
-    day = date(2099, 1, 1)
-    stamp = datetime(2099, 1, 1, 9, 0)
-    meeting = Meeting(title="_T204_", start_time=stamp, end_time=stamp, client_id=client.id)
-    note_a = Note(content="_T204_", client_id=client.id)
-    note_b = Note(content="_T204_", client_id=client.id)
-    other_note = Note(content="_T204_", client_id=other.id)
-    project = Project(name="_T204_", client_id=client.id)
-    recipient = ReportRecipient(
-        report_type="_T204_", recipient_type="_T204_", client_id=client.id,
-    )
-    report = Report(
-        report_type="_T204_", report_date=day, content="_T204_", client_id=client.id,
-    )
-    session.add_all([meeting, note_a, note_b, other_note, project, recipient, report])
-    session.flush()
-    entry = TimeEntry(
-        note_id=note_a.id, duration_hours=1, entry_date=day, entry_time=time(9, 0), client_id=client.id,
-    )
-    session.add(entry)
-    session.flush()
-    rows = {
-        Meeting: meeting.id,
-        Note: [note_a.id, note_b.id],
-        Project: project.id,
-        ReportRecipient: recipient.id,
-        Report: report.id,
-        TimeEntry: entry.id,
-    }
-    return client, other, other_note, rows
+CREATED = datetime(2099, 1, 1, 9, 0, tzinfo=timezone.utc)
+NOTE_TIME = datetime(2099, 1, 1, 9, 0)
 
 
 class TestList:
-    def test_s1_lists_clients_in_name_order(self, db_session):
-        repo = ClientRepository(db_session)
-        b = repo.create("_T204_B")
-        a = repo.create("_T204_A")
+    def test_lists_clients_in_name_order(self, fake_uow: FakeUnitOfWork) -> None:
+        fake_uow.store['clients'] = {
+            1: {'id': 1, 'name': 'Beta', 'is_active': False, 'created_at': CREATED},
+            2: {'id': 2, 'name': 'Alpha', 'is_active': True, 'created_at': CREATED},
+        }
 
-        page = clients_service.list_clients(db_session)
+        page = clients_service.list_clients(fake_uow)
 
-        seeded = [r for r in page.rows if r.name.startswith("_T204_")]
-        assert seeded == [
-            clients_service.ClientRow(a.id, "_T204_A", False),
-            clients_service.ClientRow(b.id, "_T204_B", False),
-        ]
-        assert page.total == len(page.rows)
-        assert page.filters == ()
+        assert page == Page(
+            rows=(
+                clients_service.ClientRow(2, 'Alpha', True),
+                clients_service.ClientRow(1, 'Beta', False),
+            ),
+            total=2,
+            filters=(),
+        )
 
 
 class TestGet:
-    def test_s2_by_id_digit_string(self, db_session):
-        client = ClientRepository(db_session).create("_T204_Get")
+    def test_by_id_digit_string(self, fake_uow: FakeUnitOfWork) -> None:
+        fake_uow.store['clients'] = {
+            7: {'id': 7, 'name': 'Acme', 'is_active': False, 'created_at': CREATED},
+        }
 
-        detail = clients_service.get_client(db_session, str(client.id))
+        detail = clients_service.get_client(fake_uow, '7')
 
-        assert detail.client_id == client.id
-        assert detail.name == "_T204_Get"
-        assert detail.is_active is False
-        assert detail.created_at == client.created_at
+        assert detail == clients_service.ClientDetail(7, 'Acme', False, CREATED)
 
-    def test_s3_by_name_in_other_case(self, db_session):
-        client = ClientRepository(db_session).create("_T204_Get")
+    def test_by_name_in_other_case(self, fake_uow: FakeUnitOfWork) -> None:
+        fake_uow.store['clients'] = {
+            7: {'id': 7, 'name': 'Acme', 'is_active': False, 'created_at': CREATED},
+        }
 
-        detail = clients_service.get_client(db_session, "_t204_GET")
+        detail = clients_service.get_client(fake_uow, 'aCME')
 
-        assert detail.client_id == client.id
+        assert detail.client_id == 7
 
-    def test_s4_digit_string_gets_no_suggestions(self, db_session):
-        ClientRepository(db_session).create("_T204_99999999")
-
-        with pytest.raises(ClientNotFoundError) as e:
-            clients_service.get_client(db_session, "99999999")
-
-        assert str(e.value) == "Client '99999999' not found."
-
-    def test_s5_not_found_suggests_substring_matches(self, db_session):
-        repo = ClientRepository(db_session)
-        alpha = repo.create("_T204_Alpha")
-        beta = repo.create("_T204_Beta")
+    def test_digit_string_gets_no_suggestions(self, fake_uow: FakeUnitOfWork) -> None:
+        fake_uow.store['clients'] = {
+            1: {'id': 1, 'name': 'Acme 42', 'is_active': False, 'created_at': CREATED},
+        }
 
         with pytest.raises(ClientNotFoundError) as e:
-            clients_service.get_client(db_session, "_T204_")
+            clients_service.get_client(fake_uow, '42')
+
+        assert str(e.value) == "Client '42' not found."
+
+    def test_not_found_suggests_substring_matches(self, fake_uow: FakeUnitOfWork) -> None:
+        fake_uow.store['clients'] = {
+            1: {'id': 1, 'name': 'Beta Corp', 'is_active': False, 'created_at': CREATED},
+            2: {'id': 2, 'name': 'Alpha Corp', 'is_active': False, 'created_at': CREATED},
+            3: {'id': 3, 'name': 'Gamma', 'is_active': False, 'created_at': CREATED},
+        }
+
+        with pytest.raises(ClientNotFoundError) as e:
+            clients_service.get_client(fake_uow, 'corp')
 
         assert str(e.value) == (
-            f"Client '_T204_' not found. "
-            f"Did you mean: _T204_Alpha (#{alpha.id}), _T204_Beta (#{beta.id})?"
+            "Client 'corp' not found. Did you mean: Alpha Corp (#2), Beta Corp (#1)?"
         )
 
-    def test_s6_not_found_without_matches(self, db_session):
+    def test_not_found_without_matches(self, fake_uow: FakeUnitOfWork) -> None:
         with pytest.raises(ClientNotFoundError) as e:
-            clients_service.get_client(db_session, "_T204_none")
+            clients_service.get_client(fake_uow, 'Nobody')
 
-        assert str(e.value) == "Client '_T204_none' not found."
+        assert str(e.value) == "Client 'Nobody' not found."
 
 
 class TestAdd:
-    def test_s7_adds_an_inactive_client(self, db_session):
-        row = clients_service.add_client(db_session, "_T204_New")
+    def test_adds_an_inactive_client(self, fake_uow: FakeUnitOfWork) -> None:
+        row = clients_service.add_client(fake_uow, 'Acme')
 
-        assert row.client_id is not None
-        assert row.name == "_T204_New"
-        assert row.is_active is False
-        assert ClientRepository(db_session).get_by_id(row.client_id) is not None
+        assert row == clients_service.ClientRow(1, 'Acme', False)
+        assert fake_uow.committed is True
+        stored = fake_uow.store['clients'][1]
+        assert (stored['name'], stored['is_active']) == ('Acme', False)
 
-    def test_s8_reserved_name(self, db_session):
+    def test_reserved_name(self, fake_uow: FakeUnitOfWork) -> None:
         with pytest.raises(InvalidClientNameError) as e:
-            clients_service.add_client(db_session, " Internal ")
+            clients_service.add_client(fake_uow, ' Internal ')
 
         assert str(e.value) == (
             "'internal' is a reserved keyword and cannot be used as a client name."
         )
+        assert fake_uow.store == {}
+        assert fake_uow.committed is False
 
-    def test_s9_duplicate_name_in_other_case(self, db_session):
-        ClientRepository(db_session).create("_T204_Dup")
+    def test_duplicate_name_in_other_case(self, fake_uow: FakeUnitOfWork) -> None:
+        fake_uow.store['clients'] = {
+            1: {'id': 1, 'name': 'Acme', 'is_active': False, 'created_at': CREATED},
+        }
 
         with pytest.raises(InvalidClientNameError) as e:
-            clients_service.add_client(db_session, "_t204_dup")
+            clients_service.add_client(fake_uow, 'aCME')
 
-        assert str(e.value) == "A client named '_t204_dup' already exists."
+        assert str(e.value) == "A client named 'aCME' already exists."
+        assert list(fake_uow.store['clients']) == [1]
+        assert fake_uow.committed is False
 
 
 class TestDelete:
-    def test_s10_preview_states_linked_counts(self, db_session):
-        client, _, _, _ = _seed_linked(db_session, "_T204_Del")
+    def test_preview_states_linked_counts(self, fake_uow: FakeUnitOfWork) -> None:
+        fake_uow.store['clients'] = {
+            1: {'id': 1, 'name': 'Acme', 'is_active': False, 'created_at': CREATED},
+        }
+        fake_uow.store['meetings'] = {1: {'id': 1, 'title': 'Sync', 'client_id': 1}}
+        fake_uow.store['notes'] = {
+            note_id: {
+                'id': note_id, 'content': 'Note', 'tags': ['internal-only'],
+                'created_at': NOTE_TIME, 'meeting_id': None, 'client_id': 1,
+            }
+            for note_id in (1, 2)
+        }
+        for table in ('projects', 'report_recipients', 'reports', 'time_entries'):
+            fake_uow.store[table] = {1: {'id': 1, 'client_id': 1}}
 
-        preview = clients_service.preview_delete(db_session, client.name, False)
+        preview = clients_service.preview_delete(fake_uow, 'Acme', False)
 
-        assert preview.client == clients_service.ClientRow(client.id, client.name, False)
-        assert preview.totals == clients_service.LinkedTotals(
-            meetings=1, notes=2, projects=1, report_recipients=1, reports=1, time_entries=1,
+        assert preview == clients_service.DeletePreview(
+            filters=(('client', 'Acme'), ('id', 1)),
+            client=clients_service.ClientRow(1, 'Acme', False),
+            totals=clients_service.LinkedTotals(
+                meetings=1, notes=2, projects=1, report_recipients=1, reports=1,
+                time_entries=1,
+            ),
+            question=(
+                "Delete client 'Acme' (ID: 1)? "
+                "Its 2 notes, 1 time entries, 1 meetings, 1 reports, 1 projects "
+                "and 1 report recipients will lose their client."
+            ),
         )
-        assert preview.filters == (("client", client.name), ("id", client.id))
-        assert preview.question == (
-            f"Delete client '{client.name}' (ID: {client.id})? "
-            "Its 2 notes, 1 time entries, 1 meetings, 1 reports, 1 projects "
-            "and 1 report recipients will lose their client."
-        )
 
-    def test_s11_active_client_without_force(self, db_session):
-        client = ClientRepository(db_session).create("_T204_Act")
-        clients_service.set_active(db_session, client.name)
+    def test_active_client_without_force(self, fake_uow: FakeUnitOfWork) -> None:
+        fake_uow.store['clients'] = {
+            1: {'id': 1, 'name': 'Acme', 'is_active': True, 'created_at': CREATED},
+        }
+        fake_uow.store['system_state'] = {'active_client_id': '1'}
 
         with pytest.raises(ActiveClientDeleteError) as e:
-            clients_service.preview_delete(db_session, client.name, False)
+            clients_service.preview_delete(fake_uow, 'Acme', False)
 
-        assert str(e.value) == (
-            f"Client '{client.name}' is currently active. Use --force to delete."
-        )
+        assert str(e.value) == "Client 'Acme' is currently active. Use --force to delete."
 
-    def test_s12_active_client_with_force(self, db_session):
-        client = ClientRepository(db_session).create("_T204_Act")
-        clients_service.set_active(db_session, client.name)
+    def test_active_client_with_force(self, fake_uow: FakeUnitOfWork) -> None:
+        fake_uow.store['clients'] = {
+            1: {'id': 1, 'name': 'Acme', 'is_active': True, 'created_at': CREATED},
+        }
+        fake_uow.store['system_state'] = {'active_client_id': '1'}
 
-        preview = clients_service.preview_delete(db_session, client.name, True)
+        preview = clients_service.preview_delete(fake_uow, 'Acme', True)
 
-        assert preview.client.client_id == client.id
+        assert preview.client == clients_service.ClientRow(1, 'Acme', True)
 
-    def test_s13_preview_of_unknown_client(self, db_session):
-        with pytest.raises(ClientNotFoundError):
-            clients_service.preview_delete(db_session, "_T204_none", True)
+    def test_preview_of_unknown_client(self, fake_uow: FakeUnitOfWork) -> None:
+        with pytest.raises(ClientNotFoundError) as e:
+            clients_service.preview_delete(fake_uow, 'Nobody', True)
 
-    def test_s14_delete_unlinks_linked_rows(self, db_session):
-        client, other, other_note, rows = _seed_linked(db_session, "_T204_Del")
+        assert str(e.value) == "Client 'Nobody' not found."
 
-        row = clients_service.delete_client(db_session, client.id)
-        db_session.expire_all()
+    def test_delete_unlinks_linked_rows(self, fake_uow: FakeUnitOfWork) -> None:
+        fake_uow.store['clients'] = {
+            1: {'id': 1, 'name': 'Acme', 'is_active': False, 'created_at': CREATED},
+            2: {'id': 2, 'name': 'Other', 'is_active': False, 'created_at': CREATED},
+        }
+        fake_uow.store['meetings'] = {1: {'id': 1, 'title': 'Sync', 'client_id': 1}}
+        fake_uow.store['notes'] = {
+            note_id: {
+                'id': note_id, 'content': 'Note', 'tags': ['internal-only'],
+                'created_at': NOTE_TIME, 'meeting_id': None, 'client_id': owner,
+            }
+            for note_id, owner in ((1, 1), (2, 2))
+        }
+        for table in ('projects', 'report_recipients', 'reports', 'time_entries'):
+            fake_uow.store[table] = {1: {'id': 1, 'client_id': 1}}
 
-        assert row == clients_service.ClientRow(client.id, client.name, False)
-        assert db_session.get(Client, client.id) is None
-        for model, ids in rows.items():
-            for row_id in ids if isinstance(ids, list) else [ids]:
-                found = db_session.get(model, row_id)
-                assert found is not None
-                assert found.client_id is None
-        assert db_session.get(Note, other_note.id).client_id == other.id
+        row = clients_service.delete_client(fake_uow, 1)
 
-    def test_s15_deleting_the_active_client_clears_the_context(self, db_session):
-        client = ClientRepository(db_session).create("_T204_Act")
-        clients_service.set_active(db_session, client.name)
+        assert row == clients_service.ClientRow(1, 'Acme', False)
+        assert fake_uow.committed is True
+        assert list(fake_uow.store['clients']) == [2]
+        for table in ('meetings', 'projects', 'report_recipients', 'reports', 'time_entries'):
+            assert fake_uow.store[table][1]['client_id'] is None, table
+        assert fake_uow.store['notes'][1]['client_id'] is None
+        assert fake_uow.store['notes'][2]['client_id'] == 2
 
-        clients_service.delete_client(db_session, client.id)
+    def test_deleting_the_active_client_clears_the_context(
+        self, fake_uow: FakeUnitOfWork
+    ) -> None:
+        fake_uow.store['clients'] = {
+            1: {'id': 1, 'name': 'Acme', 'is_active': True, 'created_at': CREATED},
+        }
+        fake_uow.store['system_state'] = {'active_client_id': '1'}
 
-        assert ClientRepository(db_session).get_by_id(client.id) is None
-        assert SystemStateRepository(db_session).get_int("active_client_id") is None
-        assert clients_service.get_status(db_session).totals == (
-            clients_service.ClientStatusTotals("internal", None)
-        )
+        clients_service.delete_client(fake_uow, 1)
 
-    def test_s16_delete_of_unknown_id(self, db_session):
-        with pytest.raises(ClientNotFoundError):
-            clients_service.delete_client(db_session, 99999999)
+        assert fake_uow.committed is True
+        assert fake_uow.store['clients'] == {}
+        assert fake_uow.store['system_state'] == {}
+        status = clients_service.get_status(FakeUnitOfWork(store=fake_uow.store))
+        assert status.totals == clients_service.ClientStatusTotals('internal', None)
+
+    def test_delete_of_unknown_id(self, fake_uow: FakeUnitOfWork) -> None:
+        with pytest.raises(ClientNotFoundError) as e:
+            clients_service.delete_client(fake_uow, 99)
+
+        assert str(e.value) == "Client '99' not found."
 
 
 class TestActive:
-    def test_s17_sets_the_active_client_by_name(self, db_session):
-        client = ClientRepository(db_session).create("_T204_Act")
+    def test_sets_the_active_client_by_name(self, fake_uow: FakeUnitOfWork) -> None:
+        fake_uow.store['clients'] = {
+            1: {'id': 1, 'name': 'Acme', 'is_active': False, 'created_at': CREATED},
+        }
 
-        status = clients_service.set_active(db_session, "_t204_ACT")
+        status = clients_service.set_active(fake_uow, 'aCME')
 
-        assert type(status) is Summary
-        assert status.filters == ()
-        assert status.totals == clients_service.ClientStatusTotals("_T204_Act", client.id)
-        db_session.refresh(client)
-        assert client.is_active is True
-        assert SystemStateRepository(db_session).get_int("active_client_id") == client.id
+        assert status == Summary(clients_service.ClientStatusTotals('Acme', 1), ())
+        assert fake_uow.committed is True
+        assert fake_uow.store['clients'][1]['is_active'] is True
+        assert fake_uow.store['system_state'] == {'active_client_id': '1'}
 
-    @pytest.mark.parametrize("name", ["internal", "INTERNAL", " Internal "])
-    def test_s18_internal_clears_the_context(self, db_session, name):
-        ClientRepository(db_session).create("_T204_Act")
-        clients_service.set_active(db_session, "_T204_Act")
+    @pytest.mark.parametrize('name', ['internal', 'INTERNAL', ' Internal '])
+    def test_internal_clears_the_context(self, fake_uow: FakeUnitOfWork, name: str) -> None:
+        fake_uow.store['clients'] = {
+            1: {'id': 1, 'name': 'Acme', 'is_active': True, 'created_at': CREATED},
+        }
+        fake_uow.store['system_state'] = {'active_client_id': '1'}
 
-        status = clients_service.set_active(db_session, name)
+        status = clients_service.set_active(fake_uow, name)
 
-        assert status.totals == clients_service.ClientStatusTotals("internal", None)
+        assert status.totals == clients_service.ClientStatusTotals('internal', None)
+        assert fake_uow.committed is True
+        assert fake_uow.store['clients'][1]['is_active'] is False
+        assert fake_uow.store['system_state'] == {}
 
-    def test_s19_unknown_name_leaves_the_active_client(self, db_session):
-        repo = ClientRepository(db_session)
-        alpha = repo.create("_T204_Alpha")
-        clients_service.set_active(db_session, alpha.name)
+    def test_unknown_name_leaves_the_active_client(self, fake_uow: FakeUnitOfWork) -> None:
+        fake_uow.store['clients'] = {
+            1: {'id': 1, 'name': 'Alpha', 'is_active': True, 'created_at': CREATED},
+        }
+        fake_uow.store['system_state'] = {'active_client_id': '1'}
 
         with pytest.raises(ClientNotFoundError) as e:
-            clients_service.set_active(db_session, "_T204_")
+            clients_service.set_active(fake_uow, 'alp')
 
-        assert str(e.value) == (
-            f"Client '_T204_' not found. Did you mean: _T204_Alpha (#{alpha.id})?"
-        )
-        assert clients_service.get_status(db_session).totals == (
-            clients_service.ClientStatusTotals("_T204_Alpha", alpha.id)
-        )
+        assert str(e.value) == "Client 'alp' not found. Did you mean: Alpha (#1)?"
+        assert fake_uow.committed is False
+        status = clients_service.get_status(FakeUnitOfWork(store=fake_uow.store))
+        assert status.totals == clients_service.ClientStatusTotals('Alpha', 1)
 
 
 class TestStatus:
-    def test_s20_reports_the_active_client(self, db_session):
-        client = ClientRepository(db_session).create("_T204_Act")
-        clients_service.set_active(db_session, client.name)
+    def test_reports_the_active_client(self, fake_uow: FakeUnitOfWork) -> None:
+        fake_uow.store['clients'] = {
+            1: {'id': 1, 'name': 'Acme', 'is_active': True, 'created_at': CREATED},
+        }
+        fake_uow.store['system_state'] = {'active_client_id': '1'}
 
-        status = clients_service.get_status(db_session)
+        status = clients_service.get_status(fake_uow)
 
-        assert type(status) is Summary
-        assert status.totals == clients_service.ClientStatusTotals("_T204_Act", client.id)
-        assert status.filters == ()
+        assert status == Summary(clients_service.ClientStatusTotals('Acme', 1), ())
 
-    def test_s21_falls_back_to_the_flagged_client(self, db_session):
-        repo = ClientRepository(db_session)
-        client = repo.create("_T204_Flag")
-        repo.clear_active()
-        client.is_active = True
-        db_session.flush()
+    def test_falls_back_to_the_flagged_client(self, fake_uow: FakeUnitOfWork) -> None:
+        fake_uow.store['clients'] = {
+            1: {'id': 1, 'name': 'Other', 'is_active': False, 'created_at': CREATED},
+            2: {'id': 2, 'name': 'Flagged', 'is_active': True, 'created_at': CREATED},
+        }
 
-        status = clients_service.get_status(db_session)
+        status = clients_service.get_status(fake_uow)
 
-        assert status.totals == clients_service.ClientStatusTotals("_T204_Flag", client.id)
+        assert status.totals == clients_service.ClientStatusTotals('Flagged', 2)
 
-    def test_s22_internal_when_nothing_is_active_and_formatters(self, db_session):
-        ClientRepository(db_session).clear_active()
+    def test_internal_when_nothing_is_active_and_formatters(
+        self, fake_uow: FakeUnitOfWork
+    ) -> None:
+        fake_uow.store['clients'] = {
+            1: {'id': 1, 'name': 'Acme', 'is_active': False, 'created_at': CREATED},
+        }
 
-        status = clients_service.get_status(db_session)
+        status = clients_service.get_status(fake_uow)
 
-        assert status.totals == clients_service.ClientStatusTotals("internal", None)
-        assert clients_service.format_active_marker(True) == "●"
-        assert clients_service.format_active_marker(False) == ""
-        assert clients_service.format_yes_no(True) == "Yes"
-        assert clients_service.format_yes_no(False) == "No"
+        assert status.totals == clients_service.ClientStatusTotals('internal', None)
+        assert clients_service.format_active_marker(True) == '●'
+        assert clients_service.format_active_marker(False) == ''
+        assert clients_service.format_yes_no(True) == 'Yes'
+        assert clients_service.format_yes_no(False) == 'No'

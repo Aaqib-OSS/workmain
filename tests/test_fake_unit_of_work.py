@@ -1,5 +1,5 @@
 """
-Tests for the fake unit of work and the fake system-state repository.
+Tests for the fake unit of work and its fake repositories.
 
 The fake must stand in for the real unit of work in a service test: keep
 rows in memory, commit and roll back as the real one does, refuse the same
@@ -9,12 +9,33 @@ nesting, and answer every faked repository method as the SQL does.
 import copy
 import inspect
 import re
+from datetime import date, datetime, time, timedelta, timezone
 
 import pytest
 from sqlalchemy.orm import Session
 
-from tests.mocks.fake_unit_of_work import FakeSystemStateRepository, FakeUnitOfWork
+from tests.mocks.fake_unit_of_work import (
+    FakeClientRepository,
+    FakeNotesRepository,
+    FakeSystemStateRepository,
+    FakeTaskStatusRepository,
+    FakeUnitOfWork,
+)
+from workmain.database.models import (
+    Meeting,
+    Note,
+    Project,
+    Report,
+    ReportRecipient,
+    TimeEntry,
+)
+from workmain.database.repositories.client_repository import ClientRepository
+from workmain.database.repositories.meetings_repo import MeetingsRepository
+from workmain.database.repositories.notes_repo import NotesRepository
+from workmain.database.repositories.reports_repo import ReportsRepository
 from workmain.database.repositories.system_state_repository import SystemStateRepository
+from workmain.database.repositories.task_status_repo import TaskStatusRepository
+from workmain.database.repositories.time_entries_repo import TimeEntriesRepository
 from workmain.services.unit_of_work import (
     _OPEN_SCOPE_MESSAGE,
     _REENTRY_MESSAGE,
@@ -175,7 +196,9 @@ class TestFakeParity:
                 if method_name.startswith('_'):
                     continue
                 real_method = getattr(real_class, method_name)
-                assert inspect.signature(method) == inspect.signature(real_method), method_name
+                assert inspect.signature(method, eval_str=True) == inspect.signature(
+                    real_method, eval_str=True
+                ), method_name
 
 
 @pytest.mark.parametrize('kind', ['real', 'fake'])
@@ -251,3 +274,660 @@ class TestSystemStateContract:
         repo = self._repository(kind, db_session)
         repo.set_int('count', 7)
         assert repo.get('count') == '7'
+
+
+@pytest.mark.parametrize('kind', ['real', 'fake'])
+class TestClientContract:
+    """Each FakeClientRepository method answers as ClientRepository does."""
+
+    @staticmethod
+    def _repository(kind: str, db_session: Session, store: dict) -> ClientRepository:
+        if kind == 'real':
+            return ClientRepository(db_session)
+        return FakeClientRepository(store)
+
+    @staticmethod
+    def _state(kind: str, db_session: Session, store: dict) -> SystemStateRepository:
+        if kind == 'real':
+            return SystemStateRepository(db_session)
+        return FakeSystemStateRepository(store)
+
+    def test_create_writes_an_inactive_client(self, kind: str, db_session: Session) -> None:
+        repo = self._repository(kind, db_session, {})
+        client = repo.create('ZqvNew')
+        assert client.name == 'ZqvNew'
+        assert client.is_active is False
+        assert client.created_at.utcoffset() is not None
+        assert abs(datetime.now(timezone.utc) - client.created_at) < timedelta(minutes=1)
+        assert repo.get_by_id(client.id).name == 'ZqvNew'
+
+    def test_create_refuses_the_reserved_name(self, kind: str, db_session: Session) -> None:
+        repo = self._repository(kind, db_session, {})
+        with pytest.raises(ValueError) as e:
+            repo.create(' Internal ')
+        assert str(e.value) == (
+            "'internal' is a reserved keyword and cannot be used as a client name."
+        )
+
+    def test_create_refuses_a_duplicate_in_other_case(self, kind: str, db_session: Session) -> None:
+        repo = self._repository(kind, db_session, {})
+        repo.create('ZqvDup')
+        with pytest.raises(ValueError) as e:
+            repo.create('zqvDUP')
+        assert str(e.value) == "A client named 'zqvDUP' already exists."
+
+    def test_get_by_id_of_unknown_id_is_none(self, kind: str, db_session: Session) -> None:
+        repo = self._repository(kind, db_session, {})
+        assert repo.get_by_id(99999999) is None
+
+    def test_get_by_name_ignores_case_and_padding(self, kind: str, db_session: Session) -> None:
+        repo = self._repository(kind, db_session, {})
+        client = repo.create('ZqvName')
+        assert repo.get_by_name('  zqvNAME ').id == client.id
+
+    def test_get_by_name_of_unknown_name_is_none(self, kind: str, db_session: Session) -> None:
+        repo = self._repository(kind, db_session, {})
+        assert repo.get_by_name('ZqvNobody') is None
+
+    def test_find_by_name_fuzzy_matches_substrings_in_name_order(
+        self, kind: str, db_session: Session
+    ) -> None:
+        repo = self._repository(kind, db_session, {})
+        repo.create('ZqvMatchb')
+        repo.create('ZqvMatchC')
+        repo.create('ZqvOther')
+        found = repo.find_by_name_fuzzy(' zqvMATCH ')
+        assert [c.name for c in found] == ['ZqvMatchC', 'ZqvMatchb']
+
+    def test_list_all_returns_every_client_in_name_order(
+        self, kind: str, db_session: Session
+    ) -> None:
+        repo = self._repository(kind, db_session, {})
+        for name in ('Zqvb', 'ZqvC', 'ZqvA'):
+            repo.create(name)
+        names = [c.name for c in repo.list_all() if c.name.startswith('Zqv')]
+        assert names == ['ZqvA', 'ZqvC', 'Zqvb']
+
+    def test_delete_of_unknown_id_is_false(self, kind: str, db_session: Session) -> None:
+        repo = self._repository(kind, db_session, {})
+        assert repo.delete(99999999) is False
+
+    def test_delete_removes_the_client_and_unlinks_its_rows(
+        self, kind: str, db_session: Session
+    ) -> None:
+        store: dict = {}
+        repo = self._repository(kind, db_session, store)
+        client = repo.create('ZqvGone')
+        other = repo.create('ZqvKept')
+        day = date(2099, 1, 1)
+        stamp = datetime(2099, 1, 1, 9, 0)
+        if kind == 'real':
+            meeting = MeetingsRepository(db_session).create(
+                title='ZqvMeeting', start_time=stamp, client_id=client.id,
+            )
+            note = NotesRepository(db_session).create(
+                content='ZqvNote', tags=['internal-only'], created_at=stamp, client_id=client.id,
+            )
+            other_note = NotesRepository(db_session).create(
+                content='ZqvNote', tags=['internal-only'], created_at=stamp, client_id=other.id,
+            )
+            project = Project(name='ZqvProject', client_id=client.id)
+            recipient = ReportRecipient(
+                report_type='ZqvReport', recipient_type='to', client_id=client.id,
+            )
+            db_session.add_all([project, recipient])
+            db_session.flush()
+            report = ReportsRepository(db_session).create(
+                report_type='ZqvReport', report_date=day, content='ZqvReport',
+                ai_provider='claude', generation_time=1.0, client_id=client.id,
+            )
+            entry = TimeEntriesRepository(db_session).create(
+                note_id=note.id, duration_hours=1.0, entry_date=day,
+                entry_time=time(9, 0), client_id=client.id,
+            )
+            linked = {
+                Meeting: meeting.id, Note: note.id, Project: project.id,
+                ReportRecipient: recipient.id, Report: report.id, TimeEntry: entry.id,
+            }
+            other_ids = {Note: other_note.id}
+        else:
+            store['meetings'] = {1: {'id': 1, 'title': 'ZqvMeeting', 'client_id': client.id}}
+            store['notes'] = {
+                1: {
+                    'id': 1, 'content': 'ZqvNote', 'tags': ['internal-only'],
+                    'created_at': stamp, 'meeting_id': None, 'client_id': client.id,
+                },
+                2: {
+                    'id': 2, 'content': 'ZqvNote', 'tags': ['internal-only'],
+                    'created_at': stamp, 'meeting_id': None, 'client_id': other.id,
+                },
+            }
+            for table in ('projects', 'report_recipients', 'reports', 'time_entries'):
+                store[table] = {1: {'id': 1, 'client_id': client.id}}
+            linked = {
+                'meetings': 1, 'notes': 1, 'projects': 1,
+                'report_recipients': 1, 'reports': 1, 'time_entries': 1,
+            }
+            other_ids = {'notes': 2}
+
+        assert repo.delete(client.id) is True
+
+        assert repo.get_by_id(client.id) is None
+        if kind == 'real':
+            db_session.expunge_all()
+            unlinked = [
+                db_session.query(model).filter(model.id == row_id).one().client_id
+                for model, row_id in linked.items()
+            ]
+            kept = [
+                db_session.query(model).filter(model.id == row_id).one().client_id
+                for model, row_id in other_ids.items()
+            ]
+        else:
+            unlinked = [store[table][row_id]['client_id'] for table, row_id in linked.items()]
+            kept = [store[table][row_id]['client_id'] for table, row_id in other_ids.items()]
+        assert unlinked == [None] * 6
+        assert kept == [other.id]
+
+    def test_count_linked_records_counts_by_table_in_order(
+        self, kind: str, db_session: Session
+    ) -> None:
+        store: dict = {}
+        repo = self._repository(kind, db_session, store)
+        client = repo.create('ZqvCount')
+        other = repo.create('ZqvOther')
+        day = date(2099, 1, 1)
+        stamp = datetime(2099, 1, 1, 9, 0)
+        if kind == 'real':
+            notes = NotesRepository(db_session)
+            MeetingsRepository(db_session).create(
+                title='ZqvMeeting', start_time=stamp, client_id=client.id,
+            )
+            note = notes.create(
+                content='ZqvNote', tags=['internal-only'], created_at=stamp, client_id=client.id,
+            )
+            notes.create(
+                content='ZqvNote', tags=['internal-only'], created_at=stamp, client_id=client.id,
+            )
+            notes.create(
+                content='ZqvNote', tags=['internal-only'], created_at=stamp, client_id=other.id,
+            )
+            db_session.add(
+                ReportRecipient(report_type='ZqvReport', recipient_type='to', client_id=client.id)
+            )
+            db_session.flush()
+            ReportsRepository(db_session).create(
+                report_type='ZqvReport', report_date=day, content='ZqvReport',
+                ai_provider='claude', generation_time=1.0, client_id=client.id,
+            )
+            TimeEntriesRepository(db_session).create(
+                note_id=note.id, duration_hours=1.0, entry_date=day,
+                entry_time=time(9, 0), client_id=client.id,
+            )
+        else:
+            store['meetings'] = {1: {'id': 1, 'title': 'ZqvMeeting', 'client_id': client.id}}
+            store['notes'] = {
+                row_id: {
+                    'id': row_id, 'content': 'ZqvNote', 'tags': ['internal-only'],
+                    'created_at': stamp, 'meeting_id': None, 'client_id': owner,
+                }
+                for row_id, owner in ((1, client.id), (2, client.id), (3, other.id))
+            }
+            store['report_recipients'] = {1: {'id': 1, 'client_id': client.id}}
+            store['reports'] = {1: {'id': 1, 'client_id': client.id}}
+            store['time_entries'] = {1: {'id': 1, 'client_id': client.id}}
+
+        counts = repo.count_linked_records(client.id)
+
+        assert list(counts.items()) == [
+            ('meetings', 1), ('notes', 2), ('projects', 0),
+            ('report_recipients', 1), ('reports', 1), ('time_entries', 1),
+        ]
+
+    def test_set_active_flags_one_client_and_stores_its_id(
+        self, kind: str, db_session: Session
+    ) -> None:
+        store: dict = {}
+        repo = self._repository(kind, db_session, store)
+        first = repo.create('ZqvFirst')
+        second = repo.create('ZqvSecond')
+        repo.set_active(first.id)
+
+        active = repo.set_active(second.id)
+
+        assert (active.id, active.is_active) == (second.id, True)
+        assert repo.get_by_id(first.id).is_active is False
+        assert self._state(kind, db_session, store).get('active_client_id') == str(second.id)
+
+    def test_set_active_of_unknown_id_raises(self, kind: str, db_session: Session) -> None:
+        repo = self._repository(kind, db_session, {})
+        with pytest.raises(ValueError) as e:
+            repo.set_active(99999999)
+        assert str(e.value) == "No client with ID 99999999."
+
+    def test_clear_active_unflags_and_deletes_the_stored_id(
+        self, kind: str, db_session: Session
+    ) -> None:
+        store: dict = {}
+        repo = self._repository(kind, db_session, store)
+        client = repo.create('ZqvActive')
+        repo.set_active(client.id)
+
+        repo.clear_active()
+
+        assert repo.get_by_id(client.id).is_active is False
+        assert self._state(kind, db_session, store).get('active_client_id') is None
+
+    def test_get_active_returns_the_client_the_stored_id_names(
+        self, kind: str, db_session: Session
+    ) -> None:
+        repo = self._repository(kind, db_session, {})
+        repo.create('ZqvFirst')
+        second = repo.create('ZqvSecond')
+        repo.set_active(second.id)
+        assert repo.get_active().id == second.id
+
+    def test_get_active_without_a_stored_id_falls_back_to_the_flagged_client(
+        self, kind: str, db_session: Session
+    ) -> None:
+        store: dict = {}
+        repo = self._repository(kind, db_session, store)
+        client = repo.create('ZqvFlagged')
+        repo.set_active(client.id)
+        self._state(kind, db_session, store).delete('active_client_id')
+        assert repo.get_active().id == client.id
+
+    def test_get_active_falls_back_when_the_stored_id_names_no_client(
+        self, kind: str, db_session: Session
+    ) -> None:
+        store: dict = {}
+        repo = self._repository(kind, db_session, store)
+        client = repo.create('ZqvFlagged')
+        repo.set_active(client.id)
+        self._state(kind, db_session, store).set_int('active_client_id', 99999999)
+        assert repo.get_active().id == client.id
+
+    def test_get_active_with_nothing_active_is_none(self, kind: str, db_session: Session) -> None:
+        repo = self._repository(kind, db_session, {})
+        repo.create('ZqvIdle')
+        repo.clear_active()
+        assert repo.get_active() is None
+
+
+@pytest.mark.parametrize('kind', ['real', 'fake'])
+class TestNotesContract:
+    """FakeNotesRepository.get_by_id answers as NotesRepository.get_by_id does."""
+
+    @staticmethod
+    def _repository(kind: str, db_session: Session, store: dict) -> NotesRepository:
+        if kind == 'real':
+            return NotesRepository(db_session)
+        return FakeNotesRepository(store)
+
+    def test_get_by_id_returns_the_note_with_its_meeting(
+        self, kind: str, db_session: Session
+    ) -> None:
+        store: dict = {}
+        stamp = datetime(2099, 1, 2, 23, 30)
+        if kind == 'real':
+            meeting_id = MeetingsRepository(db_session).create(
+                title='ZqvMeeting', start_time=stamp,
+            ).id
+            note_id = NotesRepository(db_session).create(
+                content='ZqvNote', tags=['carry-forward', 'internal-only'],
+                meeting_id=meeting_id, created_at=stamp,
+            ).id
+            db_session.expunge_all()
+        else:
+            meeting_id, note_id = 7, 3
+            store['meetings'] = {7: {'id': 7, 'title': 'ZqvMeeting', 'client_id': None}}
+            store['notes'] = {3: {
+                'id': 3, 'content': 'ZqvNote', 'tags': ['carry-forward', 'internal-only'],
+                'created_at': stamp, 'meeting_id': 7, 'client_id': None,
+            }}
+
+        note = self._repository(kind, db_session, store).get_by_id(note_id)
+
+        assert (note.id, note.content, note.tags) == (
+            note_id, 'ZqvNote', ['carry-forward', 'internal-only'],
+        )
+        assert (note.created_at, note.created_date) == (stamp, date(2099, 1, 2))
+        assert (note.meeting_id, note.client_id) == (meeting_id, None)
+        assert (note.meeting.id, note.meeting.title) == (meeting_id, 'ZqvMeeting')
+
+    def test_get_by_id_of_a_note_without_a_meeting(self, kind: str, db_session: Session) -> None:
+        store: dict = {}
+        stamp = datetime(2099, 1, 2, 9, 0)
+        if kind == 'real':
+            note_id = NotesRepository(db_session).create(
+                content='ZqvNote', tags=['internal-only'], created_at=stamp,
+            ).id
+            db_session.expunge_all()
+        else:
+            note_id = 3
+            store['notes'] = {3: {
+                'id': 3, 'content': 'ZqvNote', 'tags': ['internal-only'],
+                'created_at': stamp, 'meeting_id': None, 'client_id': None,
+            }}
+
+        note = self._repository(kind, db_session, store).get_by_id(note_id)
+
+        assert (note.meeting_id, note.meeting) == (None, None)
+
+    def test_get_by_id_of_unknown_id_is_none(self, kind: str, db_session: Session) -> None:
+        assert self._repository(kind, db_session, {}).get_by_id(99999999) is None
+
+
+@pytest.mark.parametrize('kind', ['real', 'fake'])
+class TestTaskStatusContract:
+    """Each FakeTaskStatusRepository method answers as TaskStatusRepository does."""
+
+    @staticmethod
+    def _repository(kind: str, db_session: Session, store: dict) -> TaskStatusRepository:
+        if kind == 'real':
+            return TaskStatusRepository(db_session)
+        return FakeTaskStatusRepository(store)
+
+    def test_get_by_note_id_returns_the_task_with_its_note(
+        self, kind: str, db_session: Session
+    ) -> None:
+        store: dict = {}
+        stamp = datetime(2099, 1, 2, 9, 0)
+        if kind == 'real':
+            meeting_id = MeetingsRepository(db_session).create(
+                title='ZqvMeeting', start_time=stamp,
+            ).id
+            note_id = NotesRepository(db_session).create(
+                content='ZqvTask', tags=['carry-forward'], meeting_id=meeting_id, created_at=stamp,
+            ).id
+            TaskStatusRepository(db_session).create_active(note_id)
+            db_session.expunge_all()
+        else:
+            meeting_id, note_id = 7, 3
+            store['meetings'] = {7: {'id': 7, 'title': 'ZqvMeeting', 'client_id': None}}
+            store['notes'] = {3: {
+                'id': 3, 'content': 'ZqvTask', 'tags': ['carry-forward'],
+                'created_at': stamp, 'meeting_id': 7, 'client_id': None,
+            }}
+            store['task_status'] = {1: {
+                'id': 1, 'note_id': 3, 'status': 'active', 'completed_at': None,
+                'forwarding_note_id': None, 'created_at': datetime.now(),
+                'updated_at': datetime.now(),
+            }}
+
+        task = self._repository(kind, db_session, store).get_by_note_id(note_id)
+
+        assert (task.note_id, task.status, task.completed_at, task.forwarding_note_id) == (
+            note_id, 'active', None, None,
+        )
+        assert task.created_at.tzinfo is None
+        assert (task.note.content, task.note.created_date) == ('ZqvTask', date(2099, 1, 2))
+        assert (task.note.meeting.id, task.note.meeting.title) == (meeting_id, 'ZqvMeeting')
+
+    def test_get_by_note_id_of_a_note_without_a_task_is_none(
+        self, kind: str, db_session: Session
+    ) -> None:
+        store: dict = {}
+        if kind == 'real':
+            note_id = NotesRepository(db_session).create(
+                content='ZqvNote', tags=['internal-only'], created_at=datetime(2099, 1, 2, 9, 0),
+            ).id
+        else:
+            note_id = 3
+            store['notes'] = {3: {
+                'id': 3, 'content': 'ZqvNote', 'tags': ['internal-only'],
+                'created_at': datetime(2099, 1, 2, 9, 0), 'meeting_id': None, 'client_id': None,
+            }}
+
+        assert self._repository(kind, db_session, store).get_by_note_id(note_id) is None
+
+    @pytest.mark.parametrize('status, expected', [
+        ('active', ['ZqvActive']),
+        ('completed', ['ZqvCompleted']),
+        ('dismissed', ['ZqvDismissed']),
+        ('all', ['ZqvDismissed', 'ZqvCompleted', 'ZqvActive']),
+        (None, ['ZqvDismissed', 'ZqvCompleted', 'ZqvActive']),
+    ])
+    def test_get_filtered_filters_by_status(
+        self, kind: str, db_session: Session, status: str, expected: list
+    ) -> None:
+        store: dict = {}
+        seeds = [('ZqvActive', 'active', 1), ('ZqvCompleted', 'completed', 2),
+                 ('ZqvDismissed', 'dismissed', 3)]
+        if kind == 'real':
+            repo = TaskStatusRepository(db_session)
+            for content, task_status, hour in seeds:
+                note_id = NotesRepository(db_session).create(
+                    content=content, tags=['carry-forward'],
+                    created_at=datetime(2099, 1, 2, hour, 0),
+                ).id
+                repo.create_active(note_id)
+                if task_status == 'completed':
+                    repo.set_completed(note_id)
+                elif task_status == 'dismissed':
+                    repo.set_dismissed(note_id)
+        else:
+            store['notes'] = {
+                row_id: {
+                    'id': row_id, 'content': content, 'tags': ['carry-forward'],
+                    'created_at': datetime(2099, 1, 2, row_id, 0), 'meeting_id': None,
+                    'client_id': None,
+                }
+                for content, _, row_id in seeds
+            }
+            store['task_status'] = {
+                row_id: {
+                    'id': row_id, 'note_id': row_id, 'status': task_status,
+                    'completed_at': None, 'forwarding_note_id': None,
+                    'created_at': datetime.now(), 'updated_at': datetime.now(),
+                }
+                for _, task_status, row_id in seeds
+            }
+
+        tasks = self._repository(kind, db_session, store).get_filtered(status=status, search='zqv')
+
+        assert [task.note.content for task in tasks] == expected
+
+    @pytest.mark.parametrize('status, expected', [
+        ('active', 1), ('completed', 1), ('dismissed', 1), ('all', 3), (None, 3),
+    ])
+    def test_count_filtered_filters_by_status(
+        self, kind: str, db_session: Session, status: str, expected: int
+    ) -> None:
+        store: dict = {}
+        seeds = [('ZqvActive', 'active', 1), ('ZqvCompleted', 'completed', 2),
+                 ('ZqvDismissed', 'dismissed', 3)]
+        if kind == 'real':
+            repo = TaskStatusRepository(db_session)
+            for content, task_status, hour in seeds:
+                note_id = NotesRepository(db_session).create(
+                    content=content, tags=['carry-forward'],
+                    created_at=datetime(2099, 1, 2, hour, 0),
+                ).id
+                repo.create_active(note_id)
+                if task_status == 'completed':
+                    repo.set_completed(note_id)
+                elif task_status == 'dismissed':
+                    repo.set_dismissed(note_id)
+        else:
+            store['notes'] = {
+                row_id: {
+                    'id': row_id, 'content': content, 'tags': ['carry-forward'],
+                    'created_at': datetime(2099, 1, 2, row_id, 0), 'meeting_id': None,
+                    'client_id': None,
+                }
+                for content, _, row_id in seeds
+            }
+            store['task_status'] = {
+                row_id: {
+                    'id': row_id, 'note_id': row_id, 'status': task_status,
+                    'completed_at': None, 'forwarding_note_id': None,
+                    'created_at': datetime.now(), 'updated_at': datetime.now(),
+                }
+                for _, task_status, row_id in seeds
+            }
+
+        count = self._repository(kind, db_session, store).count_filtered(
+            status=status, search='zqv',
+        )
+
+        assert count == expected
+
+    def test_search_and_date_filter_narrow_both_queries(
+        self, kind: str, db_session: Session
+    ) -> None:
+        store: dict = {}
+        seeds = [
+            (1, 'Zqv Alpha task', datetime(2099, 1, 3, 9, 0)),
+            (2, 'ZQV beta task', datetime(2099, 1, 3, 10, 0)),
+            (3, 'zqv gamma task', datetime(2099, 1, 4, 9, 0)),
+            (4, 'Unrelated task', datetime(2099, 1, 3, 11, 0)),
+        ]
+        if kind == 'real':
+            repo = TaskStatusRepository(db_session)
+            for _, content, stamp in seeds:
+                note_id = NotesRepository(db_session).create(
+                    content=content, tags=['carry-forward'], created_at=stamp,
+                ).id
+                repo.create_active(note_id)
+        else:
+            store['notes'] = {
+                row_id: {
+                    'id': row_id, 'content': content, 'tags': ['carry-forward'],
+                    'created_at': stamp, 'meeting_id': None, 'client_id': None,
+                }
+                for row_id, content, stamp in seeds
+            }
+            store['task_status'] = {
+                row_id: {
+                    'id': row_id, 'note_id': row_id, 'status': 'active',
+                    'completed_at': None, 'forwarding_note_id': None,
+                    'created_at': datetime.now(), 'updated_at': datetime.now(),
+                }
+                for row_id, _, _ in seeds
+            }
+        repo = self._repository(kind, db_session, store)
+
+        tasks = repo.get_filtered(search='zQv', date_filter=date(2099, 1, 3))
+        count = repo.count_filtered(search='zQv', date_filter=date(2099, 1, 3))
+
+        assert [task.note.content for task in tasks] == ['ZQV beta task', 'Zqv Alpha task']
+        assert count == 2
+
+    @pytest.mark.parametrize('limit, expected', [
+        (2, ['ZqvThird', 'ZqvSecond']),
+        (0, ['ZqvThird', 'ZqvSecond', 'ZqvFirst']),
+    ])
+    def test_get_filtered_orders_newest_first_and_applies_the_limit(
+        self, kind: str, db_session: Session, limit: int, expected: list
+    ) -> None:
+        store: dict = {}
+        seeds = [(1, 'ZqvSecond', datetime(2099, 1, 2, 9, 0)),
+                 (2, 'ZqvFirst', datetime(2099, 1, 1, 9, 0)),
+                 (3, 'ZqvThird', datetime(2099, 1, 3, 9, 0))]
+        if kind == 'real':
+            repo = TaskStatusRepository(db_session)
+            for _, content, stamp in seeds:
+                note_id = NotesRepository(db_session).create(
+                    content=content, tags=['carry-forward'], created_at=stamp,
+                ).id
+                repo.create_active(note_id)
+        else:
+            store['notes'] = {
+                row_id: {
+                    'id': row_id, 'content': content, 'tags': ['carry-forward'],
+                    'created_at': stamp, 'meeting_id': None, 'client_id': None,
+                }
+                for row_id, content, stamp in seeds
+            }
+            store['task_status'] = {
+                row_id: {
+                    'id': row_id, 'note_id': row_id, 'status': 'active',
+                    'completed_at': None, 'forwarding_note_id': None,
+                    'created_at': datetime.now(), 'updated_at': datetime.now(),
+                }
+                for row_id, _, _ in seeds
+            }
+
+        tasks = self._repository(kind, db_session, store).get_filtered(search='zqv', limit=limit)
+
+        assert [task.note.content for task in tasks] == expected
+
+    def test_a_task_whose_note_is_gone_is_neither_listed_nor_counted(
+        self, kind: str, db_session: Session
+    ) -> None:
+        store: dict = {}
+        if kind == 'real':
+            notes = NotesRepository(db_session)
+            repo = TaskStatusRepository(db_session)
+            kept_id = notes.create(
+                content='ZqvKept', tags=['carry-forward'], created_at=datetime(2099, 1, 2, 9, 0),
+            ).id
+            gone_id = notes.create(
+                content='ZqvGone', tags=['carry-forward'], created_at=datetime(2099, 1, 2, 10, 0),
+            ).id
+            repo.create_active(kept_id)
+            repo.create_active(gone_id)
+            notes.delete(gone_id)
+        else:
+            store['notes'] = {1: {
+                'id': 1, 'content': 'ZqvKept', 'tags': ['carry-forward'],
+                'created_at': datetime(2099, 1, 2, 9, 0), 'meeting_id': None, 'client_id': None,
+            }}
+            store['task_status'] = {
+                row_id: {
+                    'id': row_id, 'note_id': row_id, 'status': 'active',
+                    'completed_at': None, 'forwarding_note_id': None,
+                    'created_at': datetime.now(), 'updated_at': datetime.now(),
+                }
+                for row_id in (1, 2)
+            }
+        repo = self._repository(kind, db_session, store)
+
+        tasks = repo.get_filtered(search='zqv')
+
+        assert [task.note.content for task in tasks] == ['ZqvKept']
+        assert repo.count_filtered(search='zqv') == 1
+
+    @pytest.mark.parametrize('method, status', [
+        ('set_completed', 'completed'),
+        ('set_dismissed', 'dismissed'),
+    ])
+    def test_status_change_sets_status_and_times(
+        self, kind: str, db_session: Session, method: str, status: str
+    ) -> None:
+        store: dict = {}
+        if kind == 'real':
+            note_id = NotesRepository(db_session).create(
+                content='ZqvTask', tags=['carry-forward'], created_at=datetime(2099, 1, 2, 9, 0),
+            ).id
+            TaskStatusRepository(db_session).create_active(note_id)
+        else:
+            note_id = 3
+            store['notes'] = {3: {
+                'id': 3, 'content': 'ZqvTask', 'tags': ['carry-forward'],
+                'created_at': datetime(2099, 1, 2, 9, 0), 'meeting_id': None, 'client_id': None,
+            }}
+            store['task_status'] = {1: {
+                'id': 1, 'note_id': 3, 'status': 'active', 'completed_at': None,
+                'forwarding_note_id': None, 'created_at': datetime(2099, 1, 2, 9, 0),
+                'updated_at': datetime(2099, 1, 2, 9, 0),
+            }}
+        repo = self._repository(kind, db_session, store)
+
+        task = getattr(repo, method)(note_id)
+
+        assert (task.note_id, task.status) == (note_id, status)
+        assert task.completed_at == task.updated_at
+        assert task.completed_at.tzinfo is None
+        assert abs(datetime.now() - task.completed_at) < timedelta(minutes=1)
+        assert repo.get_by_note_id(note_id).status == status
+
+    @pytest.mark.parametrize('method', ['set_completed', 'set_dismissed'])
+    def test_status_change_of_a_note_without_a_task_raises(
+        self, kind: str, db_session: Session, method: str
+    ) -> None:
+        repo = self._repository(kind, db_session, {})
+        with pytest.raises(ValueError) as e:
+            getattr(repo, method)(99999999)
+        assert str(e.value) == "No task_status record exists for note 99999999."
