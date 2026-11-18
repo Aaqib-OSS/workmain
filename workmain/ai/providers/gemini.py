@@ -52,6 +52,7 @@ class GeminiProvider(BaseProvider):
 
     provider_type = ProviderType.GEMINI
     REQUIRED_POLICY_KEYS = {'thinking_config', 'automatic_function_calling'}
+    REQUIRED_CONFIG_KEYS = {'cost_per_1k_prompt_tokens', 'cost_per_1k_completion_tokens'}
 
     def __init__(self, config: dict, policy: dict = None):
         """
@@ -69,8 +70,8 @@ class GeminiProvider(BaseProvider):
         self.model = config.get('model')
         self._retry_attempts = config.get('retry_attempts', 3)
         self._retry_delay = config.get('retry_delay_seconds', 1.0)
-        self._cost_per_1k_prompt = config.get('cost_per_1k_prompt_tokens', 0.00015)
-        self._cost_per_1k_completion = config.get('cost_per_1k_completion_tokens', 0.0006)
+        self._cost_per_1k_prompt = config['cost_per_1k_prompt_tokens']
+        self._cost_per_1k_completion = config['cost_per_1k_completion_tokens']
 
         api_key_env = config.get('api_key_env', 'GOOGLE_API_KEY')
         self._api_key = os.getenv(api_key_env)
