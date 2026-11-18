@@ -8,6 +8,13 @@ commits by keeping the store as it is, and rolls back by restoring the store,
 in place, to a deep copy taken on entry. It refuses re-entry, and a non-record
 fake inside another open fake, with the real unit of work's messages, so a
 service test refuses the nesting production refuses.
+
+Each fake repository takes the store and keeps its rows under its table's
+name. FakeUnitOfWork.REPOSITORIES maps the attribute names
+UnitOfWork.REPOSITORIES uses to the fake classes, and
+tests/test_fake_unit_of_work.py checks every fake method's signature against
+the real repository's and runs each fake's contract tests against both the
+fake and the real repository on db_session.
 """
 
 from __future__ import annotations

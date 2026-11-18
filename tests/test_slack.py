@@ -24,6 +24,7 @@ from unittest.mock import ANY, MagicMock, patch
 import pytest
 from click.testing import CliRunner
 from dotenv import load_dotenv
+from sqlalchemy.orm import Session
 
 load_dotenv()
 
@@ -33,7 +34,7 @@ from workmain.cli.commands.slack import (
     slack,
     slack_status,
 )
-from workmain.database.connection import DatabaseConnection, get_db
+from workmain.database.connection import DatabaseConnection
 from workmain.database.models import Report
 from workmain.database.repositories.reports_repo import ReportsRepository
 from workmain.integrations.slack.auth import (
@@ -582,7 +583,7 @@ class TestSlackPostWeeklySharedRunner(unittest.TestCase):
 
 class TestSlackPostRecord:
 
-    def test_t19_record_survives_a_later_failed_scope(self, db_session):
+    def test_t19_record_is_written_in_a_record_scope(self, db_session: Session) -> None:
         report = Report(
             report_type="weekly_client", report_date=date(2099, 1, 3),
             content="Sentinel record content",
@@ -597,12 +598,6 @@ class TestSlackPostRecord:
         ) as spy:
             recorded = _record_slack_post(report_id, "test-ts-record", "#test-channel", "Test WS")
         spy.assert_called_once()
-
-        with pytest.raises(RuntimeError):
-            with get_db().session_scope() as session:
-                session.get(Report, report_id).content = "changed by a failing scope"
-                session.flush()
-                raise RuntimeError("later failure")
 
         assert recorded is True
         db_session.expire_all()

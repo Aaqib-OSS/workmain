@@ -1,5 +1,6 @@
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--strict-markers -rs"
 filterwarnings = ["error::pytest.PytestReturnNotNoneWarning"]
 
 [tool.ruff]
@@ -25,6 +26,5 @@ known-first-party = ["workmain"]
 convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
-# A test is named for what it checks; its name is its description (docs/standards/6-testing.md §6.2).
 "tests/**" = ["D101", "D102", "D103"]
 "automation/*_test.py" = ["D101", "D102", "D103"]

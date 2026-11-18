@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.58.7] - 2026-11-17
+
+The testing standard listed a test form for each case without the rule each one followed from, so two of its rules contradicted each other and each new case added another exception. §6.1 banned `get_db()` in tests, while its own record-test bullet needed it to fail a later scope. §6 is rewritten to state its rules once each. The fixtures' mechanics move into the fixtures' docstrings, which `pytest --fixtures -v` shows (#285).
+
+### Changed
+
+- `docs/standards/6-testing.md`: the opening, §6.1 and §6.2 are rewritten, in 660 words where they used 1,872. §6.1 states the rule the isolation follows, and drops the ban on `get_db()`, which no longer protected anything. §6.2 states where each kind of logic is tested, with one end-to-end test per path through a command. Its rules are named, not numbered, and include "A test's result depends only on what it sets up, and its changes stay inside `workmain_test` and its `tmp_path`".
+- An outside-action record is tested by a spy on `record_scope()` and a read through `db_session`. Failing a later scope can't change the outcome under the fixture, so the six record tests in `tests/test_ai_costs.py`, `tests/test_clockify_service.py`, `tests/test_gdrive.py` and `tests/test_slack.py` drop it, along with `_fail_a_later_scope`, and are renamed for what they check.
+- `tests/conftest.py`: the docstrings of `_test_database`, `_isolated_database` and `db_session` describe how each works.
+- `tests/mocks/fake_unit_of_work.py`: the module docstring describes the fake repositories, `REPOSITORIES` and the parity tests.
+- The defect-fix rule moves to `.claude/skills/session-start/references/anvil.md` § Working rules, and `docs/dev/results/_TEMPLATE_RESULTS.md` cites it there.
+- The rule that a test uses inputs every open issue leaves valid moves to `docs/standards/1-workflow.md` §1.3.
+- `docs/standards/4-database.md` §4.3 cites §6.2 for the record test.
+- `pyproject.toml`: pytest runs with `--strict-markers -rs`. The `ruff` comment that cited §6.2 is removed.
+
+### Added
+
+- `tests/conftest.py`: the `fake_uow` fixture, a `FakeUnitOfWork` over an empty store.
+
+Suite: 1707 passed, 0 failed, 0 skipped (baseline 1707 passed, 0 failed, 0 skipped).
+
 ## [1.58.6] - 2026-11-16
 
 `workmain init`, `workmain status` and `workmain today` printed fixed text that no longer described the system: a placeholder for a setup wizard, a phase table frozen at Phase 11, and a fixed list of commands. They are removed, and running one gives Click's `No such command` error with exit 2. `init` is replaced by the setup wizard in #42 and `status` by #256; `today` is retired. `README.md`'s Quick Start named four commands that do not exist and now shows ones that do (#206).

@@ -10,6 +10,7 @@ from datetime import date, datetime, timezone
 import click
 import pytest
 from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from workmain.ai.provider_manager import ProviderManager
 from workmain.database.models import AiCost
@@ -624,12 +625,11 @@ class TestAiCostService:
         db_session.commit()
         assert db_session.get(Report, report.id) is not None
 
-    def test_record_reply_survives_a_later_failed_scope(self, db_session):
-        """T8: the cost row is committed in its own scope, so a scope that
-        writes and raises afterwards does not take it."""
+    def test_record_reply_writes_its_row_in_a_record_scope(self, db_session: Session) -> None:
+        """T8: the cost row is written in a record scope, and is read back through db_session."""
         from unittest.mock import patch
 
-        from workmain.database.connection import DatabaseConnection, get_db
+        from workmain.database.connection import DatabaseConnection
         from workmain.services import ai_cost_service
 
         with patch.object(
@@ -641,11 +641,6 @@ class TestAiCostService:
             )
         assert record_id is not None
         spy.assert_called_once()
-
-        with pytest.raises(RuntimeError):
-            with get_db().session_scope() as session:
-                _insert_cost(session)
-                raise RuntimeError("later failure")
 
         assert db_session.get(AiCost, record_id) is not None
 
