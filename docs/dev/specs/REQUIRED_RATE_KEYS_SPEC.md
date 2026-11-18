@@ -26,6 +26,7 @@
 | 20261118 | Caliper | 3, spec defect, non-blocking: it is unclear whether DR7 covers existing tests. DR7 says "A test of pricing uses rates unlike any built-in rate DR5 removes". §2 lists existing pricing tests that use those exact rates: `_offline_claude_config` (0.003 / 0.015), `_offline_gemini_config` (0.00015 / 0.0006), and the expectations at `tests/test_ai_providers_offline.py:664` and `:685`. Neither §1 nor Step 1 says to change them, and DR6 says only the 18 listed tests' fixtures change. The implementer has to guess whether DR7 means changing those two shared fixtures, which many other offline tests use, or applies only to new test (vi). | **Accepted.** DR7 covers only test (vi). The existing fixtures and expectations are not changed: once DR5 removes the built-in rates, the values they use can come only from their own config. §2's fixture lines are corrected to 369-379. |
 | 20261118 | Caliper | Pass at 1525d15, full: 36 items checked, 0 blocking, 3 non-blocking. | n/a |
 | 20261118 | Caliper | Pass at fe88949, changes since 1525d15: 14 items checked, 0 blocking, 0 non-blocking. | n/a |
+| 20261118 | Caliper (post-implementation) | No findings. | n/a |
 
 ---
 
