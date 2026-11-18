@@ -10,7 +10,7 @@
 
 ## 1. Summary
 
-Complete. Every public function of `clients_service` and `tasks_service` takes a `UnitOfWork` and enters it once, and every `clients` and `tasks` command builds one per use-case call. Service tests run on `fake_uow` with no database. The three new fake repositories are checked against the real ones by contract tests, and each command path runs end to end through `CliRunner` with the recording renderer. `docs/standards/5-cli.md` §5.6 states the unit-of-work form. Three criteria (AC2.1, AC3.2, AC7.1) wait on Ray's reading.
+Complete. Every public function of `clients_service` and `tasks_service` takes a `UnitOfWork` and enters it once, and every `clients` and `tasks` command builds one per use-case call. Service tests run on `fake_uow` with no database. The three new fake repositories are checked against the real ones by contract tests, and each command path runs end to end through `CliRunner` with the recording renderer. `docs/standards/5-cli.md` §5.6 states the unit-of-work form.
 
 ## 2. What shipped, by step
 
@@ -30,13 +30,13 @@ All checks run at `ddc565b`.
 | AC | Status | Evidence |
 | --- | --- | --- |
 | AC1.1 | Met | `python3 automation/session_param_check.py workmain/services/clients_service.py workmain/services/tasks_service.py` printed nothing and exited 0. |
-| AC2.1 | Not met | Awaiting Ray. `pytest tests/test_clients_service.py tests/test_tasks_service.py`: 47 passed, 0 failed, 0 skipped. `grep -n db_session tests/test_clients_service.py tests/test_tasks_service.py` returned nothing (exit 1). For Ray's reading: § 4, Functions and their service tests. |
+| AC2.1 | Met | Ray, 20261117: reviewed § 4, Functions and their service tests. `pytest tests/test_clients_service.py tests/test_tasks_service.py`: 47 passed, 0 failed, 0 skipped. `grep -n db_session tests/test_clients_service.py tests/test_tasks_service.py` returned nothing (exit 1). |
 | AC3.1 | Met | `pytest tests/test_fake_unit_of_work.py::TestFakeParity`: 2 passed, 0 failed, 0 skipped. `FakeUnitOfWork.REPOSITORIES` holds `clients`, `notes`, `system_state`, `task_status`. The signature test compares `inspect.signature(..., eval_str=True)` on both sides (`tests/test_fake_unit_of_work.py:199-200`). |
-| AC3.2 | Not met | Awaiting Ray. `pytest tests/test_fake_unit_of_work.py::TestClientContract tests/test_fake_unit_of_work.py::TestNotesContract tests/test_fake_unit_of_work.py::TestTaskStatusContract`: 82 passed, 0 failed, 0 skipped, 41 tests each run as `real` and `fake`. For Ray's reading: § 4, Faked methods and their contract tests. |
+| AC3.2 | Met | Ray, 20261117: reviewed the § 4, Faked methods and their contract tests. `pytest tests/test_fake_unit_of_work.py::TestClientContract tests/test_fake_unit_of_work.py::TestNotesContract tests/test_fake_unit_of_work.py::TestTaskStatusContract`: 82 passed, 0 failed, 0 skipped, 41 tests each run as `real` and `fake`. |
 | AC4.1 | Met | `pytest tests/test_clients_commands.py tests/test_tasks_commands.py`: 20 passed, 0 failed, 0 skipped: the 19 tests DR15 lists and `test_c1_group_is_a_workmain_group`, kept. `grep -n -e get_db -e session_scope workmain/cli/commands/clients.py workmain/cli/commands/tasks.py` returned nothing (exit 1). `grep -n patch` hits only `tests/test_clients_commands.py:9`, the `unittest.mock` import, and `:176`, the abort test's patch of `click.confirm`. |
 | AC5.1 | Met | `python3 automation/architecture_check.py` printed `New findings: 0`. |
 | AC6.1 | Met | `pytest tests/test_output.py::TestRecordingRenderer`: 4 passed, 0 failed, 0 skipped. `test_is_a_renderer_so_pass_renderer_keeps_it` asserts `isinstance(recording_renderer, Renderer)`. `test_every_public_method_records_its_call_and_prints_nothing` calls each public `Renderer` method found by `inspect` and asserts the call is in `mock_calls` and `capsys` captured nothing. |
-| AC7.1 | Not met | Awaiting Ray: a reading of `docs/standards/5-cli.md` §5.6's converted-command bullet and its preview and outside-action sub-bullets. |
+| AC7.1 | Met | Ray, 20261117: Reviewed `docs/standards/5-cli.md` §5.6's converted-command bullet and its preview and outside-action sub-bullets. |
 | AC8.1 | Met | `pytest`: 1787 passed, 0 failed, 0 skipped. |
 | AC8.2 | Met | `pytest tests/test_task_lifecycle.py::TestQueries`: 8 passed, 0 failed, 0 skipped, including `test_get_filtered_statement_count_does_not_grow_with_rows`. With `contains_eager(TaskStatus.note)` removed from `get_filtered` it failed. |
 
