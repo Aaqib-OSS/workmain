@@ -82,7 +82,7 @@ The question is real. Today the summary, the condensed note and the linked entry
 
 | Q | Question | Answer |
 | --- | --- | --- |
-| Q1 | Does the condenser stop writing, so that one use case writes the condensed summary, the condensed note and the linked entry in a single unit of work (§4 Q1, the only valid option)? | |
+| Q1 | Does the condenser stop writing, so that one use case writes the condensed summary, the condensed note and the linked entry in a single unit of work (§4 Q1, the only valid option)? | Ray, 20261118: yes. `condense_meeting` stops writing and returns the summary, and one use case writes `condensed_summary` and `condensed_at`, the condensed note and the linked entry in a single unit of work, through `MeetingsRepository`. |
 
 ## 6. Disposition
 
