@@ -50,6 +50,8 @@ Not read: the bodies of the other `ActionExecutor` handlers beyond what reposito
 | F18 | The condense paths reach `ProviderManager.generate`. A test reaches them through the offline provider: `offline_provider_env` patches the vendor clients, not anything between the command and the use case. Existing condense tests patch `generate` itself. | `tests/conftest.py:255-265`; `tests/test_meetings_condense.py:93`, `tests/test_notes_log.py:157` | Low |
 | F19 | #141 changes the same `create_note` call sites, to pass `created_at` for a meeting's note. The issue body states that whichever lands second re-reads the other's sites. #141 is not linked as a dependency either way. | issue #141 body; `gh api …/issues/278/dependencies/blocking` | Low |
 | F20 | Baseline: `python3 automation/architecture_check.py` prints `PASS`. `pytest --collect-only -q` collects 1787 tests. | Run 20261117 on `df06370` | Low |
+| F21 | No application-layer module owns a write to the `meetings` table. `docs/ARCHITECTURE.md` §2 gives `notes_service` every note write and `time_entry_service` every time-entry write, and lists no meetings service. §1 says "A service owns one domain". Today the condensed summary is written by a capability (F8). Moving it into a use case (Q1) needs an owner for it in the application layer. | `docs/ARCHITECTURE.md` §1 Application row, §2 Application | High |
+| F22 | #208 and #209 each say that condensing a meeting and linking its entry "becomes one service", made by whichever of the two lands first. Once Q1's use case exists, that is this issue's work, and neither body says so. | issue #208 § Also in scope; issue #209 body line 44 | Medium |
 
 ### Settled by rule, recorded here so the spec can cite it
 
@@ -78,11 +80,27 @@ The question is real. Today the summary, the condensed note and the linked entry
   - **It can be tested in the standard form.** "The summary, note and entry commit together" becomes a property of one use case, tested at the service on `fake_uow`, with the repository method under a contract class (`docs/standards/6-testing.md` §6.2). With the write in the command, no test owns that property.
 - **What it costs:** a change to `workmain/ai/note_condenser.py`. No test asserts that the condenser writes the summary. The one assertion on it, `tests/test_note_condenser.py:338`, checks that a refused condensation leaves it unwritten, which still holds. One repository change, and its fake method with contract tests. The command's scope holds no write across the provider call, as today.
 
+### Q2 — Which module owns the condensation use case
+
+The question is real (F21). The use case writes a meeting's summary, a note and a time entry. The note and entry go through their owners' operations, `create_note` and `link_condensed_note`, so the use case's own write is the meeting's summary. That summary is a fact about the meeting.
+
+#### The only valid option — a meetings service
+
+- **Approach:** a new `workmain/services/meetings_service.py` holds `record_condensation`. It writes the summary through `uow.meetings`, and calls `notes_service.create_note` and `time_entry_service.link_condensed_note` on the same unit of work, the way `clockify_service.apply_pull` calls those operations for the pull. `docs/ARCHITECTURE.md` §2 Application gains a line for it: `workmain/services/meetings_service.py` — meeting records, and a meeting's condensation. #208 extends the module when it converts the `meetings` commands.
+- **Why it is the only one:** placing the use case in `time_entry_service`, beside `link_condensed_note`, would make the time-entry service decide a fact about meetings, and a service owns one domain (`docs/ARCHITECTURE.md` §1). `notes_service` fails for the same reason. Leaving the write in the condenser is what Q1 rejected.
+- **What it costs:** a new module and a line in the map, which is changed only by Ray's decision (`docs/ARCHITECTURE.md` opening paragraphs). One use case in the module until #208.
+
+### Q3 — #208's and #209's bodies
+
+The question is real (F22). Read as written, the two bodies have #208's or #209's recon plan a condensation service this issue already delivers. The options are to edit both bodies now, saying the condense-and-link is `meetings_service.record_condensation`, delivered by #278, which each calls; or at this issue's close-out. Recommendation: now. Both issues are blocked by #278, so neither is in progress, and an edit made now means no reader meets the stale text while #278 is open.
+
 ## 5. Open questions
 
 | Q | Question | Answer |
 | --- | --- | --- |
 | Q1 | Does the condenser stop writing, so that one use case writes the condensed summary, the condensed note and the linked entry in a single unit of work (§4 Q1, the only valid option)? | Ray, 20261118: yes. `condense_meeting` stops writing and returns the summary, and one use case writes `condensed_summary` and `condensed_at`, the condensed note and the linked entry in a single unit of work, through `MeetingsRepository`. |
+| Q2 | Does `record_condensation` live in a new `workmain/services/meetings_service.py`, with a line for it added to `docs/ARCHITECTURE.md` §2 Application (§4 Q2, the only valid option)? | |
+| Q3 | Are #208's and #209's bodies edited now to say the condense-and-link is delivered by #278 and each calls it, or at #278's close-out? | |
 
 ## 6. Disposition
 
