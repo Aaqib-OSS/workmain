@@ -18,7 +18,7 @@
    - **Claim about existing behaviour** — a §2 row, or a statement of what code does: the evidence it cites is read and shows the claim.
    - **Test node** — `pytest --collect-only -q <node>` collects it.
    - **Issue** — `gh issue view <N>` returns it, in the state the spec gives where it gives one.
-   - **Command** — run only if it only reads, such as `grep`, `git grep`, `git show` or `gh issue view`, and resolved when it exits 0, or 1 from `grep` or `git grep`, which means no match. Any other exit status is a discrepancy. Its output is compared with the spec only where the spec says what it prints before the work; output a criterion states for after the work is not checked at open. Any other command is not run: each path, symbol and test node it names is resolved under this list.
+   - **Command** — run only if it only reads, such as `grep`, `git grep`, `git show` or `gh issue view`, and resolved when it exits 0, 1 from `grep` or `git grep`, which means no match, or the exit status the spec states it gives before the work. Any other exit status is a discrepancy. Its output is compared with the spec only where the spec says what it prints before the work; output a criterion states for after the work is not checked at open. Any other command is not run: each path, symbol and test node it names is resolved under this list.
 
    A path, symbol or test node that a step creates resolves against that step's deliverable instead, and is a discrepancy if it already exists.
 6. `docs/standards/README.md`, `docs/standards/1-workflow.md`, `docs/standards/2-git.md` and `docs/standards/6-testing.md`, end to end.
