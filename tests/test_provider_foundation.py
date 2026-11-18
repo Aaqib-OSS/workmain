@@ -166,6 +166,11 @@ def test_ollama_provider_check_availability_returns_unavailable():
 
 _CLAUDE_ENV = {'ANTHROPIC_API_KEY': 'sk-ant-test1234567890123456789012345678901234567'}
 _GEMINI_ENV = {'GOOGLE_API_KEY': 'A' * 39}
+_RATE_KEYS = ('cost_per_1k_prompt_tokens', 'cost_per_1k_completion_tokens')
+
+# Invented rates, unlike any rate a provider once wrote into its code.
+_TEST_RATES = {'cost_per_1k_prompt_tokens': 0.0021, 'cost_per_1k_completion_tokens': 0.0137}
+
 _VALID_CLAUDE_POLICY = {'thinking': {'type': 'disabled'}, 'sampling': {}}
 _VALID_GEMINI_POLICY = {
     'thinking_config': {'thinking_level': 'high'},
@@ -179,6 +184,7 @@ def test_claude_provider_reads_model_from_config():
     config = {
         'model': 'test-model',
         'api_key_env': 'ANTHROPIC_API_KEY',
+        **_TEST_RATES,
     }
     with patch('anthropic.Anthropic'):
         p = ClaudeProvider(config, dict(_VALID_CLAUDE_POLICY))
@@ -188,7 +194,7 @@ def test_claude_provider_reads_model_from_config():
 @patch.dict(os.environ, _CLAUDE_ENV)
 def test_claude_provider_requires_model_in_config():
     """ClaudeProvider with no model raises ConfigurationError — no hardcoded default (DR5)."""
-    config = {'api_key_env': 'ANTHROPIC_API_KEY'}
+    config = {'api_key_env': 'ANTHROPIC_API_KEY', **_TEST_RATES}
     with patch('anthropic.Anthropic'):
         with pytest.raises(ConfigurationError, match="model name is required"):
             ClaudeProvider(config, dict(_VALID_CLAUDE_POLICY))
@@ -200,6 +206,7 @@ def test_gemini_provider_reads_model_from_config():
     config = {
         'model': 'test-model',
         'api_key_env': 'GOOGLE_API_KEY',
+        **_TEST_RATES,
     }
     with patch('google.genai.Client'):
         p = GeminiProvider(config, dict(_VALID_GEMINI_POLICY))
@@ -209,7 +216,7 @@ def test_gemini_provider_reads_model_from_config():
 @patch.dict(os.environ, _GEMINI_ENV)
 def test_gemini_provider_requires_model_in_config():
     """GeminiProvider with no model raises ConfigurationError — no hardcoded default (DR5)."""
-    config = {'api_key_env': 'GOOGLE_API_KEY'}
+    config = {'api_key_env': 'GOOGLE_API_KEY', **_TEST_RATES}
     with patch('google.genai.Client'):
         with pytest.raises(ConfigurationError, match="model name is required"):
             GeminiProvider(config, dict(_VALID_GEMINI_POLICY))
@@ -226,7 +233,7 @@ class TestProviderPolicyContract:
     def test_claude_missing_policy_names_both_keys(self):
         with patch('workmain.ai.providers.claude.Anthropic') as fake_cls:
             with pytest.raises(ConfigurationError) as exc_info:
-                ClaudeProvider({'model': 'test-model', 'api_key_env': 'ANTHROPIC_API_KEY'})
+                ClaudeProvider({'model': 'test-model', 'api_key_env': 'ANTHROPIC_API_KEY', **_TEST_RATES})
         assert 'sampling' in str(exc_info.value)
         assert 'thinking' in str(exc_info.value)
         fake_cls.assert_not_called()
@@ -236,7 +243,7 @@ class TestProviderPolicyContract:
         with patch('workmain.ai.providers.claude.Anthropic'):
             with pytest.raises(ConfigurationError) as exc_info:
                 ClaudeProvider(
-                    {'model': 'test-model', 'api_key_env': 'ANTHROPIC_API_KEY'},
+                    {'model': 'test-model', 'api_key_env': 'ANTHROPIC_API_KEY', **_TEST_RATES},
                     {'sampling': {}},
                 )
         assert 'thinking' in str(exc_info.value)
@@ -246,7 +253,7 @@ class TestProviderPolicyContract:
     def test_gemini_missing_policy_names_key(self):
         with patch('workmain.ai.providers.gemini.genai.Client') as fake_cls:
             with pytest.raises(ConfigurationError) as exc_info:
-                GeminiProvider({'model': 'test-model', 'api_key_env': 'GOOGLE_API_KEY'})
+                GeminiProvider({'model': 'test-model', 'api_key_env': 'GOOGLE_API_KEY', **_TEST_RATES})
         assert 'thinking_config' in str(exc_info.value)
         assert 'automatic_function_calling' in str(exc_info.value)
         assert 'sampling' not in str(exc_info.value)
@@ -262,7 +269,7 @@ class TestProviderPolicyContract:
              patch.object(ClaudeProvider, 'missing_policy_keys', return_value=['x']):
             with pytest.raises(ConfigurationError) as exc_info:
                 ClaudeProvider(
-                    {'model': 'test-model', 'api_key_env': 'ANTHROPIC_API_KEY'},
+                    {'model': 'test-model', 'api_key_env': 'ANTHROPIC_API_KEY', **_TEST_RATES},
                     dict(_VALID_CLAUDE_POLICY),
                 )
         assert 'x' in str(exc_info.value)
@@ -275,7 +282,7 @@ class TestProviderPolicyContract:
             'providers': {
                 'claude': {'enabled': True, 'model': 'claude-test',
                            'api_key_env': 'ANTHROPIC_API_KEY',
-                           'accepts': ['system_prompt']},
+                           'accepts': ['system_prompt'], **_TEST_RATES},
                 'gemini': {'enabled': False, 'model': 'gemini-test',
                            'accepts': ['system_prompt']},
                 'ollama': {'enabled': False, 'model': 'mistral-7b',
@@ -293,6 +300,102 @@ class TestProviderPolicyContract:
                 _manager_from_dict(settings)
         assert 'x' in str(exc_info.value)
         assert 'config/providers/claude/settings.json' in str(exc_info.value)
+
+
+# ---------------------------------------------------------------------------
+# Config contract — Issue #155
+# ---------------------------------------------------------------------------
+
+_PAID_PROVIDERS = [
+    pytest.param(
+        ClaudeProvider, 'claude', 'ANTHROPIC_API_KEY', _CLAUDE_ENV,
+        'workmain.ai.providers.claude.Anthropic', _VALID_CLAUDE_POLICY, id='claude',
+    ),
+    pytest.param(
+        GeminiProvider, 'gemini', 'GOOGLE_API_KEY', _GEMINI_ENV,
+        'workmain.ai.providers.gemini.genai.Client', _VALID_GEMINI_POLICY, id='gemini',
+    ),
+]
+
+
+class TestProviderConfigContract:
+    """A paid provider refuses to exist without the rate keys it declares."""
+
+    @pytest.mark.parametrize('rate_key', _RATE_KEYS)
+    @pytest.mark.parametrize('cls, name, key_env, env, client_path, policy', _PAID_PROVIDERS)
+    def test_direct_construction_without_rate_key_raises(
+        self, cls: type[BaseProvider], name: str, key_env: str, env: dict,
+        client_path: str, policy: dict, rate_key: str,
+    ) -> None:
+        config = {'model': 'test-model', 'api_key_env': key_env, **_TEST_RATES}
+        del config[rate_key]
+        with patch.dict(os.environ, env), patch(client_path) as fake_client:
+            with pytest.raises(ConfigurationError) as exc_info:
+                cls(config, dict(policy))
+        assert rate_key in str(exc_info.value)
+        fake_client.assert_not_called()
+
+    @pytest.mark.parametrize('rate_key', _RATE_KEYS)
+    @pytest.mark.parametrize('cls, name, key_env, env, client_path, policy', _PAID_PROVIDERS)
+    def test_manager_load_without_rate_key_raises(
+        self, cls: type[BaseProvider], name: str, key_env: str, env: dict,
+        client_path: str, policy: dict, rate_key: str,
+    ) -> None:
+        settings = _make_temp_settings()
+        entry = settings['providers'][name]
+        entry.update({'enabled': True, 'api_key_env': key_env, **_TEST_RATES})
+        del entry[rate_key]
+        with patch.dict(os.environ, env), patch(client_path) as fake_client:
+            with pytest.raises(ConfigurationError) as exc_info:
+                _manager_from_dict(settings)
+        assert f'providers.{name}.{rate_key}' in str(exc_info.value)
+        fake_client.assert_not_called()
+
+    @pytest.mark.parametrize('cls, name, key_env, env, client_path, policy', _PAID_PROVIDERS)
+    def test_disabled_provider_without_rate_keys_loads(
+        self, cls: type[BaseProvider], name: str, key_env: str, env: dict,
+        client_path: str, policy: dict,
+    ) -> None:
+        settings = _make_temp_settings()
+        entry = settings['providers'][name]
+        assert entry['enabled'] is False
+        assert not set(_RATE_KEYS) & set(entry)
+        manager = _manager_from_dict(settings)
+        assert manager.is_disabled(name) is True
+
+    @patch.dict(os.environ, _CLAUDE_ENV)
+    def test_constructor_uses_missing_config_keys(self) -> None:
+        with patch('workmain.ai.providers.claude.Anthropic'), \
+             patch.object(ClaudeProvider, 'missing_config_keys', return_value=['x']):
+            with pytest.raises(ConfigurationError) as exc_info:
+                ClaudeProvider(
+                    {'model': 'test-model', 'api_key_env': 'ANTHROPIC_API_KEY', **_TEST_RATES},
+                    dict(_VALID_CLAUDE_POLICY),
+                )
+        assert 'x' in str(exc_info.value)
+
+    @patch.dict(os.environ, _CLAUDE_ENV)
+    def test_manager_load_uses_missing_config_keys(self) -> None:
+        settings = _make_temp_settings()
+        settings['providers']['claude'].update(
+            {'enabled': True, 'api_key_env': 'ANTHROPIC_API_KEY', **_TEST_RATES}
+        )
+        with patch('workmain.ai.providers.claude.Anthropic'), \
+             patch.object(ClaudeProvider, 'missing_config_keys', return_value=['x']):
+            with pytest.raises(ConfigurationError) as exc_info:
+                _manager_from_dict(settings)
+        assert 'providers.claude.x' in str(exc_info.value)
+
+    @pytest.mark.parametrize('cls, name, key_env, env, client_path, policy', _PAID_PROVIDERS)
+    def test_estimate_cost_uses_configured_rates(
+        self, cls: type[BaseProvider], name: str, key_env: str, env: dict,
+        client_path: str, policy: dict,
+    ) -> None:
+        config = {'model': 'test-model', 'api_key_env': key_env, **_TEST_RATES}
+        with patch.dict(os.environ, env), patch(client_path):
+            provider = cls(config, dict(policy))
+        expected = _TEST_RATES['cost_per_1k_prompt_tokens'] + _TEST_RATES['cost_per_1k_completion_tokens']
+        assert provider.estimate_cost(1000, 1000) == pytest.approx(expected)
 
 
 # ---------------------------------------------------------------------------
@@ -425,6 +528,7 @@ def _failed_construction_manager(enabled):
     settings = _make_temp_settings()
     settings['providers']['claude']['enabled'] = enabled
     settings['providers']['claude']['api_key_env'] = 'WORKMAIN_TEST_UNSET_API_KEY'
+    settings['providers']['claude'].update(_TEST_RATES)
     with patch.dict(os.environ):
         os.environ.pop('WORKMAIN_TEST_UNSET_API_KEY', None)
         return _manager_from_dict(settings)
@@ -881,7 +985,7 @@ def test_provider_disabled_by_construction_failure_reports_reason():
     settings = _make_temp_settings()
     settings['providers']['claude'] = {
         "enabled": True, "model": "claude-test", "api_key_env": "ANTHROPIC_API_KEY",
-        "accepts": ["system_prompt"],
+        "accepts": ["system_prompt"], **_TEST_RATES,
     }
     env = {k: v for k, v in os.environ.items() if k != 'ANTHROPIC_API_KEY'}
     with patch.dict(os.environ, env, clear=True):
