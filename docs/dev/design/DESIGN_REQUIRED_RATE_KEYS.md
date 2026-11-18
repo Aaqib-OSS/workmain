@@ -120,9 +120,9 @@ Under Option B the manager must know which keys each provider requires. Ollama h
 | Q1 | When a paid provider's entry in `config/ai_settings.json` lacks a rate key, does `ProviderManager` refuse to load (Option B), or does that provider alone fail construction (Option A)? | Ray, 20261118: Option B. |
 | Q2 | Under Option B, does each provider class declare its required config keys in the provider contract on `BaseProvider`, mirroring `REQUIRED_POLICY_KEYS` (Option D)? | Ray, 20261118: Option D. |
 | Q3 | Under Option B, is the check run for enabled providers only, or for every provider? | Ray, 20261118: enabled providers only. |
-| Q4 | F12 and F13 are outside this issue. Should each become an issue of its own, join #155, or be dropped? | Ray, 20261118: one issue covering F12 and F13. |
+| Q4 | F12 and F13 are outside this issue. Should each become an issue of its own, join #155, or be dropped? | Ray, 20261118: one issue covering F12 and F13 — #295. |
 
 ## 6. Disposition
 
-- Promoted to:
+- Promoted to: `../specs/REQUIRED_RATE_KEYS_SPEC.md`; F12 and F13 to issue #295
 - Superseded by:
