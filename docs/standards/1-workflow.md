@@ -2,154 +2,143 @@
 
 ### 1.1 Two paths through the cycle
 
-There are two paths, and **the branch type is which one applies**. §2.7 step 3 already makes that the first decision of any session, so by the time work starts the path is settled and no further judgement is needed.
+**The branch type decides the path.** The direct path has fewer checks because a document is easy to fix after the fact; application code is not, so the branch type decides the path, not the size of the change. §2.7 step 3 makes the branch type the first decision of any session, so the path is settled before work starts.
 
 - **`feature/*` and `hotfix/*` → the full path.** The change alters application behaviour.
-- **`chore/*` → the direct path.** §2.2 defines what `chore/*` covers: `docs/**`, standards documents, `.claude/`, and dev tooling that changes no application behaviour.
+- **`chore/*` → the direct path.** §2.2 defines what `chore/*` covers: `docs/**`, standards documents, `.claude/`, and dev tooling that leaves application behaviour as it is.
 
-**Full path**
+**The stages each path runs**, in this order:
 
-No spec is written without a read-only audit first. Recon produces a findings document in `docs/dev/design/`; decisions are made from it; only then is a spec written.
+| Stage | Full path | Direct path |
+| --- | --- | --- |
+| Recon | Required | Where the work turns up options or questions whose answers change it |
+| Analysis | Required | Where Recon ran |
+| Spec | Required | Required |
+| Review | Required | Ray decides at the start |
+| Approval | Required | Required |
+| Implementation | Required, by Role 3 | Required, by Role 1 |
+| Implementation review | Required | Where Review ran |
+| Close-out | Required | Required |
 
-```text
-RECON  →  ANALYSIS  →  SPEC  →  REVIEW  →  APPROVAL  →  IMPLEMENTATION  →  IMPLEMENTATION REVIEW  →  CLOSE-OUT
-```
+**What shows each stage done.** Each stage is done when its artifact or field shows it. The condition is the same on both paths unless the stage says otherwise.
 
-- **Recon** — read-only pass, verbatim findings, no fixes and no inline suggestions. Where the findings turn up options, a trade-off, or questions whose answers change the work, the artifact is a design study instead: it adds the options with a recommendation and the open questions (`docs/dev/design/_TEMPLATE_DESIGN.md`), and it is written before the spec. Recon also runs §1.3's search by file for every file the work will change, and the study lists what it returns. Findings and options never go in the spec's Decision Log or only in chat, and each Decision Log decision cites the question it answers.
-- **Analysis** — Ray plus Role 1 decide; decisions are logged.
-- **Spec** — written to `docs/dev/specs/`.
-- **Review** — Role 2 findings go back to Role 1, never forward to the implementer.
-- **Approval** — Ray approves explicitly. No implementation without an approved spec.
-- **Implementation** — Role 3, step by step, from the approved spec only.
-- **Implementation review** — Role 2 reviews the delivered branch against the spec and its results artifact, on Ray's request, in a Caliper session of its own (`.claude/skills/session-start/SKILL.md` § Role 2). `.claude/skills/session-start/references/caliper.md` § Post-implementation review states its reads and checks. Findings go back to Role 1, never forward to the implementer.
-  - **An unstopped departure** is a change on the branch made without the stop it required: a change that traces to nothing in the spec, a results §4 row whose `Step stopped at` is `none`, or a `within approved meaning` change that altered the meaning, scope or file set Ray approved. Ray rules on each one, as the resolution of its Decision Log row, with one of two outcomes:
+- **Recon** — Role 1 makes a read-only pass and records its findings verbatim in `docs/dev/design/`. Fixes belong to the spec, and suggestions to the design study's options. Where the findings turn up options, a trade-off, or questions whose answers change the work, the artifact is a design study: it adds the options with a recommendation and the open questions (`docs/dev/design/_TEMPLATE_DESIGN.md`). Recon also runs §1.3's search by file for every file the work will change, and the artifact lists what it returns. On the direct path, recon earns its place when the change spans documents that may contradict each other, and every site of a rule has to be found before the change can be specified.
+  - *Done when* a `docs/dev/design/` artifact names the issue in its `**Originating item:**` field.
+  - Where no recon runs, the spec's `**Design study:**` field reads `n/a`, which `/closeout`'s `P5a` accepts on a `chore/*` spec alone.
+- **Analysis** — Ray and Role 1 answer the design artifact's open questions. Each decision in the spec's Decision Log cites the question it answers.
+  - *Done when* every row of that artifact's §5 Open questions carries an answer.
+- **Spec** — written to `docs/dev/specs/` from its template. The template states which sections a direct-path spec may omit, and §1.2 how it verifies existing state.
+  - *Done when* a `docs/dev/specs/` artifact names the issue in its `**Originating item:**` field.
+- **Review** — Role 2 reviews the spec in a Caliper pass (`.claude/skills/session-start/SKILL.md` § Role 2), and its findings go to Role 1.
+  - *Done when* the spec's last `Caliper` row, by its position in the Decision Log, is a pass row (`.claude/skills/session-start/references/caliper.md` § Emits) that reports no blocking finding and names the commit the pass read, and every blocking `Caliper` finding has a resolution. A non-blocking finding is resolved or recorded, and Review stays done. A `Caliper` row is one whose Source is exactly `Caliper`.
+  - On the direct path, the stage is `n/a` where the spec's `**Status:**` is `Approved` and it carries no `Caliper` row.
+- **Approval** — Ray approves the spec explicitly. Implementation starts from an approved spec.
+  - *Done when* the spec's `**Status:**` is `Approved`. Where the spec carries a `Caliper` row, `**Status:**` is first set to `Approved` only when `git diff <commit> -- <spec path>`, run before that edit with the commit the Review stage's pass row names, shows changes only to Decision Log rows and the resolutions of that pass's non-blocking findings.
+  - An edit to the spec while `**Status:**` is `Approved`, other than a Decision Log row, a change to the `**Status:**` field itself, and the amendment a Keep ruling makes (§1.1 Implementation review), sets `**Status:**` back to `Draft` in the same commit, and Ray approves it again.
+- **Implementation** — step by step, from the approved spec. On the full path Role 3 implements. On the direct path Role 1 implements in the session that wrote the spec: each step quotes its exact replacement text, so a separate implementer would only transcribe it. Each step ends with a commit, and the next step begins. A departure stops the step before its commit: Anvil stops on every departure (`.claude/skills/session-start/SKILL.md` § Role 3), and Role 1 on one that changes the meaning, scope or file set Ray approved (`.claude/skills/session-start/references/spanner.md` § Working rules).
+  - *Done when* a results artifact in `docs/dev/results/` names the spec in its `**Spec:**` field. The implementing role writes it as its last implementation step, checking every acceptance criterion against the delivered code.
+- **Implementation review** — on Ray's request, Role 2 reviews the delivered branch against the spec and its results artifact, in a Caliper session of its own. `.claude/skills/session-start/references/caliper.md` § Post-implementation review states its reads and checks. Findings go to Role 1.
+  - **An unstopped departure** is a change on the branch that skipped the stop it required: a change outside the spec, a results §4 row whose `Step stopped at` is `none`, or a `within approved meaning` change that altered the meaning, scope or file set Ray approved. Ray rules on each one with one of two outcomes:
     - **Revert** — the change is reverted on the branch, and carried to an issue under §1.3 if it is still wanted.
     - **Keep** — the spec is amended so the change traces to it.
   - The ruling's home is the resolution of the finding's Decision Log row. Role 1 writes it there and writes the outcome into the spec, and the implementing role carries it out.
-- **Close-out** — Ray runs the `/closeout` skill (`.claude/skills/closeout/SKILL.md`). Posting the issue's closing comment and closing the issue are Ray's, on the same principle as merging the `dev → main` PR.
-
-**Direct path**
-
-```text
-SPEC  →  REVIEW*  →  APPROVAL  →  IMPLEMENTATION  →  IMPLEMENTATION REVIEW*  →  CLOSE-OUT
-```
-
-**The four unmarked stages are required.** The two marked `*` are the Role 2 review, which Ray calls for or not at the start (§1.2). Where they run, they are the full path's Review and Implementation review, done when the table below shows them done.
-
-- **Spec** — written to `docs/dev/specs/`, from the same template. §1.2 states which sections it may omit and how it verifies existing state instead.
-- **Approval** — Ray approves explicitly. No implementation without an approved spec.
-- **Implementation** — Role 1, in the session that wrote the spec. A direct-path step quotes the exact replacement text, so there is nothing to hand off: a separate implementer would transcribe rather than implement, and a transcription is a new chance to get it wrong, not a second pair of eyes.
-- **Close-out** — the same `/closeout` run, unchanged. A direct-path spec meets its preconditions as a full-path spec does.
-
-**A design artifact is permitted on this path, and required where the work turns up options or questions whose answers change it** — the full path's Recon stage states what it then holds. A recon earns its place when the change spans documents that may contradict each other — where a rule is stated in one place and cited or restated in others, and the change has to find every site before it can be specified. Run one where that is true; it produces a design artifact in `docs/dev/design/` exactly as on the full path.
-
-**Where no design artifact is written**, the spec's `**Design study:**` field reads `n/a`. That is the stated form of a direct-path spec, not a requirement quietly skipped: `/closeout`'s `P5a` accepts `n/a` only on a `chore/*` spec, and fails every other missing or broken design-study citation exactly as before.
-
-**What the direct path trades.** With no recon, no required Role 2 pass and no separate implementer, **Ray's approval is the only review between the spec and the edit**, and scope that no acceptance criterion named is found only *during* implementation, when Role 1 stops on a change to the scope Ray approved (`.claude/skills/session-start/references/spanner.md` § Working rules), rather than *before* it by recon and review. On a document that is recoverable — the text is there to read and the fix is another edit. On application code it is not, which is why the path is keyed on the branch type and not on how small the change looks.
-
-**What shows each stage done.** Each stage is done when its artifact or field shows it, and not before. A stage on both paths has the same condition on each, except where its row states a direct-path `n/a`.
-
-| Stage | Done when |
-| --- | --- |
-| Recon | A `docs/dev/design/` artifact names the issue in its `**Originating item:**` field. |
-| Analysis | Every row of that artifact's §5 Open questions carries an answer. |
-| Spec | A `docs/dev/specs/` artifact names the issue in its `**Originating item:**` field. |
-| Review | The spec's last `Caliper` row, by its position in the Decision Log, is a pass row (`.claude/skills/session-start/references/caliper.md` § Emits) that reports no blocking finding and names the commit the pass read, and every blocking `Caliper` finding has a resolution. A non-blocking finding is resolved or recorded, and does not reopen Review. A `Caliper` row is one whose Source is exactly `Caliper`. A Caliper pass is `.claude/skills/session-start/SKILL.md` § Role 2. On the direct path the stage is `n/a` where the spec's `**Status:**` is `Approved` and it carries no `Caliper` row. |
-| Approval | The spec's `**Status:**` is `Approved`. Where the spec carries a `Caliper` row, `**Status:**` is first set to `Approved` only when `git diff <commit> -- <spec path>`, run before that edit with the commit the Review row's pass row names, shows no change but Decision Log rows and the resolutions of that pass's non-blocking findings. An edit to the spec while `**Status:**` is `Approved`, other than a Decision Log row, a change to the `**Status:**` field itself, and the amendment a Keep ruling makes (§1.1 Implementation review), sets `**Status:**` back to `Draft` in the same commit, and Ray approves it again. |
-| Implementation | A results artifact in `docs/dev/results/` names it in its `**Spec:**` field. The implementing role writes it as its last implementation step. |
-| Implementation review | The spec's Decision Log carries at least one `Caliper (post-implementation)` row, and every one has a resolution. A clean pass is the `No findings.` row the review emits for one. On the direct path the stage is `n/a` where the spec carries no `Caliper` row, because it runs only where the Review stage ran (§1.2). |
-| Close-out | The spec's `**Status:**` is `Shipped`, and the artifact set is in `docs/archive/`. |
+  - *Done when* the spec's Decision Log carries at least one `Caliper (post-implementation)` row, and every one has a resolution. A clean pass is the `No findings.` row the review emits for one.
+  - On the direct path, the stage is `n/a` where the spec carries no `Caliper` row.
+- **Close-out** — Ray runs the `/closeout` skill (`.claude/skills/closeout/SKILL.md`), the same run on both paths. Posting the issue's closing comment and closing the issue are Ray's, on the same principle as merging the `dev → main` PR.
+  - *Done when* the spec's `**Status:**` is `Shipped`, and the artifact set is in `docs/archive/`.
 
 ### 1.2 Spec authoring rules
 
-- Every claim about existing behaviour is verified against source at authoring time — cite file and symbol. Assertions that were not verified are the most common spec defect. This principle is the same on both paths; only its form differs.
+- **Every claim about existing behaviour is verified against source at authoring time**, citing file and symbol. The spec measures the defect's full extent itself — every site, every condition — and treats the issue's list as a starting point.
   - **Full path:** the §2 verified-current-state table carries the citations.
-  - **Direct path:** the §2 table is not required. The text being replaced is quoted inline in the step that replaces it, which *is* the verification — the claim and its evidence are the same lines, and a quote that no longer matches the file is caught the moment the edit is applied.
-- **A contract change enumerates its call sites.** Where a spec changes a signature, a required input, or an invariant of something already called elsewhere, its §2 table lists every call site found by a search of the whole repository — `tests/` and `automation/` included — together with the search that found them, and an acceptance criterion covers the whole enumerated set. A call site that bypasses the usual entry point is still a call site.
-- A call site found by a name search is confirmed by reading what the call is made on: a same-named method on another object is not a caller. A claim that a method has no caller states that references by name (getattr, a method passed uncalled) were also searched.
-- Changes to an existing spec are surgical, not wholesale rewrites.
-- **A revision finds every statement of what it changes.** A change to a spec, including the resolution of a review finding, searches the whole spec for every other statement of what it changes and every reference to an ID it adds, removes or alters, and changes each one. A change that edits one statement and leaves another standing hands the implementer a spec that disagrees with itself. §1.5 states the same duty across the document set for a rule change.
-- **An item that has a name of its own is cited by that name, never given an ID.** A test is cited by its pytest node ID, a file by its path, a function or class by its symbol. An ID a document invents for such an item is a second name that nothing keeps in step with the first. An ID is the only name of an item that has no other, such as a design rule, a criterion or a finding, and it is that item's one home. Within the file that defines it, every reference to it names that ID or cites its section; anywhere else, §1.5 states how it is cited. The rule above keeps each reference true when a set changes.
-- **A finding outside the spec's scope is not fixed in it.** Whoever finds it states what an issue for it needs: the defect or gap, the files it lives in, and its acceptance criteria. It also names any open issue it could join, found by §1.3's search. Ray decides whether it joins that issue or is parked (§1.3).
-- **An issue's acceptance criteria validate the work; they do not design it.** They are written before the design exists. Design on the merits. Where the design makes a criterion wrong, the spec restates it in its §5, says the issue body needs the edit, and the edit is made at close-out. A conflict between the design and an issue's criterion is not an open question. A criterion's check must be able to produce the answer the criterion states: a search that cannot see every form of what it counts proves nothing.
-- **A new rule goes in only with Ray's approval, into its one home, and only where no existing rule covers it.** A fix does not write the method it used into this document.
-- The spec measures the defect's full extent itself — every site, every condition — and never takes the issue's list as the census.
-- **A rule that refuses authored text is run over the live set it will judge before it is specified** — every open issue, every spec row, whatever the rule reads — and the result is recorded in the spec before its options go to Ray. A rule tried only on its own example can refuse correct text it was never shown. A rule that must tell a property's subject from the evidence for it is a reading, not a pattern.
-- Acceptance criteria must be mechanically testable. If an AC cannot be checked by running something, rewrite it until it can.
-- **A criterion names a property of the delivered system. The command is evidence for that property, not the criterion itself.** Write it as "*<property>*, checked by `<command>`" — not as "`<command>` returns zero hits" standing alone. A command is a proxy, and a proxy has many ways to read green, only one of which is the change that was wanted. Naming the property is what tells a reviewer, and an implementer, which of those ways is the work.
-  - The same criterion, written both ways:
-    - **Check as the criterion:** `grep -rn '^Version:' workmain/ --include='*.py'` returns zero hits.
-    - **Property, with the check as evidence:** no Python module under `workmain/` carries a version header in its docstring — git is the version record (§3.1) — checked by `grep -rn '^Version:' workmain/ --include='*.py'` returning zero hits.
-    - The first is satisfied by renaming the header to `Ver:`. The second is not, and the difference is readable at review time, before any code exists.
-  - `docs/dev/specs/_TEMPLATE_SPEC.md` §5 carries the two as separate columns, `Criterion` and `How it is checked`. On an issue, `.github/ISSUE_TEMPLATE/issue.schema.json` carries them as separate fields, and `automation/issue_validator.py` refuses a criterion that states only a command. A criterion that passes the validator still has to meet this rule.
-- **A criterion that verifies changed behaviour names the entry path it exercises.** Where more than one entry path reaches the change, the criteria cover the set, or state which paths are omitted and why. A green check through the one path that works is not coverage.
-- **Where a criterion is a property of a document rather than of running code, the check may be a stated reading by Ray.** It is still a check, and it still names what is being read: the section, and what the reader is reading it for. `docs/dev/specs/_TEMPLATE_SPEC.md` §5 states the same and cites here.
-  - **A check that names Ray is Ray's sign-off.** The implementer records its results row as `Not met`, with `Awaiting Ray` as its evidence, never `Met` on its own reading or run. Once he has checked it, the row becomes `Met` with evidence in the form `Ray, <YYYYMMDD>: <what he read or ran>`.
-- A spec may map sub-ACs to the ACs on the originating issue using the numbering `ACn.m`, which is what lets close-out read the set mechanically. An unmapped sub-AC verifies nothing the issue asked for.
-- At least one Role 2 review pass before a spec is approved, and a post-implementation review before close-out (§1.1 Implementation review) — on the full path. On the direct path both are at Ray's discretion, decided once, at the start: the post-implementation review runs exactly when Ray had Role 2 review the spec.
+  - **Direct path:** the text being replaced is quoted inline in the step that replaces it. The quote is the verification: a quote that no longer matches the file is caught the moment the edit is applied.
+- **A contract change enumerates its call sites.** Where a spec changes a signature, a required input, or an invariant of something already called elsewhere, its §2 table lists every call site found by a search of the whole repository — `tests/` and `automation/` included — together with the search that found them, and an acceptance criterion covers the whole enumerated set. A call site that bypasses the usual entry point is still a call site. A call site found by a name search is confirmed by reading what the call is made on: a caller calls the changed object itself. A claim that a method has no caller states that references by name (getattr, a method passed uncalled) were also searched.
+- **Steps are ordered, and each one leaves the suite green.** Each step is committed on its own, so it can be reviewed and reverted on its own. A step that changes a signature, a required input or an invariant updates every caller in that step, or keeps the old call working.
+- **A revision is surgical, and finds every statement of what it changes.** A change to a spec, including the resolution of a review finding, edits the statements that change. It searches the whole spec for every other statement of what it changes and every reference to an ID it adds, removes or alters, and changes each one, so the spec keeps agreeing with itself. §1.5 states the same duty across the document set for a rule change.
+- **An issue's acceptance criteria validate the work.** They are written before the design exists, so the design is made on its merits. Where the design makes a criterion wrong, the spec restates it in its §5, says the issue body needs the edit, and the edit is made at close-out. A conflict between the design and an issue's criterion is settled this way, as a restated criterion. A criterion's check is one that can produce the answer the criterion states: a search covers every form of what it counts.
+- **A criterion names a property of the delivered system, and the command is the evidence for it.** Write it as "*<property>*, checked by `<command>`". A command is a proxy, and a proxy has many ways to read green, only one of which is the change that was wanted. Naming the property is what tells a reviewer, and an implementer, which of those ways is the work. `docs/dev/specs/_TEMPLATE_SPEC.md` §5 shows an example.
+- **Each criterion is checked by running something, or, for a property of a document, by a stated reading by Ray.** A reading names the section and what it is read for. A check that names Ray is his sign-off: the implementer records its results row as `Not met`, with `Awaiting Ray` as its evidence, and once he has checked it the row becomes `Met` with evidence in the form `Ray, <YYYYMMDD>: <what he read or ran>`.
+- **A criterion that verifies changed behaviour names the entry path it exercises.** Where more than one entry path reaches the change, the criteria cover the set, or state which paths are omitted and why.
+- **Sub-ACs map to the issue's ACs** by the numbering `ACn.m`, which lets close-out read the set mechanically. Every sub-AC maps to an AC on the originating issue.
 
 ### 1.3 Issue discipline
 
-- Work is tracked in GitHub Issues. State is GitHub's own — open or closed. There is no status vocabulary to maintain in prose, and no register or statistics table to keep in step. Work is called an issue and cited by its number. "Backlog", "backlog item" and "item number" are retired terms and are not written into new text; a quote of existing text, and the filename `docs/archive/FEATURE_BACKLOG.md`, stay as they are.
+Work is tracked in GitHub Issues, called an issue and cited by its number. State is GitHub's own: open or closed. "Backlog", "backlog item" and "item number" are retired terms; a quote of existing text, and the filename `docs/archive/FEATURE_BACKLOG.md`, stay as they are.
+
+**What an issue holds.** An issue records a problem, and the design study designs the fix. The issue's `context` field holds the first four parts below, and its `acs` field the criteria.
+
+- **Problem** — what is wrong, in plain language: what a person sees or what breaks, and who notices.
+- **Where** — the owner `docs/ARCHITECTURE.md` names, and each file and symbol by name. Names survive edits; line numbers move with the next commit.
+- **Found** — where and when the problem was found, so a reader can tell how old the evidence is.
+- **Fix in mind** — where the finder has one, it is written as a question for the design study to weigh.
+- **Acceptance criteria** — properties of the delivered system, written as §1.2 states.
+
+The design study reads an issue body as dated evidence. It re-checks each claim against current source, and decides the design from `docs/ARCHITECTURE.md` and these standards.
+
+**Labels and milestones.**
+
 - Labels carry area, and `defect`/`gap` is the label pair that says what an unscheduled issue is. An issue with no milestone carries exactly one of them.
   - A **defect** is work the project asserted already worked — a spec acceptance criterion, a CHANGELOG entry, a man page — and does not. A **gap** is work never planned, documented, or designed.
-  - The pair is not removed when an issue is later pulled into a milestone. A milestone carrying one means that work came from the unscheduled pool rather than being planned as part of it.
-- What each area label means is its description on GitHub, readable with `gh label list` — not enumerated here, since a prose list is a register that goes stale the first time a label is added.
+  - The pair stays when an issue is later pulled into a milestone. A milestone carrying one means that work came from the unscheduled pool rather than being planned as part of it.
+- What each area label means is its description on GitHub, readable with `gh label list`.
 - A milestone carries the exit condition that closes it, and that condition must cover every issue in it.
-- An issue must be independently verifiable on its own: split into sub-issues only where each piece leaves the repository in a coherent state its own acceptance criteria can verify. Where steps are strictly sequential and individually meaningless, they stay inline as steps in one issue — not split into a parent with children for its own sake.
-- **An issue is opened only for what no open issue already covers.** Before any issue is opened — while planning, at close-out, or to carry a finding or an unmet acceptance criterion forward — the open issues are searched for one covering the same defect or gap: `gh issue list --state open --search "<term>"` once for each symbol, file and behaviour the new issue would name, and every result read. A finding an open issue already covers is added to that issue's context or acceptance criteria, and a new issue carries only the rest.
-- **An issue is opened when its body is written, it is on the board, and its dependencies are linked.** It is created with `python3 automation/issue_validator.py <file> --create`, which adds it to the `WorkmAIn Queue` project and links each issue in its `blocked_by` and `blocking` fields as a GitHub dependency. Every real dependency goes in those fields, whichever way it runs: the new issue may wait on an open one, or an open one may wait on it. "Depends on #N" in prose is not a dependency: nothing reads it, and the board shows the issue as ready. An issue created with a dependency left out of the fields still looks complete, so each is verified by reading it back: `gh issue view <N> --json projectItems` for the board, and, in both directions, `gh api repos/lockdwn20/workmain/issues/<blocked>/dependencies/blocked_by` and `gh api repos/lockdwn20/workmain/issues/<blocker>/dependencies/blocking`.
-- **A test uses inputs that every open issue leaves valid.** Opening an issue that narrows behaviour includes rewriting the open criteria and tests that exercise the narrowed path, and both issues say why.
-- **An issue split by its design study takes its findings with it.** When a design study shows that its issue must be split into several issues, each new issue's write-up carries the study's findings and settled answers for that issue, so it can be worked on without the study, and each new issue gets a design study of its own. The originating issue's study is narrowed to the work that issue keeps. If the originating issue is left as a parent with no work of its own, its study is deleted, and git keeps its history. A spec cites only a design study written for its own issue, because `/closeout` archives a spec's design study along with the spec (§1.5).
-- Verification of every AC against delivered code before marking an item complete is required. A spec's say-so is not evidence.
-- A finding outside the work in hand is parked. When the §1.3 search finds no open issue covering it, it is opened as an issue labelled parked, after Ray approves it. Its body names, by path, every file the defect or gap lives in, because that is how it is found again. A parked issue is on the board but is not scheduled work. The board walk passes over it (`.claude/skills/session-start/references/spanner.md` read 1). Ray schedules one by removing the label and placing it on the board.
-- Recon finds parked work by file. For each file the work will change, recon runs `gh issue list --state open --limit "$(gh repo view --json issues --jq .issues.totalCount)" --search "\"<path>\" in:body" --json` number,title,labels, and lists every issue it returns in its findings. Each parked issue found is one open question: fold it into this issue, or leave it parked. The recommendation states the finding's size, read from the code. Folding removes the parked label, and the finding joins this issue's scope and acceptance criteria. A search by file can return extra issues but cannot miss one that names the file; a search by term can.
 
-### 1.4 Steps and authorization points
+**Opening an issue.**
 
-A spec's steps are ordered work, defined below.
+- An issue must be independently verifiable on its own: split into sub-issues only where each piece leaves the repository in a coherent state its own acceptance criteria can verify. Where steps are strictly sequential and individually meaningless, they stay inline as steps in one issue.
+- **A new issue carries only what the open issues leave uncovered.** Before any issue is opened — while planning, at close-out, or to carry a finding or an unmet acceptance criterion forward — the open issues are searched for one covering the same defect or gap: `gh issue list --state open --search "<term>"` once for each symbol, file and behaviour the new issue would name, and every result read. A finding an open issue already covers is added to that issue's context or acceptance criteria, and a new issue carries only the rest.
+- **An issue is opened when its body is written, it is on the board, and its dependencies are linked.** It is created with `python3 automation/issue_validator.py <file> --create`, which adds it to the `WorkmAIn Queue` project and links each issue in its `blocked_by` and `blocking` fields as a GitHub dependency. Every real dependency goes in those fields, whichever way it runs: the new issue may wait on an open one, or an open one may wait on it. The board reads dependencies from those fields alone, so each is verified by reading it back: `gh issue view <N> --json projectItems` for the board, and, in both directions, `gh api repos/lockdwn20/workmain/issues/<blocked>/dependencies/blocked_by` and `gh api repos/lockdwn20/workmain/issues/<blocker>/dependencies/blocking`.
+- **An issue split by its design study takes its findings with it.** When a design study shows that its issue must be split into several issues, each new issue's write-up carries the study's findings and settled answers for that issue, so it stands on its own, and each new issue gets a design study of its own. The originating issue's study is narrowed to the work that issue keeps. If the originating issue is left as a parent with no work of its own, its study is deleted, and git keeps its history. A spec cites only a design study written for its own issue, because `/closeout` archives a spec's design study along with the spec (§1.5).
 
-- **Steps.** Ordered work inside a spec. Committed individually, reviewable and revertible individually. No approval stop: a step that goes as the spec writes it ends with a commit, not with a request to continue. A departure is the exception. Anvil stops on every departure before the step's commit (`.claude/skills/session-start/SKILL.md` § Role 3). Role 1, on its own direct-path spec, stops on one that changes the meaning, scope or file set Ray approved (`.claude/skills/session-start/references/spanner.md` § Working rules). A step that changes a signature, a required input or an invariant updates every caller in that step, or keeps the old call working, so each step's commit leaves the suite green.
-- **Authorization points.** Attached to specific *actions* that are irreversible or reach outside the working tree.
-  - This is a property of the action, so it does not scale with scope: a one-step issue can contain one and a twenty-step issue can contain none.
-  - An authorization point is a hard stop — state what is about to happen, then wait for   Ray's explicit approval.
-  - **The authorization set (anything not on this list is a step):**
-    - Executing a DB migration against the live database. Building the test database from the migrations is not one.
-    - Deleting a GitHub object (issue, label, milestone, branch, release)
-      - The branch entry covers a branch on `origin`. Deleting a local branch that was never pushed is not a GitHub object deletion — see §2.3.
-    - Merging to `main`
-    - Force-pushing any branch
-    - Changing the run state of a live service beyond the carve-out below.
-      - **Carve-out.** The post-merge service restart is not an authorization point. §2.6 requires it after every `feature/*` and `hotfix/*` merge to `dev`, so close-out performs it as a step. A restart that §2.6 does not require is not covered by this carve-out.
+**Findings and parked issues.**
+
+- **A finding outside the work in hand goes to an issue.** Whoever finds it writes the issue as **What an issue holds** above states. It joins an open issue that already covers it, found by the search above, or it is parked. Ray decides which.
+- **A parked finding is opened as its own issue.** When the search above finds no open issue covering it, it is opened as an issue labelled `parked`, after Ray approves it. Its **Where** names every file by path, because that is how recon finds it again. A parked issue sits on the board outside the scheduled work. The board walk passes over it (`.claude/skills/session-start/references/spanner.md` read 1). Ray schedules one by removing the label and placing it on the board.
+- **Recon finds parked work by file.** For each file the work will change, recon runs `gh issue list --state open --limit "$(gh repo view --json issues --jq .issues.totalCount)" --search "\"<path>\" in:body" --json number,title,labels`, and lists every issue it returns in its findings. Each `parked` issue found is one open question: fold it into this issue, or leave it parked. The recommendation states the finding's size, read from the code. Folding removes the `parked` label, and the finding joins this issue's scope and acceptance criteria. A search by file can return extra issues, and finds every issue that names the file.
+
+### 1.4 Authorization points
+
+An authorization point is an action that is irreversible or reaches outside the working tree. It is a property of the action, whatever the size of the work. Whoever is about to take it — the implementing role during Implementation, or the `/closeout` run during Close-out — states what is about to happen and waits for Ray's explicit approval. Every other action is a step.
+
+| Action | Usually comes up in |
+| --- | --- |
+| Executing a DB migration against the live database. Building the test database from the migrations is a step. | Implementation, as a spec step |
+| Merging to `main` | Close-out |
+| Deleting a GitHub object: an issue, label, milestone, release, or a branch on `origin`. Deleting a local branch that was never pushed is a step (§2.3). | Close-out for a branch; any stage for the rest |
+| Force-pushing any branch | Any stage |
+| Changing the run state of a live service. The post-merge service restart is a step: §2.6 requires it after every `feature/*` and `hotfix/*` merge to `dev`, so close-out performs it. Every other change is an authorization point. | Close-out |
 
 ### 1.5 Documentation rules
 
-- Dev artifacts live where §7 places them.
-- **Filenames are subject-based** — no version suffix, no date. Artifacts are updated in place, so filenames never change and citations never break.
-- **Every artifact carries exactly one `Status:` field, in its header block.** A status on a section rather than on the document is not a status; it is a leftover from the retired per-section vocabulary.
-  - Specs carry `Draft`, `Approved`, `Shipped` or `Superseded`
-  - Design and Results artifacts carry `Active`, `Shipped` or `Superseded`.
-- While work is live, retirement is a status edit, not a file move. An artifact stays where it is, and where it is cited, for as long as it is being referenced.
-  - **`docs/archive/`** holds artifacts whose work is complete. An artifact moves there when its issue closes out — `/closeout` performs the move as a step — and `docs/archive/<type>/` mirrors `docs/dev/<type>/`. It is kept for reference only, is never authoritative, and is always superseded by `docs/dev/design/`, `docs/dev/specs/` and `docs/dev/results/`. It is git-tracked, and filenames never change on the move, so citations to it stay resolvable.
-  - Never cite an archived artifact as the basis for a current decision. If it still governs something, it has not finished being live and does not belong in the archive.
-- **A pointer between artifacts of the same set is written relative; every other citation is written from the repository root.** The set is a spec, its design study and its results artifact — the three that are archived together.
-  - `**Design study:** `../design/<file>.md`` from a spec, `**Spec:** `../specs/<file>_SPEC.md`` from a results artifact. Because `docs/archive/<type>/` mirrors `docs/dev/<type>/` and a set is archived whole, a relative pointer resolves before and after the move and is never repointed.
-  - Everything else is a repo-root path: a standards section, an artifact from a different set, and any path inside a `git show <ref>:<path>` or quoted command output. The form is therefore the tell — a relative path is a pointer to resolve now, a repo-root path is either a target that does not move or a record of where something was at a stated moment.
-- **Specs carry a Decision Log** — decisions and review findings with their resolution only.
-  - Never a description of what changed in the document or a restatement of information already included elsewhere in the spec.
-  - Design and results artifacts carry neither a decision log nor a version history.
-- **Markdown is never hard-wrapped.** One line per paragraph, per list item, per table row — let the editor wrap it. A paragraph broken across source lines makes every later edit a reflow, and turns a one-word change into a multi-line diff nobody can review. `MD013` is off in `.markdownlint.json` for this reason.
-- **Nothing is proposed that has to be kept up by hand.** No list, register, count, status table or copy of state that lives somewhere authoritative goes into a document, a spec step, a criterion or a script. A test count, queue size, version or status written as currently true is stale on the next commit, and the next reader spends a turn reconciling it. The rule is stated, and the set is derived from its live source: `pytest --collect-only -q`, `gh issue list`, `gh label list`, `workmain/__version__.py`. An operational bound, such as a `--limit`, is an instruction to derive it, never a remembered number. A list found already in a document is deleted, not updated: needing an update is the sign it should not exist. A criterion that would need such a list checks instead that the rule is stated. A document that cannot be trusted is deleted, not annotated. A dated measurement with its evidence, such as a recon's suite count at recon time, is a record and stays.
-- **A change to a rule searches the whole document set** — `CLAUDE.md`, this document, the skills and the templates — for every other statement of it, and corrects each one. A historical citation stays as written; only a live, forward-looking reference is repointed.
-- **A document is written for a reader who has read nothing else.** An issue, a criterion and a design study's open question each stand alone. The facts they depend on are stated in them. A rule is stated in a sentence, and another document is cited as its checklist, never as its definition. What breaks, and who notices, is spelled out. A design study's question says whether the problem it asks about is real before framing it, and a finding that cites two files says which one has the problem and which is there for contrast. An ID — a finding, a question, a design rule — is used only inside the file that defines it; anywhere else the thing is stated or cited in full. A bare `§` is only ever a section of this document, wherever it is written; a section of any other document is cited with that document's name, and on its first reference in a document with what the section is. A reason is stated in terms the reader can check. An issue number may follow it as the record, but never stands in as the reason. An example is set out as an example, not woven into the rule, and is checked against the rest of this document before it goes in.
-- **No version headers or version-history blocks in any document.** Git is the version record. See §3.1 for the code equivalent.
-- **A process rule never travels with the code.** Text that ships alongside what it describes says what the thing does and what it requires. It never says what a person should do about that. `CLAUDE.md` and this document are the two homes for a process rule; per `CLAUDE.md`'s opening, everywhere else cites them.
-- Each `docs/dev/` subdirectory holds a `_TEMPLATE_*.md` starting point. Templates are advisory — **template compliance is not a Role 2 review criterion.**
+**Artifacts.**
+
+- Dev artifacts live where §7 places them. Each `docs/dev/` subdirectory holds a `_TEMPLATE_*.md` starting point; templates are advisory, and Role 2 reviews the content.
+- **Git is the version record.** A filename carries the subject alone, and an artifact is edited in place, so filenames and citations stay stable.
+- **Every artifact carries exactly one `Status:` field, in its header block.**
+  - Specs carry `Draft`, `Approved`, `Shipped` or `Superseded`.
+  - Design and results artifacts carry `Active`, `Shipped` or `Superseded`.
+- **An artifact stays in `docs/dev/` while its work is live.** When its issue closes out, `/closeout` moves the set to `docs/archive/<type>/`, which mirrors `docs/dev/<type>/`. `docs/dev/` is authoritative, and the archive is kept for reference.
+- **A pointer within a set is relative; every other path starts from the repository root.** A set is a spec, its design study and its results artifact, which are archived together: **Design study:** `../design/<file>.md` from a spec, **Spec:** `../specs/<file>_SPEC.md` from a results artifact.
+- **Specs carry a Decision Log** of decisions and review findings, each with its resolution.
+
+**Writing.**
+
+- **Markdown is written one line per paragraph**, per list item and per table row, and the editor wraps it. `.markdownlint.json` is set to match, and governs all formatting.
+- **A document is written for a reader who comes to it cold.** An issue, a criterion and a design study's open question each stand alone and state the facts they depend on. What breaks, and who notices, is spelled out. A rule is stated in a sentence, and another document is cited as its checklist. A reason is stated in terms the reader can check, and an issue number may follow it as the record. An example is set out separately from the rule, and is checked against the rest of the standards before it goes in.
+- **A bare `§` is a section of the `docs/standards/` set**, whose numbers are unique across its files. A section of any other document is cited with that document's name.
+- **An item that has a name of its own is cited by that name:** a test by its pytest node ID, a file by its path, a function or class by its symbol. An ID names an item that has no other name, such as a design rule, a criterion, a finding or an open question. It is used inside the file that defines it; anywhere else it is cited in full.
+- **State is derived from its live source.** A document, a spec step, a criterion or a script states the rule and reads the list, count, status or version from where it lives: `pytest --collect-only -q`, `gh issue list`, `gh label list`, `workmain/__version__.py`. An operational bound, such as a `--limit`, is derived the same way, and a list found in a document is replaced by its source. A dated measurement with its evidence, such as a recon's suite count at recon time, is a record and stays.
+
+**Rules.**
+
+- **A rule has one home:** `CLAUDE.md`, a `docs/standards/` file, or a role's skill reference, as `CLAUDE.md`'s opening states. Everywhere else cites it. Text that ships alongside code follows `docs/standards/3-code.md`.
+- **A new rule or standard requires Ray's approval.** The method a fix used stays in that fix's own artifacts.
+- **A change to a rule searches the whole document set** — `CLAUDE.md`, the standards, the skills and the templates — for every other statement of it, and corrects each one. A historical citation in `docs/archive/` stays as written; a live, forward-looking reference is repointed.
 
 ### 1.6 Sequencing
 
-**The Github Project Board is the order.** Every issue joins the `WorkmAIn Queue` project at creation (§1.3), and its position there is the sequence. The next open item on the list is what comes next. There is no priority label and no rank field. The board is read as `.claude/skills/session-start/references/spanner.md` read 1 states.
+**The GitHub Project Board is the order.** Every issue joins the `WorkmAIn Queue` project at creation (§1.3), and its position there is the sequence. What comes next is the first open issue on the board whose sub-issues are all closed, passing over any `parked` issue (§1.3): a parent waits for its children. The board is read as `.claude/skills/session-start/references/spanner.md` read 1 states.
 
-Ordering is Ray's. Position is set in the Web UI, and nothing in this repository changes it. Adding a new issue to the board (§1.3) is the one write, and it orders nothing. The project's `Status` field is auto-populated by GitHub and cannot be removed; it is ignored.
+Ordering is Ray's, set in the Web UI. Adding a new issue to the board (§1.3) is the repository's one write to it, and it places the issue without ordering it. The project's `Status` field is auto-populated by GitHub and is left unread.
 
-**Preemption is expressed by position, and by nothing else.** Work that preempts the schedule is moved to the top of the board. **No general category of preempting work is defined.** Future preemption is decided case by case, by Ray, and takes effect as a move on the board — not as a label, a milestone, or a rule added here.
+**Preemption is a move on the board.** Work that preempts the schedule is moved to the top of the board. Ray decides each case.

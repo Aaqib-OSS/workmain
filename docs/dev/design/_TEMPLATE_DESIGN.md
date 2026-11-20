@@ -4,53 +4,57 @@
 **Kind:** Design study | Recon
 **Author:** Spanner (Role 1)
 **Date:** YYYYMMDD
+**Read at:** <commit SHA the read was taken at>
 **Originating item:** Issue #N | Ray request, YYYYMMDD
 
 > Delete this block before use.
 >
-> **Filename:** subject-based, no version suffix, no date — `DESIGN_<SUBJECT>.md` for a design study, `RECON_<SUBJECT>.md` for a recon. This file is updated in place; git holds the history.
+> **Filename:** `DESIGN_<SUBJECT>.md` for a design study, `RECON_<SUBJECT>.md` for a recon, named as `docs/standards/1-workflow.md` §1.5 states.
 >
-> **Two kinds, one template.** A *design study* explores options and makes a recommendation. A *recon* is a read-only census that reports findings and makes no recommendation at all. Pick one in the Kind field and delete the sections that don't apply — §4 Options is design-study only.
+> **Two kinds, one template.** A recon reports findings (§1.1 Recon). A design study adds §4, the governing rules and the options with a recommendation. Pick one in the Kind field and keep the sections it uses.
 >
-> This template is advisory. Add or drop sections as the work requires. Template compliance is not a Caliper review criterion.
+> Templates are advisory (§1.5).
 
 ---
 
 ## 1. Purpose
 
-What question is this document answering, and why is it being asked now? One paragraph. If this is a recon, state the read-only contract explicitly: no code changes, no fixes, no suggestions inline with findings.
+The question this document answers, and why it is asked now. One paragraph. A recon states its read-only contract here (§1.1 Recon).
 
 ## 2. Scope of the read
 
-What was examined, and what was deliberately not. Name the files, trees, and surfaces. A reader should be able to tell whether a given area was covered or simply not looked at — silence is the most common source of false confidence in a recon.
+What was examined, named as files, trees and surfaces, with the searches §1.1 Recon runs. Name each area left out, so a reader can tell an area covered from one unexamined.
 
 ## 3. Findings
 
-Every claim about existing behaviour is verified against source at authoring time and cites file and symbol. Quote verbatim where the exact wording matters.
+Verify each finding against source at the **Read at:** commit (§1.2). Each claim the issue body makes is a finding to re-check (§1.3).
 
-| # | Finding | Evidence (file:line, symbol) | Severity |
-| --- | --- | --- | --- |
-| F1 | | | Critical / High / Medium / Low |
+- Quote verbatim where the exact wording matters.
+- Where a finding cites two files, say which one has the problem and which is there for contrast.
 
-Mark anything asserted-but-not-verified as such, explicitly. An unverified claim that looks verified is worse than an admitted gap.
+| # | Finding | Evidence (file:line, symbol) |
+| --- | --- | --- |
+| F1 | | |
 
-## 4. Options *(design study only — delete for a recon)*
+Mark a claim the read could not verify as unverified, so the reader sees the gap.
 
-For each real option: what it is, what it costs, what it forecloses.
+## 4. Governing rules and options *(design study)*
 
-### Option A — <name>
+**Governing rules.** The owner `docs/ARCHITECTURE.md` names for what changes, and each standard that applies, cited. The options are judged against these.
+
+For each option that survives the findings and the governing rules: what it is, what it costs, and what it closes off.
+
+### Option XX — <name>
 
 - **Approach:**
 - **Pros:**
 - **Cons:**
 
-### Option B — <name>
-
-**Recommendation:** <which, and why>. State the rationale in terms of what the project already does — the easiest path is not automatically the correct one.
+**Recommendation:** <which, and why>, argued from the governing rules above.
 
 ## 5. Open questions
 
-Numbered, so answers can be cited later (`Q3 answered YYYYMMDD: ...`). Each question should be one that changes the resulting work depending on the answer. If the answer wouldn't change anything, it isn't an open question.
+Numbered, so answers can be cited later (`Q3 answered YYYYMMDD: ...`). Each is a question whose answer changes the work, and it says whether the problem it asks about is real before framing it.
 
 | Q | Question | Answer |
 | --- | --- | --- |

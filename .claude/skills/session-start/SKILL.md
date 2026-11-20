@@ -72,16 +72,13 @@ All design authority lives here:
 
 Reviews every spec before implementation begins, against these criteria:
 
-1. Which acceptance criteria are not mechanically testable?
-2. Which claims about existing behavior were asserted rather than verified against code?
-3. Where is this spec under-specified such that an implementer would have to guess?
-4. What here is scope that wasn't in the originating item?
-5. For every boundary this spec crosses - function call, DB session, thread, transaction, schema change - what does each side assume about the other, and was that assumption checked against live source?
-6. Does this spec add something `docs/ARCHITECTURE.md` gives another owner, introduce a new path where an existing service, orchestrator or workflow already covers the case, or write its own version of a mechanism `docs/standards/3-code.md` §3.8 says to use?
-7. Which acceptance criteria could be satisfied by a change that does not achieve what the criterion is for? — how a criterion is worded so that difference is visible: `docs/standards/1-workflow.md` §1.2.
-8. Where does this spec state the same thing in more than one place, and do the statements agree? — how a revision keeps every statement in step: `docs/standards/1-workflow.md` §1.2.
+1. Does the spec meet `docs/standards/1-workflow.md` §1.2?
+2. Where is this spec under-specified such that an implementer would have to guess?
+3. What here is scope that wasn't in the originating item?
+4. For every boundary this spec crosses - function call, DB session, thread, transaction, schema change - what does each side assume about the other, and was that assumption checked against live source?
+5. Does this spec add something `docs/ARCHITECTURE.md` gives another owner, introduce a new path where an existing service, orchestrator or workflow already covers the case, or write its own version of a mechanism `docs/standards/3-code.md` §3.8 says to use?
 
-**Each pass runs in a session of its own**, opened with `/session-start Caliper <spec path>`, and a session runs one pass, because a session that has run a pass carries the text it read. The first pass reviews the whole spec against every criterion. A later pass reviews what changed since the pass before it, every statement those changes affect, and anything no pass has checked since it last changed. After implementation, on Ray's request, the pass reviews the delivered branch against the spec and its results artifact. Which review a run is: `references/caliper.md` § Choosing the review. When each review is required: `docs/standards/1-workflow.md` §1.2.
+**Each pass runs in a session of its own**, opened with `/session-start Caliper <spec path>`, and a session runs one pass, because a session that has run a pass carries the text it read. The first pass reviews the whole spec against every criterion. A later pass reviews what changed since the pass before it, every statement those changes affect, and anything no pass has checked since it last changed. After implementation, on Ray's request, the pass reviews the delivered branch against the spec and its results artifact. Which review a run is: `references/caliper.md` § Choosing the review. When each review is required: `docs/standards/1-workflow.md` §1.1.
 
 **Each finding is triaged** by what it is, which decides who acts on it and whether it blocks:
 
@@ -102,7 +99,7 @@ Works from approved specs only. Before step 1 it reads the spec end to end, chec
 
 Every implementation owes the following, whether or not the spec repeats it:
 
-- a commit at the end of each step — `docs/standards/1-workflow.md` §1.4
+- a commit at the end of each step — `docs/standards/1-workflow.md` §1.1
 - the results artifact as the last implementation step, with test counts in the form §6 states and every check that names Ray left to him — §1.1 § What shows each stage done, §1.2
 - no merge, version bump or restart; those are close-out's — §1.1
 
