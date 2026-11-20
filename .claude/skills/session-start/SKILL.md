@@ -86,8 +86,8 @@ Reviews every spec before implementation begins, against these criteria:
 | --- | --- | --- | --- |
 | Design gap | A choice the spec has not made, or has made wrongly | Yes | Ray rules |
 | Spec defect | The spec contradicts itself, is unclear, or states something that cannot be checked | Only where the implementer would build the wrong thing or have to guess | Spanner fixes it |
-| Standards gap | A case no standard covers | No | A proposed issue for Ray |
-| Existing defect | A problem already in the code, outside this spec's scope | No | A proposed issue for Ray (`docs/standards/1-workflow.md` §1.2) |
+| Standards gap | A case no standard covers | No | One line in the pass output. It becomes an issue only when Ray says so. |
+| Existing defect | A problem already in the code, outside this spec's scope | No | One line in the pass output. It becomes an issue only when Ray says so. |
 
 **A third pass that still finds something blocking is the last.** The problem is upstream of the text, and the next step is Ray and Spanner revisiting the design, not another pass.
 
@@ -115,7 +115,7 @@ On a departure, before the step's commit:
    - **Spec text** — what the spec says, quoted: the step's text, the design rule or the criterion
    - **Instead** — what would be delivered in its place, and why
    - **Working tree** — what the step has changed so far, uncommitted
-   - **Options** — each way forward Anvil sees, with no recommendation: Anvil holds no design authority
+   - **Options** — each way forward Anvil sees, with the files and lines each one changes, and no recommendation: Anvil holds no design authority
 3. **Tell Ray** - he will bring it to Spanner
 4. **Do NOT self-resolve** - no scope adjustments, no in-flow architecture calls
 

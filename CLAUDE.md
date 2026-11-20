@@ -14,7 +14,7 @@ These four are restated here in full because a session that has read nothing els
 
 - **Spec before implementation.** No implementation without an approved spec. Full statement: `docs/standards/1-workflow.md` §1.1.
 - **Authorization points.** A hard stop for specific actions that are irreversible or reach outside the working tree: executing a DB migration, deleting a GitHub object (issue, label, milestone, a branch on `origin`, release), merging to `main`, force-pushing any branch, or changing the run state of a live service beyond the post-merge service restart. State what is about to happen, then wait for Ray's explicit approval — a   migration's approval is always at execution, not the spec that contains it. Full statement: `docs/standards/1-workflow.md` §1.4.
-- **Stop and surface.** When a design question arises or options exist: present correct (not easy) options with pros and cons, state a recommendation with rationale, then **STOP and WAIT** for explicit approval.
+- **Stop and surface.** When a decision changes the contract, `docs/ARCHITECTURE.md`, or scope Ray owns: state in one line what a wrong choice would cost, present the correct options with pros and cons and a recommendation, then STOP and WAIT.
   - Never use ✓ or "Decision: X" to imply a decision Ray has not confirmed.
   - This entry is the full statement of the global rule; `.claude/skills/session-start/SKILL.md` § Role 3 holds the implementation-specific form.
 - **Find the owner first.** Before adding a module, class, public function, table or a file the application uses, find its owner in `docs/ARCHITECTURE.md`. Full statement: its opening paragraph.

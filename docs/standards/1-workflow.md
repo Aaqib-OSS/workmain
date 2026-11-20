@@ -92,7 +92,7 @@ The design study reads an issue body as dated evidence. It re-checks each claim 
 
 **Findings and parked issues.**
 
-- **A finding outside the work in hand goes to an issue.** Whoever finds it writes the issue as **What an issue holds** above states. It joins an open issue that already covers it, found by the search above, or it is parked. Ray decides which.
+- **A finding outside the work in hand is reported to Ray in one line.** It becomes an issue only when he says so. Its finder then writes it as **What an issue holds** above states, and it joins an open issue that already covers it, found by the search above, or it is parked.
 - **A parked finding is opened as its own issue.** When the search above finds no open issue covering it, it is opened as an issue labelled `parked`, after Ray approves it. Its **Where** names every file by path, because that is how recon finds it again. A parked issue sits on the board outside the scheduled work. The board walk passes over it (`.claude/skills/session-start/references/spanner.md` read 1). Ray schedules one by removing the label and placing it on the board.
 - **Recon finds parked work by file.** For each file the work will change, recon runs `gh issue list --state open --limit "$(gh repo view --json issues --jq .issues.totalCount)" --search "\"<path>\" in:body" --json number,title,labels`, and lists every issue it returns in its findings. Each `parked` issue found is one open question: fold it into this issue, or leave it parked. The recommendation states the finding's size, read from the code. Folding removes the `parked` label, and the finding joins this issue's scope and acceptance criteria. A search by file can return extra issues, and finds every issue that names the file.
 

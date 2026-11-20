@@ -55,6 +55,7 @@ chore/*    — documentation/process/tooling only. From main, merges to main AND
 
 - `main` and `dev` are the only branches on `origin`. **Working branches stay local** (`feature/*`, `hotfix/*`, `chore/*`) — feature branches merge to `dev` locally.
 - A working branch is deleted locally once it has merged everywhere §2.1 sends it. Close-out deletes the local branch only.
+
 **Every merge is `--no-ff`.**
 
 - `--no-ff` guarantees a merge commit.
@@ -65,9 +66,9 @@ chore/*    — documentation/process/tooling only. From main, merges to main AND
 
 ```text
 <type>(<scope>): <short description>
- 
+
 <body — what and why. Files changed, decisions made, expected test count.>
- 
+
 Co-Authored-By: Claude <model> <noreply@anthropic.com>
 ```
 
@@ -76,14 +77,15 @@ Types: `feat`, `fix`, `refactor`, `chore`, `docs`, `test`.
 - This is the **only** commit format. The subject describes the change; step context goes in the body — `feat(notes): converge write path` with `Step 3 of 7` in the body.
 - **Every commit runs the hooks.** `--no-verify` skips them.
 - **Stage by path** — `git add <path>`. Ray edits live `config/` in the working tree mid-session, and `git commit -a` sweeps his edit in under your message. Check `git status --short` first; stage only your own files and mention any others.
-- **Enforced by `.githooks/commit-msg`.** Enable it once per clone; `.git/hooks/` is outside version control:
+- **Enforced by `.githooks/commit-msg`.**
+  - The hook exempts merge, revert, and fixup/squash subjects, which git generates itself.
+  - It validates format; the scope and description are the author's check.
+
+Enable it once per clone; `.git/hooks/` is outside version control:
 
 ```bash
 git config core.hooksPath .githooks
 ```
-
-- The hook exempts merge, revert, and fixup/squash subjects, which git generates itself.
-- It validates format; the scope and description are the author's check.
 
 ### 2.5 Version bumps
 
@@ -96,6 +98,7 @@ A release (§2.2 `main`) updates these together:
 
 - `workmain/__version__.py`: `__version__` and `__version_info__`
 - `CHANGELOG.md`
+
 **The pre-push hook (`.githooks/pre-push`, running `automation/check_release_integrity.py`) accepts a push only when they agree.**
 
 ### 2.6 Deployment
