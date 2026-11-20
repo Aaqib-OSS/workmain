@@ -27,7 +27,7 @@ Every row is reported `pass`, `fail`, or `n/a`, **with its reason**, on every ru
 | --- | --- | --- | --- |
 | P1 | The working tree is clean | never | Commit or stash before running close-out |
 | P2 | The branch resolves — `git branch --show-current`, or `--branch <name>` for an already-merged branch | never | Check out the branch being closed out, or pass `--branch` |
-| P3 | The branch prefix is one of `chore`, `feature`, `hotfix` | never | `docs/standards/2-git.md` §2.2 defines three; a fourth is a mistake or a standards change this table has not caught up with |
+| P3 | The branch prefix is one of `chore`, `feature`, `hotfix` | never | `docs/standards/2-git.md` §2.1 defines three; a fourth is a mistake or a standards change this table has not caught up with |
 | P4 | Exactly one spec names this branch in its `**Branch:**` field — searching `docs/dev/specs/` then `docs/archive/specs/` — and its `**Status:**` is `Approved` or `Shipped` | never | No spec: `docs/standards/1-workflow.md` §1.1 permits no implementation without one. Several: the `**Branch:**` fields collide and one is wrong. `Shipped` is **not** a failure — it means an earlier run reached the artifact step, and § Resume point decides where this one starts. Resolving from `docs/archive/specs/` is **not** a failure either — it means an earlier run reached the archive step |
 | P5 | The results artifact exists in the `results/` directory of the root holding the spec `P4` resolved, and its `**Status:**` is one `docs/standards/1-workflow.md` §1.5 defines | never | Implementing Role writes it from `_TEMPLATE_RESULTS.md` as its last implementation step. Close-out is what sets it to `Shipped`; requiring that here would reproduce the re-entry defect this skill was corrected for |
 | P5a | The design artifact named by the spec's `**Design study:**` field exists, resolved relative to the spec itself (`docs/standards/1-workflow.md` §1.5 makes an intra-set pointer relative, so it lands in whichever root the spec was found in), and its `**Status:**` is one `docs/standards/1-workflow.md` §1.5 defines | the branch prefix is `chore` and the spec's `**Design study:**` field reads `n/a` — the direct path with no recon, `docs/standards/1-workflow.md` §1.1 | No field at all, or `n/a` on a `feature/*` or `hotfix/*` branch: `docs/standards/1-workflow.md` §1.1 requires a recon on the full path and permits `n/a` only in the direct path's stated form. Missing file: the citation is broken and the spec cannot be verified against what it was built from |
@@ -36,7 +36,7 @@ Every row is reported `pass`, `fail`, or `n/a`, **with its reason**, on every ru
 | P8 | `pytest` passes | never | Fix the failures; a close-out cannot proceed past a red suite |
 | P9 | `pytest automation/` passes | the branch changed no path under `automation/`, diffed against the merge base | Fix the failures |
 | P10 | `automation/check_release_integrity.py` exits zero | never | Repo-wide, so a `chore/*` branch can meet it without having caused it; the fix is the missing Release or `CHANGELOG.md` section it names |
-| P11 | Against the merge base: `workmain/__version__.py` is unchanged, no `CHANGELOG.md` section was added, and no tag points at the branch | branch type is `feature` or `hotfix`, where all three are required rather than forbidden | `docs/standards/2-git.md` §2.2 forbids all three on `chore/*`. **This is an assertion of absence and is never reported `n/a` for a `chore/*` branch** |
+| P11 | Against the merge base: `workmain/__version__.py` is unchanged, no `CHANGELOG.md` section was added, and no tag points at the branch | branch type is `feature` or `hotfix`, where all three are required rather than forbidden | `docs/standards/2-git.md` §2.2 makes a `chore/*` merge no release. **This is an assertion of absence and is never reported `n/a` for a `chore/*` branch** |
 
 **Where the artifacts are read from.** Only `P4` searches two roots, live first: `docs/dev/specs/` then `docs/archive/specs/`. It has to, because a close-out starts from a branch name and the spec could be in either. Everything else follows from the spec once found — the results artifact sits in the `results/` directory of the spec's own root, and the design artifact is named by a pointer relative to the spec — so neither needs a search.
 
@@ -74,7 +74,7 @@ Nothing else stops.
 
 - **The post-merge restart does not stop** — `docs/standards/1-workflow.md` §1.4.
 - Pushing `main` or `dev`, creating the tag, and creating the Release do not stop.
-- **Deleting the branch does not stop.** Working branches stay local (`docs/standards/2-git.md` §2.3), so the delete is a local ref removal, not the GitHub object deletion `docs/standards/1-workflow.md` §1.4’s set names. A branch that does exist on origin is the `docs/standards/1-workflow.md` §1.4 exception: deleting it there is a GitHub object deletion and stops.
+- **Deleting the branch does not stop.** Working branches stay local (`docs/standards/2-git.md` §2.3), so the delete is a local ref removal, not the GitHub object deletion `docs/standards/1-workflow.md` §1.4’s set names. A branch that does exist on `origin` is a GitHub object deletion under `docs/standards/1-workflow.md` §1.4, and stops.
 
 ## The closing comment
 
