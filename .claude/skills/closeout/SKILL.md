@@ -74,7 +74,7 @@ Nothing else stops.
 
 - **The post-merge restart does not stop** — `docs/standards/1-workflow.md` §1.4.
 - Pushing `main` or `dev`, creating the tag, and creating the Release do not stop.
-- **Deleting the branch does not stop.** Working branches stay local (`docs/standards/2-git.md` §2.3), so the delete is a local ref removal, not the GitHub object deletion `docs/standards/1-workflow.md` §1.4’s set names. A branch that does exist on origin is the `docs/standards/2-git.md` §2.3 exception: deleting it there is a GitHub object deletion and stops.
+- **Deleting the branch does not stop.** Working branches stay local (`docs/standards/2-git.md` §2.3), so the delete is a local ref removal, not the GitHub object deletion `docs/standards/1-workflow.md` §1.4’s set names. A branch that does exist on origin is the `docs/standards/1-workflow.md` §1.4 exception: deleting it there is a GitHub object deletion and stops.
 
 ## The closing comment
 
