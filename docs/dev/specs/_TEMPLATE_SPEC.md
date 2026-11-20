@@ -4,7 +4,7 @@
 **Author:** Spanner (Role 1)
 **Date:** YYYYMMDD
 **Read at:** <commit SHA §2 was verified at>
-**Branch:** `feature/<name>` (from `dev`) | `hotfix/<name>` (from `main`) | `chore/<name>`
+**Branch:** `<type>/issue-<N>-<slug>` (base: `docs/standards/2-git.md` §2.1)
 **Target release:** vX.Y.Z
 **Originating item:** Issue #N | Ray request, YYYYMMDD
 **Design study:** `../design/<file>.md` | `n/a` (direct path, where no recon ran)

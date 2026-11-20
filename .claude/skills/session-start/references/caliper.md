@@ -40,7 +40,7 @@ Run when § Choosing the review selects it — `docs/standards/1-workflow.md` §
 1. The spec, end to end.
 2. The results artifact that names the spec in its `**Spec:**` field, found with `git grep -l '^\*\*Spec:\*\* .*<spec file name>' <branch> -- <results dir>`, where `<results dir>` is `docs/dev/results/`.
 3. The originating issue: `gh issue view <N> --json number,title,body,labels,milestone,parent`
-4. `git diff <base>..<branch>` and `git log --format='%h %s%n%b' <base>..<branch>`. `<base>` is `git merge-base <parent> <branch>`, and `<parent>` is the branch `docs/standards/2-git.md` §2.2 names for the branch type: `main` for `chore/*` and `hotfix/*`, `dev` for `feature/*`.
+4. `git diff <base>..<branch>` and `git log --format='%h %s%n%b' <base>..<branch>`. `<base>` is `git merge-base <parent> <branch>`, and `<parent>` is the branch `docs/standards/2-git.md` §2.1 names for the branch type.
 
 ### Checks
 

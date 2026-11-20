@@ -74,7 +74,7 @@ Nothing else stops.
 
 - **The post-merge restart does not stop** — `docs/standards/1-workflow.md` §1.4.
 - Pushing `main` or `dev`, creating the tag, and creating the Release do not stop.
-- **Deleting the branch does not stop.** No working branch in this project is ever pushed (`docs/standards/2-git.md` §2.3), so the delete is a local ref removal, not the GitHub object deletion `docs/standards/1-workflow.md` §1.4's set names. A branch that *does* exist on `origin` is the `docs/standards/2-git.md` §2.3 exception: deleting it there is a GitHub object deletion and stops.
+- **Deleting the branch does not stop.** Working branches stay local (`docs/standards/2-git.md` §2.3), so the delete is a local ref removal, not the GitHub object deletion `docs/standards/1-workflow.md` §1.4’s set names. A branch that does exist on origin is the `docs/standards/2-git.md` §2.3 exception: deleting it there is a GitHub object deletion and stops.
 
 ## The closing comment
 
@@ -85,8 +85,8 @@ The body carries, in this order, every item that applies to the branch type:
 - the merge commit SHA on `main`, and the branch it merged
 - the path to the results artifact — its archived path, since the comment is composed after the archive step has moved it
 - the AC verdict from `automation/closeout_acs.py` — the verdict itself, not a restatement of the table
-- the version, the tag, and the Release URL — `feature/*` and `hotfix/*` only; `docs/standards/2-git.md` §2.2 gives `chore/*` none of the three
-- the confirmed `ActiveEnterTimestamp` — `feature/*` and `hotfix/*` only; `docs/standards/2-git.md` §2.6 requires no restart on `chore/*`
+- the version, the tag, and the Release URL — `feature/*` and `hotfix/*` only (`docs/standards/2-git.md` §2.2)
+- the confirmed ActiveEnterTimestamp — `feature/*` and `hotfix/*` only (`docs/standards/2-git.md` §2.6)
 - the PR number — `feature/*` only, which is where it first exists
 
 An item that does not apply to this branch type is omitted, not written as `n/a`.

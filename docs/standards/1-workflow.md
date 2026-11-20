@@ -5,7 +5,7 @@
 **The branch type decides the path.** The direct path has fewer checks because a document is easy to fix after the fact; application code is not, so the branch type decides the path, not the size of the change. §2.7 step 3 makes the branch type the first decision of any session, so the path is settled before work starts.
 
 - **`feature/*` and `hotfix/*` → the full path.** The change alters application behaviour.
-- **`chore/*` → the direct path.** §2.2 defines what `chore/*` covers: `docs/**`, standards documents, `.claude/`, and dev tooling that leaves application behaviour as it is.
+- **`chore/*` → the direct path.** §2.2 defines what it covers.
 
 **The stages each path runs**, in this order:
 
