@@ -102,7 +102,7 @@ An authorization point is an action that is irreversible or reaches outside the 
 
 | Action | Usually comes up in |
 | --- | --- |
-| Executing a DB migration against the live database. Building the test database from the migrations is a step. | Implementation, as a spec step |
+| Executing a DB migration against the live database. Ray approves it when it is about to run, separately from his approval of the spec that contains it. Building the test database from the migrations is a step. | Implementation, as a spec step |
 | Merging to `main` | Close-out |
 | Deleting a GitHub object: an issue, label, milestone, release, or a branch on `origin`. Deleting a local branch that was never pushed is a step (§2.3). | Close-out for a branch; any stage for the rest |
 | Force-pushing any branch | Any stage |
