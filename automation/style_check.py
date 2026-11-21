@@ -26,7 +26,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Set, Tuple
+from typing import Sequence
 
 from dotenv import dotenv_values
 
@@ -47,7 +47,7 @@ _BLOCK_START = re.compile(
     r"\s*([-*+]\s|\d+[.)]\s|#|\||>|<!--|---\s*$|\[\^?[^\]]*\]:|\*\*[^*]+:\*\*)"
 )
 
-Violation = Tuple[str, int, int, str]
+Violation = tuple[str, int, int, str]
 
 
 # ---------------------------------------------------------------- git
@@ -80,7 +80,7 @@ def base_branch(branch: str) -> str:
     return "dev" if branch.startswith("feature/") else "main"
 
 
-def changed_lines(base: str) -> Dict[str, Optional[Set[int]]]:
+def changed_lines(base: str) -> dict[str, set[int] | None]:
     """
     Find every file and line the working tree changed since it left `base`.
 
@@ -92,7 +92,7 @@ def changed_lines(base: str) -> Dict[str, Optional[Set[int]]]:
         new, or untracked, maps to None: every line in it counts as changed.
     """
     fork = _git("merge-base", "HEAD", base).strip()
-    out: Dict[str, Optional[Set[int]]] = {}
+    out: dict[str, set[int] | None] = {}
     current = None
     for line in _git("diff", "--unified=0", "--diff-filter=AM", fork).splitlines():
         if line.startswith("+++ "):
@@ -113,7 +113,7 @@ def changed_lines(base: str) -> Dict[str, Optional[Set[int]]]:
 # ---------------------------------------------------------------- real values
 
 
-def real_values(env: Path) -> List[str]:
+def real_values(env: Path) -> list[str]:
     """
     List the real values a `.env` file names in DEV_REAL_VALUES.
 
@@ -129,7 +129,7 @@ def real_values(env: Path) -> List[str]:
     return [entry.strip() for entry in raw.split(",") if entry.strip()]
 
 
-def _value_patterns(values: Sequence[str]) -> List[re.Pattern]:
+def _value_patterns(values: Sequence[str]) -> list[re.Pattern]:
     """
     Compile each value to match in any case, bounded only by ASCII letters and digits.
 
@@ -146,7 +146,7 @@ def _value_patterns(values: Sequence[str]) -> List[re.Pattern]:
 
 def real_value_violations(
     path: str, text: str, values: Sequence[str]
-) -> List[Violation]:
+) -> list[Violation]:
     """
     Find the lines of a file that hold a listed real value.
 
@@ -173,7 +173,7 @@ def real_value_violations(
     ]
 
 
-def commit_violations(base: str, values: Sequence[str]) -> List[Tuple[str, int]]:
+def commit_violations(base: str, values: Sequence[str]) -> list[tuple[str, int]]:
     """
     Find the branch's own commit messages that hold a listed real value.
 
@@ -204,7 +204,7 @@ def commit_violations(base: str, values: Sequence[str]) -> List[Tuple[str, int]]
 # ---------------------------------------------------------------- the checks
 
 
-def python_violations(paths: List[str]) -> List[Violation]:
+def python_violations(paths: list[str]) -> list[Violation]:
     """
     Run ruff over the given Python files.
 
@@ -242,7 +242,7 @@ def python_violations(paths: List[str]) -> List[Violation]:
     ]
 
 
-def history_violations(path: str, text: str) -> List[Violation]:
+def history_violations(path: str, text: str) -> list[Violation]:
     """
     Find citations of the process that produced the code in a Python file.
 
@@ -271,7 +271,7 @@ def history_violations(path: str, text: str) -> List[Violation]:
     ]
 
 
-def markdown_violations(path: str, text: str) -> List[Violation]:
+def markdown_violations(path: str, text: str) -> list[Violation]:
     """
     Find hard-wrapped lines in a Markdown file.
 
@@ -325,8 +325,8 @@ def markdown_violations(path: str, text: str) -> List[Violation]:
 
 
 def check(
-    changes: Dict[str, Optional[Set[int]]], values: Sequence[str] = ()
-) -> List[Violation]:
+    changes: dict[str, set[int] | None], values: Sequence[str] = ()
+) -> list[Violation]:
     """
     Check every changed line.
 
@@ -367,7 +367,7 @@ def check(
 # ---------------------------------------------------------------- main
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     """
     Check the current branch's changed lines and print the report.
 
