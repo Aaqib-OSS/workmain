@@ -8,15 +8,18 @@ target-version = "py312"
 extend-exclude = ["scripts-deprecated", "staging"]
 
 [tool.ruff.lint]
-# Only what docs/standards/3-code.md states. I: import order (§3.2). D100, D104: module and
-# package docstrings (§3.1). D101-D103, D106: docstrings on public classes and functions (§3.5).
-# D205, D213: summary on the line after the opening quotes, then a blank line (the §3.1 and
-# §3.5 examples). D417: every argument appears under Args (§3.5). ANN: type hints on every
-# parameter and return (§3.5).
+# Only what docs/standards/3-code.md and docs/ARCHITECTURE.md state. I: import order
+# (§3.2). D100: module docstrings (§3.1). D104: package docstrings (docs/ARCHITECTURE.md
+# §1, Packages). D101-D103, D106: docstrings on public classes and functions (§3.5).
+# D205, D213: summary on the line after the opening quotes, then a blank line (the §3.1
+# and §3.5 examples). D417: every argument appears under Args (§3.5). ANN: type hints on
+# every parameter and return (§3.5). UP006, UP007, UP045: built-in generics and | in
+# type hints (§3.5).
 select = [
     "I",
     "D100", "D101", "D102", "D103", "D104", "D106", "D205", "D213", "D417",
     "ANN001", "ANN002", "ANN003", "ANN201", "ANN202", "ANN204", "ANN205", "ANN206",
+    "UP006", "UP007", "UP045",
 ]
 
 [tool.ruff.lint.isort]

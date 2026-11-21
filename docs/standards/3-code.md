@@ -1,10 +1,12 @@
 ## 3. Code Standards
 
-`automation/style_check.py` checks §3.1's module docstrings, §3.2's import order and §3.5's docstrings and type hints, and §3.1's history citations, on every line a branch changes, with the rules configured in `pyproject.toml`.
+Comments, docstrings and strings describe the code as it is. Git and the issue hold how it came to be, including any gate, phase, sprint, backlog item or open question.
+
+`automation/style_check.py` checks every line a branch changes against the rules here that a tool can check. `pyproject.toml` `[tool.ruff.lint]` maps each rule code it uses to its section.
 
 ### 3.1 Module headers
 
-- PEP 257 module docstring: a one-line summary, then a paragraph describing what the module does and why. **No version, no date, no version-history block** — git tags, `CHANGELOG.md`, and `workmain/__version__.py` are the version record. **No terminal command, no instruction to set an environment variable, no command-line flag, no terminal invocation, no trigger for when to run something, and no inventory of the module's own contents.** Naming an environment variable the module reads, or the API call that yields an instance of it, is a description of what the module requires and how it is obtained, and belongs here. A command belongs to `argparse` or to a Click command's own docstring (§5.6), which is where a reader looking for it will be.
+- A module docstring follows PEP 257: a one-line summary, then a paragraph saying what the module does, why, and what it requires, such as an environment variable it reads or the call that yields an instance of it. Git tags, `CHANGELOG.md` and `workmain/__version__.py` are the version record.
 
   ```python
   """
@@ -16,45 +18,17 @@
   """
   ```
 
-- **Code never cites the process that produced it.** No gate, phase, sprint, backlog item or open-question tag in a comment, docstring or string: git and the issue hold how the code came to be.
-- *NOTE: Duplicating version history in every file was retired in v1.29.0.*
-
 ### 3.2 Import organization
 
 - Standard library, then third-party, then local, with a blank line between groups.
 
-### 3.3 Singletons
-
-- Module-level `_<name>_instance = None`, created on first call, accessed through a **descriptive** getter.
-
-  ```python
-  _tag_system_instance = None
-
-  def get_tag_system() -> TagSystem:
-      """Get singleton instance of TagSystem."""
-      global _tag_system_instance
-      if _tag_system_instance is None:
-          _tag_system_instance = TagSystem()
-      return _tag_system_instance
-  ```
-
-| Correct | Wrong |
-| --- | --- |
-| `get_tag_system()` | `get_tags()` |
-| `get_template_loader()` | `get_loader()` |
-| `get_template_validator()` | `get_validator()` |
-| `get_style_adapter()` | `get_adapter()` |
-
-### 3.4 Package `__init__.py`
-
-- Moved to `docs/ARCHITECTURE.md` section 1, Packages: an `__init__.py` holds a one-sentence docstring and nothing else.
-
 ### 3.5 Function and class docstrings
 
-- **This section governs functions and classes. It does not govern module headers, which are §3.1's.** Type hints on every parameter and return. Google-style docstrings on every public function and class — `Args:`, `Returns:`, `Raises:`, `Attributes:`. Those blocks belong to a function or a class and never appear in a module header.
+- Every parameter and return has a type hint, written with built-in generics and `|`: `list[str]`, `dict[str, int]`, `int | None`.
+- Every public function and class has a Google-style docstring, with the `Args:`, `Returns:`, `Raises:` and `Attributes:` blocks that apply.
 
   ```python
-  def create(self, content: str, tags: List[str], project_id: Optional[int] = None) -> Note:
+  def create(self, content: str, tags: list[str], project_id: int | None = None) -> Note:
       """
       Create a new note.
 
@@ -68,13 +42,10 @@
       """
   ```
 
-### 3.6 NOT USED
-
 ### 3.7 Security
 
-- Never commit secrets.
-- All secrets are stored as KV pairs in the .env and utilized through python-dotenv
-- Nothing encrypts secrets at rest; `.env` must be `chmod 600`.
+- A secret is read from `.env` through python-dotenv, or from a file under `~/.workmain/` named by the module that reads it.
+- `.env` and every secret file under `~/.workmain/` are mode 600.
 
 ### 3.8 Framework mechanisms first
 
@@ -84,7 +55,8 @@
 
 | Job | Written by hand | Use instead |
 | --- | --- | --- |
-| Ask for a number from 1 to `n` | A loop that converts and bounds-checks the input. One that rejects only `0` and values above `n` accepts `-1`, which Python reads as an index from the end of the list. | `click.prompt(..., type=click.IntRange(1, n))` |
+| Ask for a number from 1 to `n` | A loop that converts and bounds-checks the input | `click.prompt(..., type=click.IntRange(1, n))` |
 | Restrict an option to fixed values | An `if value not in (...)` check in the command body | `type=click.Choice([...])` on the option |
 | Parse a `YYYY-MM-DD` date | Splitting on `-` and building a `date` from the parts | `date.fromisoformat(value)` |
 | Build a file path | Joining strings with `/` | `pathlib.Path(base) / name` |
+| Share one instance per run | A module variable and a `None` check in the getter | `@functools.cache` on a getter named for what it returns, such as `get_tag_system()` |

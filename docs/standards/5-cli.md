@@ -118,7 +118,7 @@
 
 - Destructive or externally-sending commands must confirm unless `--force` is passed, and the prompt must state exactly what will happen.
 
-- Every Click command function needs a docstring, with a one-line summary and at least one `Examples:` block. That docstring *is* the `--help` output, so it is written for the person running the command and is the one place invocations and flags belong. It is not a module header — §3.1 governs those and excludes exactly this content.
+- Every Click command function needs a docstring, with a one-line summary and at least one `Examples:` block. That docstring *is* the `--help` output, so it is written for the person running the command and is the one place invocations and flags belong.
 
 ### 5.7 Files and registration
 
