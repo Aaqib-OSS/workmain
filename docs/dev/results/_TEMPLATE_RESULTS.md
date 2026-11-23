@@ -53,7 +53,7 @@ Every departure (`.claude/skills/session-start/SKILL.md` § Role 3) is listed he
 | # | Departure or ambiguity | Step stopped at | Resolution | Resolved by |
 | --- | --- | --- | --- | --- |
 
-**Decisions below the contract.** Each choice the spec left to the implementer (`.claude/skills/session-start/SKILL.md` § Role 3), recorded as it was made.
+**Decisions below the contract.** Each choice the spec left to the implementer (`.claude/skills/session-start/SKILL.md` § Role 3), copied at the last step from the step commits that recorded them (.claude/skills/session-start/references/anvil.md § Working rules).
 
 | # | Step | Decision | Considered instead | Why |
 | --- | --- | --- | --- | --- |
