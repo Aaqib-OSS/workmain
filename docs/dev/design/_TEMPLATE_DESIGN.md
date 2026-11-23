@@ -2,7 +2,7 @@
 
 **Status:** Active | Shipped | Superseded
 **Kind:** Design study | Recon
-**Author:** Spanner (Role 1)
+**Author:** Spanner
 **Date:** YYYYMMDD
 **Read at:** <commit SHA the read was taken at>
 **Originating item:** Issue #N | Ray request, YYYYMMDD

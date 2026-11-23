@@ -1,7 +1,7 @@
 # <Title> — Implementation Results
 
 **Status:** Active | Shipped | Superseded
-**Author:** Anvil (Role 3) | Spanner (Role 1)
+**Author:** Anvil | Spanner
 **Date:** YYYYMMDD
 **Spec:** `../specs/<file>_SPEC.md`
 **Released as:** vX.Y.Z (tag vX.Y.Z) | `n/a`
@@ -47,7 +47,7 @@ Each unmet AC is listed here and carried to an issue, cited by its number: an op
 Every departure (`.claude/skills/session-start/SKILL.md` § Role 3) is listed here with how it was handled and resolved, and who resolved it. `Step stopped at` holds one of three values:
 
 - **The step number** — the implementer stopped there, before the step's commit. `Resolution` is what Ray decided; `Resolved by` is `Ray, <date>`.
-- **`within approved meaning`** — Role 1 only, on its own direct-path spec: a wording or mechanical change made within the meaning, scope and file set Ray approved (`.claude/skills/session-start/references/spanner.md` § Working rules). `Resolution` is the change; `Resolved by` is `Role 1, <date>`.
+- **`within approved meaning`** — Spanner only, on its own direct-path spec: a wording or mechanical change made within the meaning, scope and file set Ray approved (`.claude/skills/session-start/references/spanner.md` § Working rules). `Resolution` is the change; `Resolved by` is `Spanner, <date>`.
 - **`none`** — the change was made without the stop it required, an unstopped departure (§1.1 Implementation review). It is listed so the record shows it. `Resolution` is what was done; when the row is written, and what `Resolved by` holds, is `SKILL.md` § Role 3.
 
 | # | Departure or ambiguity | Step stopped at | Resolution | Resolved by |

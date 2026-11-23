@@ -1,7 +1,7 @@
 # <Title> — Spec
 
 **Status:** Draft | Approved | Shipped | Superseded
-**Author:** Spanner (Role 1)
+**Author:** Spanner
 **Date:** YYYYMMDD
 **Read at:** <commit SHA §2 was verified at>
 **Branch:** `<type>/issue-<N>-<slug>` (base: `docs/standards/2-git.md` §2.1)

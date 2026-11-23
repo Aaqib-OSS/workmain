@@ -16,32 +16,32 @@
 | Spec | Required | Required |
 | Review | Required | Ray decides at the start |
 | Approval | Required | Required |
-| Implementation | Required, by Role 3 | Required, by Role 1 |
+| Implementation | Required, by Anvil | Required, by Spanner |
 | Implementation review | Required | Where Review ran |
 | Close-out | Required | Required |
 
 **What shows each stage done.** Each stage is done when its artifact or field shows it. The condition is the same on both paths unless the stage says otherwise.
 
-- **Recon** — Role 1 makes a read-only pass and records its findings verbatim in `docs/dev/design/`. Fixes belong to the spec, and suggestions to the design study's options. Where the findings turn up options, a trade-off, or questions whose answers change the work, the artifact is a design study: it adds the options with a recommendation and the open questions (`docs/dev/design/_TEMPLATE_DESIGN.md`). Recon also runs §1.3's search by file for every file the work will change, and the artifact lists what it returns. On the direct path, recon earns its place when the change spans documents that may contradict each other, and every site of a rule has to be found before the change can be specified.
+- **Recon** — Spanner makes a read-only pass and records its findings verbatim in `docs/dev/design/`. Fixes belong to the spec, and suggestions to the design study's options. Where the findings turn up options, a trade-off, or questions whose answers change the work, the artifact is a design study: it adds the options with a recommendation and the open questions (`docs/dev/design/_TEMPLATE_DESIGN.md`). Recon also runs §1.3's search by file for every file the work will change, and the artifact lists what it returns. On the direct path, recon earns its place when the change spans documents that may contradict each other, and every site of a rule has to be found before the change can be specified.
   - *Done when* a `docs/dev/design/` artifact names the issue in its `**Originating item:**` field.
   - Where no recon runs, the spec's `**Design study:**` field reads `n/a`, which `/closeout`'s `P5a` accepts on a `chore/*` spec alone.
-- **Analysis** — Ray and Role 1 answer the design artifact's open questions. Each decision in the spec's Decision Log cites the question it answers.
+- **Analysis** — Ray and Spanner answer the design artifact's open questions. Each decision in the spec's Decision Log cites the question it answers.
   - *Done when* every row of that artifact's §5 Open questions carries an answer.
 - **Spec** — written to `docs/dev/specs/` from its template. The template states which sections a direct-path spec may omit, and §1.2 how it verifies existing state.
   - *Done when* a `docs/dev/specs/` artifact names the issue in its `**Originating item:**` field.
-- **Review** — Role 2 reviews the spec in a Caliper pass (`.claude/skills/session-start/SKILL.md` § Role 2), and its findings go to Role 1.
+- **Review** — Caliper reviews the spec in a Caliper pass (`.claude/skills/session-start/SKILL.md` § Role 2), and its findings go to Spanner.
   - *Done when* the spec's last `Caliper` row, by its position in the Decision Log, is a pass row (`.claude/skills/session-start/references/caliper.md` § Emits) that reports no blocking finding and names the commit the pass read, and every blocking `Caliper` finding has a resolution. A non-blocking finding is resolved or recorded, and Review stays done. A `Caliper` row is one whose Source is exactly `Caliper`.
   - On the direct path, the stage is `n/a` where the spec's `**Status:**` is `Approved` and it carries no `Caliper` row.
 - **Approval** — Ray approves the spec explicitly. Implementation starts from an approved spec.
   - *Done when* the spec's `**Status:**` is `Approved`. Where the spec carries a `Caliper` row, `**Status:**` is first set to `Approved` only when `git diff <commit> -- <spec path>`, run before that edit with the commit the Review stage's pass row names, shows changes only to Decision Log rows and the resolutions of that pass's non-blocking findings.
   - An edit to the spec while `**Status:**` is `Approved`, other than a Decision Log row, a change to the `**Status:**` field itself, and the amendment a Keep ruling makes (§1.1 Implementation review), sets `**Status:**` back to `Draft` in the same commit, and Ray approves it again.
-- **Implementation** — step by step, from the approved spec. On the full path Role 3 implements. On the direct path Role 1 implements in the session that wrote the spec: each step quotes its exact replacement text, so a separate implementer would only transcribe it. Each step ends with a commit, and the next step begins. A departure stops the step before its commit: Anvil stops on every departure (`.claude/skills/session-start/SKILL.md` § Role 3), and Role 1 on one that changes the meaning, scope or file set Ray approved (`.claude/skills/session-start/references/spanner.md` § Working rules).
+- **Implementation** — step by step, from the approved spec. On the full path Anvil implements. On the direct path Spanner implements in the session that wrote the spec: each step quotes its exact replacement text, so a separate implementer would only transcribe it. Each step ends with a commit, and the next step begins. A departure stops the step before its commit: Anvil stops on every departure (`.claude/skills/session-start/SKILL.md` § Role 3), and Spanner on one that changes the meaning, scope or file set Ray approved (`.claude/skills/session-start/references/spanner.md` § Working rules).
   - *Done when* a results artifact in `docs/dev/results/` names the spec in its `**Spec:**` field. The implementing role writes it as its last implementation step, checking every acceptance criterion against the delivered code.
-- **Implementation review** — on Ray's request, Role 2 reviews the delivered branch against the spec and its results artifact, in a Caliper session of its own. `.claude/skills/session-start/references/caliper.md` § Post-implementation review states its reads and checks. Findings go to Role 1.
+- **Implementation review** — on Ray's request, Caliper reviews the delivered branch against the spec and its results artifact, in a Caliper session of its own. `.claude/skills/session-start/references/caliper.md` § Post-implementation review states its reads and checks. Findings go to Spanner.
   - **An unstopped departure** is a change on the branch that skipped the stop it required: a change outside the spec, a results §4 row whose `Step stopped at` is `none`, or a `within approved meaning` change that altered the meaning, scope or file set Ray approved. Ray rules on each one with one of two outcomes:
     - **Revert** — the change is reverted on the branch, and carried to an issue under §1.3 if it is still wanted.
     - **Keep** — the spec is amended so the change traces to it.
-  - The ruling's home is the resolution of the finding's Decision Log row. Role 1 writes it there and writes the outcome into the spec, and the implementing role carries it out.
+  - The ruling's home is the resolution of the finding's Decision Log row. Spanner writes it there and writes the outcome into the spec, and the implementing role carries it out.
   - *Done when* the spec's Decision Log carries at least one `Caliper (post-implementation)` row, and every one has a resolution. A clean pass is the `No findings.` row the review emits for one.
   - On the direct path, the stage is `n/a` where the spec carries no `Caliper` row.
 - **Close-out** — Ray runs the `/closeout` skill (`.claude/skills/closeout/SKILL.md`), the same run on both paths. Posting the issue's closing comment and closing the issue are Ray's, on the same principle as merging the `dev → main` PR.
@@ -112,7 +112,7 @@ An authorization point is an action that is irreversible or reaches outside the 
 
 **Artifacts.**
 
-- Dev artifacts live where §7 places them. Each `docs/dev/` subdirectory holds a `_TEMPLATE_*.md` starting point; templates are advisory, and Role 2 reviews the content.
+- Dev artifacts live where §7 places them. Each `docs/dev/` subdirectory holds a `_TEMPLATE_*.md` starting point; templates are advisory, and Caliper reviews the content.
 - **Git is the version record.** A filename carries the subject alone, and an artifact is edited in place, so filenames and citations stay stable.
 - **Every artifact carries exactly one `Status:` field, in its header block.**
   - Specs carry `Draft`, `Approved`, `Shipped` or `Superseded`.
