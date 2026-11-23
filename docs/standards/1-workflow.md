@@ -29,7 +29,7 @@
   - *Done when* every row of that artifact's §5 Open questions carries an answer.
 - **Spec** — written to `docs/dev/specs/` from its template. The template states which sections a direct-path spec may omit, and §1.2 how it verifies existing state.
   - *Done when* a `docs/dev/specs/` artifact names the issue in its `**Originating item:**` field.
-- **Review** — Caliper reviews the spec in a Caliper pass (`.claude/skills/session-start/SKILL.md` § Role 2), and its findings go to Spanner.
+- **Review** — Caliper reviews the spec in pass (`.claude/skills/session-start/SKILL.md` § Role 2), and its findings go to Spanner.
   - *Done when* the spec's last `Caliper` row, by its position in the Decision Log, is a pass row (`.claude/skills/session-start/references/caliper.md` § Emits) that reports no blocking finding and names the commit the pass read, and every blocking `Caliper` finding has a resolution. A non-blocking finding is resolved or recorded, and Review stays done. A `Caliper` row is one whose Source is exactly `Caliper`.
   - On the direct path, the stage is `n/a` where the spec's `**Status:**` is `Approved` and it carries no `Caliper` row.
 - **Approval** — Ray approves the spec explicitly. Implementation starts from an approved spec.
@@ -37,7 +37,7 @@
   - An edit to the spec while `**Status:**` is `Approved`, other than a Decision Log row, a change to the `**Status:**` field itself, and the amendment a Keep ruling makes (§1.1 Implementation review), sets `**Status:**` back to `Draft` in the same commit, and Ray approves it again.
 - **Implementation** — step by step, from the approved spec. On the full path Anvil implements. On the direct path Spanner implements in the session that wrote the spec: each step quotes its exact replacement text, so a separate implementer would only transcribe it. Each step ends with a commit, and the next step begins. A departure stops the step before its commit: Anvil stops on every departure (`.claude/skills/session-start/SKILL.md` § Role 3), and Spanner on one that changes the meaning, scope or file set Ray approved (`.claude/skills/session-start/references/spanner.md` § Working rules).
   - *Done when* a results artifact in `docs/dev/results/` names the spec in its `**Spec:**` field. The implementing role writes it as its last implementation step, checking every acceptance criterion against the delivered code.
-- **Implementation review** — on Ray's request, Caliper reviews the delivered branch against the spec and its results artifact, in a Caliper session of its own. `.claude/skills/session-start/references/caliper.md` § Post-implementation review states its reads and checks. Findings go to Spanner.
+- **Implementation review** — on Ray's request, Caliper reviews the delivered branch against the spec and its results artifact, in a session of its own. `.claude/skills/session-start/references/caliper.md` § Post-implementation review states its reads and checks. Findings go to Spanner.
   - **An unstopped departure** is a change on the branch that skipped the stop it required: a change outside the spec, a results §4 row whose `Step stopped at` is `none`, or a `within approved meaning` change that altered the meaning, scope or file set Ray approved. Ray rules on each one with one of two outcomes:
     - **Revert** — the change is reverted on the branch, and carried to an issue under §1.3 if it is still wanted.
     - **Keep** — the spec is amended so the change traces to it.

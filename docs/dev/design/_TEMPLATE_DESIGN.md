@@ -5,7 +5,7 @@
 **Author:** Spanner
 **Date:** YYYYMMDD
 **Read at:** <commit SHA the read was taken at>
-**Originating item:** Issue #N | Ray request, YYYYMMDD
+**Originating item:** Issue #N
 
 > Delete this block before use.
 >

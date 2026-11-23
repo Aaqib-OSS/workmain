@@ -92,7 +92,7 @@ git config core.hooksPath .githooks
 | Merge type | Change | Example |
 | --- | --- | --- |
 | Hotfix → main | Patch | 1.3.0 → 1.3.1 |
-| Feature/phase → dev → main | Minor | 1.3.1 → 1.4.0 |
+| Feature → dev → main | Minor | 1.3.1 → 1.4.0 |
 
 A release (§2.2 `main`) updates these together:
 
