@@ -79,7 +79,6 @@ htmlcov/
 test_notes-*.md
 
 # Legacy manual scripts — not part of pytest suite, local only
-scripts-deprecated/
 tests/google_drive/
 
 

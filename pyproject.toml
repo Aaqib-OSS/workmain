@@ -5,7 +5,7 @@ filterwarnings = ["error::pytest.PytestReturnNotNoneWarning"]
 
 [tool.ruff]
 target-version = "py312"
-extend-exclude = ["scripts-deprecated", "staging"]
+extend-exclude = ["staging"]
 
 [tool.ruff.lint]
 # Only what docs/standards/3-code.md and docs/ARCHITECTURE.md state. I: import order
