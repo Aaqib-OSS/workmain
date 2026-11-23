@@ -117,7 +117,8 @@ An authorization point is an action that is irreversible or reaches outside the 
 - **Every artifact carries exactly one `Status:` field, in its header block.**
   - Specs carry `Draft`, `Approved`, `Shipped` or `Superseded`.
   - Design and results artifacts carry `Active`, `Shipped` or `Superseded`.
-- **An artifact stays in `docs/dev/` while its work is live.** When its issue closes out, `/closeout` moves the set to `docs/archive/<type>/`, which mirrors `docs/dev/<type>/`. `docs/dev/` is authoritative, and the archive is kept for reference.
+- **An artifact stays in `docs/dev/` while its work is live.** When its issue closes out, `/closeout` moves the set to `docs/archive/<type>/`, which mirrors `docs/dev/<type>/`.
+- **`docs/dev/` is authoritative; the archive is history.** An archived artifact records the system as it was when its work shipped, and later work may have changed it. A current decision rests on the standards, `docs/ARCHITECTURE.md` and current source.
 - **A pointer within a set is relative; every other path starts from the repository root.** A set is a spec, its design study and its results artifact, which are archived together: **Design study:** `../design/<file>.md` from a spec, **Spec:** `../specs/<file>_SPEC.md` from a results artifact.
 - **Specs carry a Decision Log** of decisions and review findings, each with its resolution.
 

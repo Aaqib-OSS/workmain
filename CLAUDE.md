@@ -1,10 +1,8 @@
 # CLAUDE.md - WorkmAIn Project Context
 
-All output — chat, specs, design docs, commit messages, code comments — is direct, concise, and plainly spoken. Every fact, decision, and rule has exactly one home. State it there; everywhere else cites it. Do not summarize back what the reader can already read: not the artifact in chat, not a section in another section, not a design rule in a decision log.
+All output — chat, specs, design docs, commit messages, code comments — is direct, concise, and plainly spoken. Every fact, decision, and rule has exactly one home. State it there; everywhere else cites it. Point to what the reader can already read: the artifact in chat, a section from another section, a design rule from a decision log.
 
 **`docs/standards/` owns how we build** — git workflow, code patterns, database, CLI, and testing. `docs/standards/README.md` is its header and index.
-
-The only text restated from it is the § Critical Rules subset; nothing else appears in both.
 
 ---
 
@@ -12,26 +10,24 @@ The only text restated from it is the § Critical Rules subset; nothing else app
 
 These four are restated here in full because a session that has read nothing else must still have them. This section is the one place in the project where duplication is deliberate; `docs/standards/README.md` states the same carve-out. Membership is Ray-approved: an entry is added, reworded, or removed only with his explicit approval.
 
-- **Spec before implementation.** No implementation without an approved spec. Full statement: `docs/standards/1-workflow.md` §1.1.
+- **Spec before implementation.** Implementation starts from an approved spec. Full statement: `docs/standards/1-workflow.md` §1.1.
 - **Authorization points.** A hard stop for specific actions that are irreversible or reach outside the working tree: executing a DB migration against the live database, deleting a GitHub object (issue, label, milestone, a branch on `origin`, release), merging to `main`, force-pushing any branch, or changing the run state of a live service beyond the post-merge service restart. State what is about to happen, then wait for Ray's explicit approval — a migration's approval is always at execution, not the spec that contains it. Full statement: `docs/standards/1-workflow.md` §1.4.
 - **Stop and surface.** When a decision changes the contract, `docs/ARCHITECTURE.md`, or scope Ray owns: state in one line what a wrong choice would cost, present the correct options with pros and cons and a recommendation, then STOP and WAIT.
-  - Never use ✓ or "Decision: X" to imply a decision Ray has not confirmed.
+  - Mark a decision made (✓, "Decision: X") only once Ray confirms it.
   - This entry is the full statement of the global rule; `.claude/skills/session-start/SKILL.md` § Role 3 holds the implementation-specific form.
 - **Find the owner first.** Before adding a module, class, public function, table or a file the application uses, find its owner in `docs/ARCHITECTURE.md`. Full statement: its opening paragraph.
-
-Coding, database, CLI, git, and testing rules all live in `docs/standards/`.
 
 ---
 
 ## THREE-ROLE MODEL ⭐
 
-A session opens in its declared role with `/session-start <role>`. What each role is, does and hands to the others is `.claude/skills/session-start/SKILL.md` § THREE-ROLE MODEL, and is stated nowhere else. The one exception is a rule for how a single role works: it sits in that role's `.claude/skills/session-start/references/<role>.md` § Working rules, which no other role's session loads.
+A session opens in its declared role with `/session-start <role>`. What each role is, does and hands to the others is `.claude/skills/session-start/SKILL.md` § THREE-ROLE MODEL.
 
 ---
 
 ## Auto-memory
 
-Claude Code auto-memory is off for this repository: `.claude/settings.json` sets `autoMemoryEnabled` to `false`. No instruction is carried by memory. A rule lives in this file, in `docs/standards/`, or in the skill that governs its role, and a correction Ray gives in a session is made there, through a spec like any other change.
+Claude Code auto-memory is off for this repository: `.claude/settings.json` sets `autoMemoryEnabled` to `false`. Every instruction lives in a file: this one, `docs/standards/`, or the skill that governs its role, and a correction Ray gives in a session is made there, through a spec like any other change.
 
 ---
 
@@ -40,31 +36,31 @@ Claude Code auto-memory is off for this repository: `.claude/settings.json` sets
 - **Version:** `workmain/__version__.py` · **Work tracking:** GitHub Issues (`gh issue list`)
 - **Test suite:** `pytest`
 
-Item state, priority, and sequencing live in GitHub Issues — never in a document. Read them with the JSON fields, not the plain list, so parent/child structure and milestone are visible:
+Item state lives in GitHub Issues, and the order on the `WorkmAIn Queue` board (`docs/standards/1-workflow.md` §1.6). Read them with the JSON fields, not the plain list, so parent/child structure and milestone are visible:
 
 ```bash
 gh issue list --state open --limit "$(gh repo view --json issues --jq .issues.totalCount)" \
   --json number,title,state,milestone,labels,parent,subIssuesSummary
 ```
 
-That command reads issue *content*. Order is separate and lives in the `WorkmAIn Queue` project — see `docs/standards/1-workflow.md` §1.6.
+That command reads issue *content*.
 
-Requires `gh` ≥ 2.6x for `parent` / `subIssues` / `subIssuesSummary` (Issues 2.0 support).
+Requires `gh` 2.105.0 or later, the version this project runs, for `parent` / `subIssues` / `subIssuesSummary` (Issues 2.0 support).
 
 What milestones, labels, and parent/child structure mean: `docs/standards/1-workflow.md` §1.3.
 
-`docs/archive/FEATURE_BACKLOG.md` and `docs/archive/implementation-checklist.md` hold the pre-migration record for historical context only. They are not authoritative, are never updated, and must not be cited as the basis for a current decision.
+`docs/archive/FEATURE_BACKLOG.md` and `docs/archive/implementation-checklist.md` are the pre-migration record, kept for reference (`docs/standards/1-workflow.md` §1.5).
 
 **Operating context:**
 
 - Ray is a Security Engineer (CSIRT / data engineering) and holds final authority on all documentation and design changes.
 - Correct architecture over expedient solutions — a DB schema refactor is the canonical cost of a shortcut, and that framing governs architectural choices.
-- Document the "why", not just the "what".
+- Document the "why" with the "what".
 
 | Document | Read it |
 | --- | --- |
 | `docs/standards/README.md` | Before committing, or writing any module, command, or test — it names the section file each needs |
-| GitHub Issues — see command below | Before proposing features; check issue state, milestone, parent/sub-issues, and ACs |
+| GitHub Issues | Before proposing features; check issue state, milestone, parent/sub-issues, and ACs |
 | `docs/AI_SETTINGS_GUIDE.md` | When editing AI provider config |
 
 ---
@@ -124,7 +120,7 @@ Input 24-hour preferred (`1430` or `14:30`); AM/PM accepted. Stored as PostgreSQ
 - `config/providers/ollama/models/workmain-intent/Modelfile` is the intent model's only source: its SYSTEM prompt, its PARAMETER values, and a `# version:` line that is Ray's build record.
 - The application references the model only as `workmain-intent:latest`, in `config/ai_settings.json` `providers.ollama.model`. A version tag is never application configuration.
 
-**Model change workflow:** edit the Modelfile and its `# version:` line → Ray runs the IaC build, which creates `workmain-intent:latest` and tags the version. Nothing else in workmain changes.
+**Model change workflow:** edit the Modelfile and its `# version:` line → Ray runs the IaC build, which creates `workmain-intent:latest` and tags the version. The Modelfile is the only workmain file the change touches.
 
 ### OLLAMA_KEEP_ALIVE
 
@@ -132,17 +128,16 @@ Always `-1`, and it must be set in **both** places: the Ollama systemd service o
 
 ### Report Correction Fields
 
-Different fields, different write paths. **Never conflate them.**
+Different fields, different write paths. **Each field has its own writers.**
 
 - `corrected_content` (TEXT) - the full edited report text. Written **only** by the `$EDITOR` path (`workmain reports correct` and the eod_workflow `[e]dit` branch).
-  - Never by action_executor.
 - `correction_note` (TEXT) - the correction description or intent. Written by `action_executor._execute_correct_report` (Slack / intent flag path) and the EOD `[e]dit` path, for both daily and weekly reports.
 
 ### Slack - Socket Mode
 
-- Inbound via Socket Mode (`xapp-` token, `SLACK_SOCKET_TOKEN` in `.env`) — the polling loop was deleted at v1.23.0.
+- Inbound via Socket Mode (`xapp-` token, `SLACK_SOCKET_TOKEN` in `.env`).
 - Block Kit for confirmation UX, plain text fallback when unavailable.
-- `client_id` is system-derived in Slack context — never user-supplied.
+- `client_id` is system-derived in Slack context.
 - `project_id` resolution from Slack is deferred indefinitely (no ProjectsRepository).
 
 ### Note Write-Path Convergence - Source of Truth
@@ -157,7 +152,7 @@ No file under `workmain/` outside `notes_service.py` calls `TaskStatusRepository
 
 ### Client Reference
 
-WorkmAIn is developed while in live use, and the repository is public. Until development no longer runs against live data, nothing published from this repository — a tracked file, a commit message, or issue or pull request text — contains a real value: a client's name, or an identifier of the operator's Slack workspace, its channels or users, a report recipient or a Drive location, as held in `.env`, `~/.workmain/` or the database. The operator's own name as authorship is not one.
+WorkmAIn is developed while in live use, and the repository is public. Until development no longer runs against live data, everything published from this repository — a tracked file, a commit message, or issue or pull request text — stands in for each real value, in one of the two forms below. A real value is a client's name, or an identifier of the operator's Slack workspace, its channels or users, a report recipient or a Drive location, as held in `.env`, `~/.workmain/` or the database. The operator's own name as authorship is not one.
 
 - **Tests and fixtures:** an invented value unlike the real one. A test never reads a real value from `.env`, `~/.workmain/` or the live database.
 - **Any other text:** where the value is held — the `.env` key (such as `WORKMAIN_DEFAULT_CLIENT`), the `~/.workmain/` file and key, or the table and column — never the value.
@@ -166,15 +161,15 @@ WorkmAIn is developed while in live use, and the repository is public. Until dev
 
 ### Known Column Naming Asymmetry
 
-`notes.created_date` (DB-computed from `created_at::DATE`, never written by app code) and `time_entries.entry_date` (explicit write at creation) serve the same conceptual role but are named differently. **Do not rename either** — blast radius ~55 references across ~12 files.
+`notes.created_date` (DB-computed from `created_at::DATE`, never written by app code) and `time_entries.entry_date` (explicit write at creation) serve the same conceptual role but are named differently. **Both names stay**: each has callers across `workmain/` and `tests/` (`git grep -c -E 'created_date|entry_date'`).
 
 ---
 
 ## Common Pitfalls (Lessons Learned)
 
-- **Master Logs are reference only** — target output format for AI, NOT input data sources.
-- **Phase scope creep** is resolved through Spanner and Ray.
+- **Master Logs are reference only** — the target output format for AI; a report's content comes from captured notes.
+- **Scope creep** is resolved through Spanner and Ray.
 - **Component-verified ≠ integration-verified** — the spec-time rules (call sites, entry paths) are `docs/standards/1-workflow.md` §1.2. At implementation, trace handle and session provenance at every call site, diff drafted code against any claimed reference verbatim (not just shape), and never accept an elided "unchanged" block without checking it against the recon's own quote.
 - **A destructive write is checked before it runs.** Run `gh` from the repository root: outside a repository it fails, and an empty file passed to `gh issue edit --body-file` blanks the issue, which GitHub cannot restore. Before overwriting anything you did not author, check that the source is non-empty and holds what you expect, and read stderr in the same block. Before changing a value, read the whole file and search it for every occurrence of the value, not only the one you came for. Where a written standard and the practice recorded in an earlier artifact disagree, surface the disagreement before running either.
 - **A meeting deleted by a cleanup script or an ad-hoc fix unlinks its notes.** `notes.meeting_id` is `ON DELETE SET NULL`, and the "Notes: N captured" line counts only the current occurrence. Before such a delete, count the meeting's notes by query, and for a recurring meeting count the series too (`MeetingsRepository.get_series_note_count()`). Delete only when the count is 0: any other count means the delete orphans those notes.
-- **`scripts/baseline/` is restricted until #188 ships.** Read #188 before running, editing or citing anything under it, and scope any search a check runs to the file it is about, never to a directory that holds the harness.
+- **`scripts/baseline/` is restricted until #188 ships.** Read #188 before running, editing or citing anything under it, and scope any search a check runs to the file it is about.
