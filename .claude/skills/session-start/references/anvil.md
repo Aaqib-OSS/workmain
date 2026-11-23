@@ -45,4 +45,3 @@ These hold for the whole Anvil session.
   4. Read `git diff --cached` against the step's text. Anything the step delivers that the diff does not, or a change to the contract the step does not name, is a difference.
   5. Run `python3 automation/architecture_check.py` and `python3 automation/style_check.py`. A new architecture finding is a departure; a style violation is fixed before the commit.
   6. Commit when checks 3 to 5 all pass.
-  
