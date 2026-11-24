@@ -19,9 +19,9 @@ chore/*    — documentation/process/tooling only. From main, merges to main AND
 **`main`**
 
 - Changes arrive only by merge.
-- Receives merges from `dev`, `hotfix/*` and `chore/*`.
-  - `dev` reaches `main` through a pull request — the `dev` block below.
-  - **A `hotfix/*` or `chore/*` branch is merged into `main` locally, and `main` is pushed.** The repository ruleset `main-pr-required` requires a pull request for every change to `main`. This push passes it through the ruleset's bypass for the repository admin role, so GitHub prints `remote: - Changes must be made through a pull request.` and accepts the push. That line is expected on these two branch types; the push succeeded. Only an account with the admin role can make this push.
+- Receives merges from `dev`, `hotfix/*` and `chore/*`, each through a GitHub pull request.
+  - `/closeout` opens it and waits for its checks. **Ray merges it himself**, as a merge commit.
+  - A `hotfix/*` or `chore/*` branch is pushed to `origin` to open its pull request (§2.3).
 - **A merge carrying application code — from `dev` or `hotfix/*` — is a release.** It bumps `workmain/__version__.py`, updates `CHANGELOG.md`, is tagged `v<version>`, and gets a GitHub Release. `/closeout` performs all four.
 - **A `chore/*` merge skips all four.** It leaves application behaviour unchanged, so its version stays the same.
 
@@ -53,7 +53,9 @@ chore/*    — documentation/process/tooling only. From main, merges to main AND
 
 ### 2.3 Branch deletion
 
-- `main` and `dev` are the only branches on `origin`. **Working branches stay local** (`feature/*`, `hotfix/*`, `chore/*`) — feature branches merge to `dev` locally.
+- `main` and `dev` are the only permanent branches on `origin`.
+- **`feature/*` stays local** and merges to `dev` locally.
+- **`hotfix/*` and `chore/*` are pushed to `origin`** for their pull request to `main` (§2.2). Ray deletes the remote branch when he merges the pull request.
 - A working branch is deleted locally once it has merged everywhere §2.1 sends it. Close-out deletes the local branch only.
 
 **Every merge is `--no-ff`.**
