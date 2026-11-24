@@ -61,14 +61,16 @@ jobs:
           cache: pip
 
       # As production: a role that is not a superuser and cannot create
-      # databases or roles, owning workmain_test. pg_trgm and uuid-ossp are
-      # trusted extensions, so that owner can create them.
+      # databases or roles, owning a workmain_test whose collation and
+      # character type are C.UTF-8. pg_trgm and uuid-ossp are trusted
+      # extensions, so that owner can create them.
       - name: Create the application's role and test database
         run: |
           docker exec "${{ job.services.postgres.id }}" psql -v ON_ERROR_STOP=1 -U postgres \
             -c "CREATE ROLE workmain_user LOGIN PASSWORD 'ci_only_password' NOSUPERUSER NOCREATEDB NOCREATEROLE" \
-            -c "CREATE DATABASE workmain_test OWNER workmain_user" \
-            -c "SELECT rolname, rolsuper, rolcreatedb, rolcreaterole FROM pg_roles WHERE rolname = 'workmain_user'"
+            -c "CREATE DATABASE workmain_test OWNER workmain_user TEMPLATE template0 LOCALE_PROVIDER libc LOCALE 'C.UTF-8'" \
+            -c "SELECT rolname, rolsuper, rolcreatedb, rolcreaterole FROM pg_roles WHERE rolname = 'workmain_user'" \
+            -c "SELECT datname, datcollate, datctype FROM pg_database WHERE datname = 'workmain_test'"
 
       - name: Install requirements and the package
         run: |
@@ -99,7 +101,8 @@ jobs:
 
       # ruff from requirements-dev.txt; python-dotenv at the version requirements.txt pins.
       - name: Install ruff and python-dotenv
-        run: pip install -r requirements-dev.txt "$(grep -oE '^python-dotenv==[^ #]+' requirements.txt)"
+        run: |
+          pip install -r requirements-dev.txt "$(grep -oE '^python-dotenv==[^ #]+' requirements.txt)"
 
       # The secret reaches this step's environment only, and style_check.py
       # reads DEV_REAL_VALUES from the environment. No file holds the values.
