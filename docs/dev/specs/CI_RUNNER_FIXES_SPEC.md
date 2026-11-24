@@ -1,6 +1,6 @@
 # Two defects in the tests workflow's first runs — Spec
 
-**Status:** Draft
+**Status:** Approved
 **Author:** Spanner
 **Date:** 20261124
 **Read at:** 1367734de27a4020aeaa105b7ac14f637a450484
@@ -15,6 +15,7 @@
 
 | Date | Source | Decision or finding | Resolution |
 | --- | --- | --- | --- |
+| 20261124 | Ray | Spec approved. | Accepted. |
 | 20261124 | Spanner | Runs `45446215786` (`main`) and `45446219024` (`dev`) both failed in two jobs. The role that caused a failure fixes it (`../archive/design/DESIGN_CI_WORKFLOW.md` Q5). | This spec. |
 
 ---
