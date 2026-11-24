@@ -7,8 +7,7 @@ loss) and that a GitHub Release object exists for the tag. For
 `workmain/__version__.py`, checks that `__version__` and `__version_info__`
 agree with each other, that `__version__` is not behind the newest tag (a
 stale version file), and that if `__version__` is ahead of every tag — a
-release in flight — CHANGELOG.md already carries its section, per §2.5's
-"update both together".
+release in flight — CHANGELOG.md already carries its section, per §2.5.
 
 Exits non-zero on any mismatch at or above BASELINE, so it can gate a push to `main`.
 Older releases are reported as accepted history and never fail the run.
@@ -60,26 +59,40 @@ def version_key(v):
 
 def changelog_sections(text):
     """Map version -> body line count, from `## [x.y.z]` headings."""
-    heads = [(m.group(1), m.start()) for m in
-             re.finditer(r"^## \[(\d+\.\d+\.\d+)\][^\n]*$", text, re.M)]
+    heads = [
+        (m.group(1), m.start())
+        for m in re.finditer(r"^## \[(\d+\.\d+\.\d+)\][^\n]*$", text, re.M)
+    ]
     out = {}
     for i, (ver, pos) in enumerate(heads):
         end = heads[i + 1][1] if i + 1 < len(heads) else len(text)
-        body = text[text.index("\n", pos) + 1:end].strip()
+        body = text[text.index("\n", pos) + 1 : end].strip()
         out[ver] = len(body.splitlines())
     return out
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--no-remote", action="store_true",
-                    help="skip the GitHub Release check (offline / no gh auth)")
-    ap.add_argument("--show-historical", action="store_true",
-                    help="list accepted pre-baseline gaps instead of just counting them")
+    ap.add_argument(
+        "--no-remote",
+        action="store_true",
+        help="skip the GitHub Release check (offline / no gh auth)",
+    )
+    ap.add_argument(
+        "--show-historical",
+        action="store_true",
+        help="list accepted pre-baseline gaps instead of just counting them",
+    )
     a = ap.parse_args()
 
-    tags = sorted({t[1:] for t in sh("git", "tag").splitlines()
-                   if re.fullmatch(r"v\d+\.\d+\.\d+", t)}, key=version_key)
+    tags = sorted(
+        {
+            t[1:]
+            for t in sh("git", "tag").splitlines()
+            if re.fullmatch(r"v\d+\.\d+\.\d+", t)
+        },
+        key=version_key,
+    )
     if not tags:
         print("no vN.N.N tags found — nothing to check")
         return 0
@@ -87,8 +100,11 @@ def main():
     sections = changelog_sections(CHANGELOG.read_text(encoding="utf-8"))
     releases = set()
     if not a.no_remote:
-        releases = {ln.split()[0].lstrip("v") for ln in
-                    sh("gh", "release", "list", "--limit", "200").splitlines() if ln.strip()}
+        releases = {
+            ln.split()[0].lstrip("v")
+            for ln in sh("gh", "release", "list", "--limit", "200").splitlines()
+            if ln.strip()
+        }
 
     problems = []
     historical = []
@@ -99,7 +115,9 @@ def main():
 
     vtext = VERSION_FILE.read_text(encoding="utf-8")
     m = re.search(r'__version__\s*=\s*["\'](\d+\.\d+\.\d+)["\']', vtext)
-    mi = re.search(r'__version_info__\s*=\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)', vtext)
+    mi = re.search(
+        r"__version_info__\s*=\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)", vtext
+    )
 
     # The version currently being prepared: bumped in __version__.py, ahead of every
     # tag, not yet tagged. Its CHANGELOG section legitimately has no tag yet.
@@ -113,8 +131,11 @@ def main():
         elif sections[v] == 0:
             note(v, "CHANGELOG section exists but is empty")
         if not a.no_remote and v not in releases:
-            note(v, f"tagged, but no GitHub Release "
-                    f"(gh release create v{v} --generate-notes)")
+            note(
+                v,
+                f"tagged, but no GitHub Release "
+                f"(gh release create v{v} --generate-notes)",
+            )
 
     for v in sections:
         if v not in tags and v != in_flight:
@@ -127,16 +148,20 @@ def main():
 
         # __version_info__ is the same fact stored twice in one file — check it agrees.
         if not mi:
-            problems.append("could not parse __version_info__ from workmain/__version__.py")
+            problems.append(
+                "could not parse __version_info__ from workmain/__version__.py"
+            )
         elif ".".join(mi.groups()) != ver:
             problems.append(
                 f"__version__.py disagrees with itself: __version__ is {ver} but "
-                f"__version_info__ is ({', '.join(mi.groups())})")
+                f"__version_info__ is ({', '.join(mi.groups())})"
+            )
 
         if version_key(ver) < version_key(tags[-1]):
             problems.append(
                 f"__version__.py is {ver} but a newer tag v{tags[-1]} exists — "
-                f"the version file is stale")
+                f"the version file is stale"
+            )
         elif version_key(ver) > version_key(tags[-1]):
             # A bump ahead of the newest tag is a release in flight, which is fine —
             # but §2.5 requires the version file and CHANGELOG move together, so the
@@ -146,25 +171,32 @@ def main():
                 problems.append(
                     f"__version__.py is {ver} (ahead of tag v{tags[-1]}, a release in "
                     f"flight) but CHANGELOG.md has no `## [{ver}]` section — "
-                    f"docs/standards/2-git.md §2.5 requires both move together")
+                    f"docs/standards/2-git.md §2.5 requires both move together"
+                )
 
     scope = "tags vs CHANGELOG" if a.no_remote else "tags vs CHANGELOG vs Releases"
     enforced = [v for v in tags if version_key(v) >= floor]
 
     if problems:
-        print(f"FAIL — {len(problems)} problem(s) at or above the v{BASELINE} "
-              f"baseline [{scope}]\n")
+        print(
+            f"FAIL — {len(problems)} problem(s) at or above the v{BASELINE} "
+            f"baseline [{scope}]\n"
+        )
         for p in problems:
             print(f"  - {p}")
     else:
         cur = m.group(1) if m else "?"
         flight = " (release in flight, untagged)" if in_flight else ""
-        print(f"OK — {len(enforced)} release(s) at or above the v{BASELINE} baseline "
-              f"are consistent [{scope}]; __version__.py = {cur}{flight}")
+        print(
+            f"OK — {len(enforced)} release(s) at or above the v{BASELINE} baseline "
+            f"are consistent [{scope}]; __version__.py = {cur}{flight}"
+        )
 
     if historical:
-        print(f"\n{len(historical)} pre-baseline item(s) accepted as history "
-              f"(not failed). Run with --show-historical to list them.")
+        print(
+            f"\n{len(historical)} pre-baseline item(s) accepted as history "
+            f"(not failed). Run with --show-historical to list them."
+        )
         if a.show_historical:
             for h in historical:
                 print(f"  - {h}")

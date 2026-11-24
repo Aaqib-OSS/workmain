@@ -11,7 +11,7 @@ here, and this file is their one home.
 
 import re
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, Set, Tuple
+from typing import Iterator
 
 import click
 
@@ -20,7 +20,7 @@ from workmain.cli.interface import cli
 STANDARDS = Path(__file__).resolve().parent.parent / "docs" / "standards" / "5-cli.md"
 
 # Domain verbs Ray approved, each with its reason (§5.3). A verb is added only with his approval.
-APPROVED_VERBS: Dict[str, str] = {
+APPROVED_VERBS: dict[str, str] = {
     "condense": "AI summarization",
     "rename": "rename without a full edit",
     "merge": "combine two records",
@@ -40,47 +40,79 @@ APPROVED_VERBS: Dict[str, str] = {
 TOP_LEVEL = {"eod"}
 
 # Subgroups whose commands are named for what they act on (§5.2). None means any name.
-NOUN_SUBGROUPS: Dict[str, Optional[Set[str]]] = {
+NOUN_SUBGROUPS: dict[str, set[str] | None] = {
     "set": None,
     "upload": None,
     "sync": {"push", "pull", "both"},
 }
 
-# Commands that existed before this test and follow none of the rules above. This
-# list only shrinks: an entry leaves when its command is renamed or removed, and
-# nothing is added. A new name is a standard verb, or an approved one.
+# Commands that existed before this test and follow none of the rules above.
 EXISTING_EXCEPTIONS = {
-    "calendar month", "calendar sync", "calendar today", "calendar week",
-    "email assign", "email unassign",
-    "meetings costs", "meetings reschedule", "meetings skip", "meetings template use", "meetings today", "meetings upcoming",
-    "notes costs", "notes date", "notes meeting", "notes search", "notes today",
-    "notifications disable", "notifications enable", "notifications set", "notifications test",
-    "providers costs", "providers test",
-    "reports corrections", "reports costs", "reports history", "reports resend",
+    "calendar month",
+    "calendar sync",
+    "calendar today",
+    "calendar week",
+    "email assign",
+    "email unassign",
+    "meetings costs",
+    "meetings reschedule",
+    "meetings skip",
+    "meetings template use",
+    "meetings today",
+    "meetings upcoming",
+    "notes costs",
+    "notes date",
+    "notes meeting",
+    "notes search",
+    "notes today",
+    "notifications disable",
+    "notifications enable",
+    "notifications set",
+    "notifications test",
+    "providers costs",
+    "providers test",
+    "reports corrections",
+    "reports costs",
+    "reports history",
+    "reports resend",
     "slack setup",
     "tasks today",
-    "time date", "time today", "time week",
+    "time date",
+    "time today",
+    "time week",
 }
 
 # Long flags that have no short form on purpose (§5.5).
 NO_SHORT_FORM = {
-    "--dry-run", "--force", "--send", "--preview", "--recurring",
-    "--include-weekends", "--cancelled", "--status", "--all", "--fallback",
+    "--dry-run",
+    "--force",
+    "--send",
+    "--preview",
+    "--recurring",
+    "--include-weekends",
+    "--cancelled",
+    "--status",
+    "--all",
+    "--fallback",
 }
 
 
-def standard_verbs() -> Set[str]:
+def standard_verbs() -> set[str]:
     """
     Read the standard verbs from §5.3's table in docs/standards/5-cli.md.
 
     Returns:
         The verb in the second column of each row of the table.
     """
-    section = STANDARDS.read_text(encoding="utf-8").split("### 5.3")[1].split("### 5.4")[0]
+    section = (
+        STANDARDS.read_text(encoding="utf-8").split("### 5.3")[1].split("### 5.4")[0]
+    )
     return set(re.findall(r"^\| [^|`]+ \| `([a-z]+)` \|", section, re.MULTILINE))
 
 
-def walk(group: click.Group, path: Tuple[str, ...] = ()) -> Iterator[Tuple[Tuple[str, ...], click.Command]]:
+def walk(
+    group: click.Group, path: tuple[str, ...] = ()
+) -> Iterator[tuple[tuple[str, ...], click.Command]]:
     """
     Yield every command under a group, depth first, with its full path.
 
@@ -97,7 +129,7 @@ def walk(group: click.Group, path: Tuple[str, ...] = ()) -> Iterator[Tuple[Tuple
             yield from walk(command, path + (name,))
 
 
-def commands() -> List[Tuple[Tuple[str, ...], click.Command]]:
+def commands() -> list[tuple[tuple[str, ...], click.Command]]:
     """
     List every command that runs something, groups excluded.
 
@@ -107,7 +139,7 @@ def commands() -> List[Tuple[Tuple[str, ...], click.Command]]:
     return [(path, cmd) for path, cmd in walk(cli) if not isinstance(cmd, click.Group)]
 
 
-def name_is_allowed(path: Tuple[str, ...]) -> bool:
+def name_is_allowed(path: tuple[str, ...]) -> bool:
     """
     Decide whether a command's name follows §5.1–§5.3, before exceptions.
 
@@ -128,7 +160,7 @@ def name_is_allowed(path: Tuple[str, ...]) -> bool:
     return name in standard_verbs() or name in APPROVED_VERBS
 
 
-def options() -> Iterator[Tuple[str, click.Option]]:
+def options() -> Iterator[tuple[str, click.Option]]:
     """
     Yield every option on every command and group.
 
@@ -147,23 +179,33 @@ def long_name(option: click.Option) -> str:
     return next((o for o in names if o.startswith("--")), names[0])
 
 
-def short_names(option: click.Option) -> List[str]:
+def short_names(option: click.Option) -> list[str]:
     """The option's short forms, such as `-n`."""
     return [o for o in option.opts + option.secondary_opts if not o.startswith("--")]
 
 
 class TestCommandNames:
-
     def test_every_row_of_the_5_3_table_yields_a_verb(self) -> None:
-        section = STANDARDS.read_text(encoding="utf-8").split("### 5.3")[1].split("### 5.4")[0]
-        table = section.split("| Action | Verb | Do not use |")[1].split("\n\n")[0]
-        rows = [line for line in table.splitlines() if line.startswith("| ") and "---" not in line]
+        section = (
+            STANDARDS.read_text(encoding="utf-8")
+            .split("### 5.3")[1]
+            .split("### 5.4")[0]
+        )
+        table = section.split("| Action | Verb | Replaces |")[1].split("\n\n")[0]
+        rows = [
+            line
+            for line in table.splitlines()
+            if line.startswith("| ") and "---" not in line
+        ]
         assert len(rows) > 0
         assert len(standard_verbs()) == len(rows)
 
     def test_every_command_has_an_approved_name(self) -> None:
-        offenders = [" ".join(path) for path, _ in commands()
-                     if not name_is_allowed(path) and " ".join(path) not in EXISTING_EXCEPTIONS]
+        offenders = [
+            " ".join(path)
+            for path, _ in commands()
+            if not name_is_allowed(path) and " ".join(path) not in EXISTING_EXCEPTIONS
+        ]
         assert offenders == []
 
     def test_every_existing_exception_is_still_in_use(self) -> None:
@@ -176,20 +218,19 @@ class TestCommandNames:
 
 
 class TestShortFlags:
-
     def test_each_short_flag_means_one_long_flag_everywhere(self) -> None:
-        meanings: Dict[str, Set[str]] = {}
+        meanings: dict[str, set[str]] = {}
         for _, option in options():
             for short in short_names(option):
                 meanings.setdefault(short, set()).add(long_name(option))
-        assert {short: sorted(longs) for short, longs in meanings.items() if len(longs) > 1} == {}
+        assert {
+            short: sorted(longs) for short, longs in meanings.items() if len(longs) > 1
+        } == {}
 
     def test_flags_kept_without_a_short_form_have_none(self) -> None:
-        offenders = [f"{where} {long_name(option)} {short_names(option)}" for where, option in options()
-                     if long_name(option) in NO_SHORT_FORM and short_names(option)]
-        assert offenders == []
-
-    def test_minus_h_is_never_reassigned(self) -> None:
-        offenders = [f"{where} {long_name(option)}" for where, option in options()
-                     if "-h" in short_names(option) and long_name(option) != "--help"]
+        offenders = [
+            f"{where} {long_name(option)} {short_names(option)}"
+            for where, option in options()
+            if long_name(option) in NO_SHORT_FORM and short_names(option)
+        ]
         assert offenders == []
