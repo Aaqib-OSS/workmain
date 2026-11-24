@@ -28,8 +28,8 @@ Both criteria are checked on the run that this branch's merge push to `main` tri
 
 | AC | Status | Evidence |
 | --- | --- | --- |
-| AC1.1 | **Not met** | `Awaiting Ray`: the run on this branch's merge push to `main` shows `C.UTF-8` for `datcollate` and `datctype`, and 0 failed |
-| AC3.1 | **Not met** | `Awaiting Ray`: the same run's style job log holds `automation/style_check.py exit 0` |
+| AC1.1 | Carried | Carried to #297. The run on this branch's merge push to `main` shows `C.UTF-8` for `datcollate` and `datctype`, and 0 failed |
+| AC3.1 | Carried | Carried to #297. The same run's style job log holds `automation/style_check.py exit 0` |
 
 ## 4. Deviations and decisions
 
