@@ -95,6 +95,7 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Build:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text)
         monkeypatch.setattr(sc, "ROOT", tmp_path)
+        monkeypatch.delenv(sc.REAL_VALUES_KEY, raising=False)
         return tmp_path
 
     return build
@@ -267,11 +268,35 @@ def _commit(root: Path, message: str) -> None:
 def test_values_are_split_on_commas_with_whitespace_and_empty_entries_dropped(tmp_path: Path) -> None:
     env = tmp_path / ".env"
     env.write_text('DEV_REAL_VALUES=" Qzx , ,quillbrook-hollow,"\n')
-    assert sc.real_values(env) == ["Qzx", "quillbrook-hollow"]
+    assert sc.real_values(env, {}) == ["Qzx", "quillbrook-hollow"]
 
 
 def test_a_missing_env_file_lists_no_values(tmp_path: Path) -> None:
-    assert sc.real_values(tmp_path / ".env") == []
+    assert sc.real_values(tmp_path / ".env", {}) == []
+
+
+def test_values_in_the_environment_are_used_over_the_file(tmp_path: Path) -> None:
+    env = tmp_path / ".env"
+    env.write_text("DEV_REAL_VALUES=Qzx\n")
+    assert sc.real_values(env, {"DEV_REAL_VALUES": " Vrell , ,wopsy-dune"}) == ["Vrell", "wopsy-dune"]
+
+
+@pytest.mark.parametrize("raw", ["", " , ,"])
+def test_an_environment_value_with_no_entries_falls_through_to_the_file(tmp_path: Path, raw: str) -> None:
+    env = tmp_path / ".env"
+    env.write_text("DEV_REAL_VALUES=Qzx\n")
+    assert sc.real_values(env, {"DEV_REAL_VALUES": raw}) == ["Qzx"]
+
+
+def test_main_reads_the_values_from_the_environment_without_printing_them(
+        repo: Build, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = repo({"docs/guide.md": BASE["docs/guide.md"] + "\nWritten for vrell today.\n"})
+    (root / ".env").unlink()
+    monkeypatch.setenv("DEV_REAL_VALUES", "Vrell")
+    assert sc.main([]) == 1
+    out = capsys.readouterr().out
+    assert "docs/guide.md:6 — holds value 1 of DEV_REAL_VALUES" in out
+    assert "vrell" not in out.lower()
 
 
 def test_a_value_is_matched_in_any_case_and_joined_by_underscore_or_hyphen() -> None:
@@ -312,7 +337,7 @@ def test_without_listed_values_the_check_fails_with_a_message(
     assert sc.main([]) == 1
     out = capsys.readouterr().out
     assert "0 violation(s)" in out
-    assert "real-value check not run: DEV_REAL_VALUES is not set in .env in the main working tree" in out
+    assert "real-value check not run: DEV_REAL_VALUES is not set in the environment or in .env in the main working tree" in out
 
 
 def test_values_are_read_from_the_main_working_tree_in_a_linked_worktree(

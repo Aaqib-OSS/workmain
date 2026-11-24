@@ -1,0 +1,199 @@
+# Runs the application suite, the style check on changed lines, the
+# commit-message check and the session-rule searches. Report-only: no
+# check here blocks a merge. Making one required is a ruleset change on
+# GitHub.
+#
+# Actions are pinned to a full commit SHA, with the release in a comment.
+
+name: tests
+
+on:
+  push:
+    branches: [dev, main]   # main: hotfix/* and chore/* merges arrive by push, with no pull request
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  suite:
+    name: Application suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    # A throwaway PostgreSQL 16, created for this run and deleted after it.
+    # The image makes POSTGRES_USER a superuser, so that account only creates
+    # the application's role and database; the suite never connects as it.
+    # Both passwords exist only inside this run.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_admin_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    # What workmain/database/connection.py reads. tests/conftest.py builds the
+    # schema itself with `alembic upgrade head`. No .env file exists here.
+    # TZ sets the process's time zone, PGTZ the database session's.
+    env:
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      DB_NAME: workmain_test
+      DB_USER: workmain_user
+      DB_PASSWORD: ci_only_password
+      TZ: America/Los_Angeles
+      PGTZ: America/Los_Angeles
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # As production: a role that is not a superuser and cannot create
+      # databases or roles, owning workmain_test. pg_trgm and uuid-ossp are
+      # trusted extensions, so that owner can create them.
+      - name: Create the application's role and test database
+        run: |
+          docker exec "${{ job.services.postgres.id }}" psql -v ON_ERROR_STOP=1 -U postgres \
+            -c "CREATE ROLE workmain_user LOGIN PASSWORD 'ci_only_password' NOSUPERUSER NOCREATEDB NOCREATEROLE" \
+            -c "CREATE DATABASE workmain_test OWNER workmain_user" \
+            -c "SELECT rolname, rolsuper, rolcreatedb, rolcreaterole FROM pg_roles WHERE rolname = 'workmain_user'"
+
+      - name: Install requirements and the package
+        run: |
+          pip install -r requirements.txt -r requirements-dev.txt
+          pip install --no-deps -e .
+
+      - name: Show the run's time zone
+        run: date
+
+      - name: Run the application suite
+        run: pytest
+
+  style:
+    name: Style check on changed lines
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      # Full history, so style_check.py can find where the change left its base.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # ruff from requirements-dev.txt; python-dotenv at the version requirements.txt pins.
+      - name: Install ruff and python-dotenv
+        run: pip install -r requirements-dev.txt "$(grep -oE '^python-dotenv==[^ #]+' requirements.txt)"
+
+      # The secret reaches this step's environment only, and style_check.py
+      # reads DEV_REAL_VALUES from the environment. No file holds the values.
+      #
+      # GitHub masks the secret's whole value, not each entry in it, so each
+      # entry is masked before anything runs. The script reads the entries
+      # from the environment, so the log never shows them.
+      #
+      # A pull request from a fork gets no secrets, so its run fails closed here.
+      #
+      # Base: origin/main on a push to dev or a pull request to main; on a push
+      # to main, the commit main pointed at before the push.
+      - name: Check the changed lines
+        env:
+          DEV_REAL_VALUES: ${{ secrets.DEV_REAL_VALUES }}
+          BASE: ${{ (github.event_name == 'push' && github.ref_name == 'main') && github.event.before || 'origin/main' }}
+        run: |
+          IFS=',' read -ra entries <<< "$DEV_REAL_VALUES"
+          for entry in "${entries[@]}"; do
+            entry="${entry#"${entry%%[![:space:]]*}"}"
+            entry="${entry%"${entry##*[![:space:]]}"}"
+            if [ -n "$entry" ]; then echo "::add-mask::$entry"; fi
+          done
+          if ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            echo "Base $BASE is not in this clone, so the changed lines cannot be found. A forced push to main replaces the commit main pointed at."
+            exit 1
+          fi
+          status=0
+          python3 automation/style_check.py --base "$BASE" || status=$?
+          echo "automation/style_check.py exit $status"
+          exit "$status"
+
+  commit-messages:
+    name: Commit messages
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # Every commit the push or pull request adds, each through
+      # .githooks/commit-msg, which exempts merge, revert and fixup subjects
+      # itself. A branch's first push has an all-zero "before", so its range
+      # starts at origin/main. A range that cannot be read fails the job.
+      # Message files go under $RUNNER_TEMP, outside the checkout.
+      - name: Check each commit message in the range
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" = "pull_request" ]; then
+            range="$PR_BASE..$PR_HEAD"
+          elif [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            range="origin/main..$AFTER"
+          else
+            range="$BEFORE..$AFTER"
+          fi
+          echo "Range: $range"
+          if ! commits="$(git rev-list --reverse "$range")"; then
+            echo "Range $range cannot be read from this clone. A forced push replaces the commit the branch pointed at before it."
+            exit 1
+          fi
+          failed=0
+          for commit in $commits; do
+            git log -1 --format=%B "$commit" > "$RUNNER_TEMP/commit-msg.txt"
+            if bash .githooks/commit-msg "$RUNNER_TEMP/commit-msg.txt"; then status=0; else status=$?; failed=1; fi
+            echo "$(git log -1 --format='%h %s' "$commit") -> exit $status"
+          done
+          exit "$failed"
+
+  session-rules:
+    name: Session rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # docs/standards/4-database.md §4.1 and §4.3: committing and rolling back
+      # are the scope owner's, never a repository's.
+      - name: No commit or rollback in a repository
+        run: |
+          if grep -rnE '\.(commit|rollback)\(\)' workmain/database/repositories/; then exit 1; fi
+          echo "none found"
+
+      # docs/standards/4-database.md §4.1: sessions open through session_scope().
+      # `get_session()` with no argument, so ConversationState.get_session(user_id)
+      # does not match.
+      - name: No get_session() outside connection.py
+        run: |
+          if grep -rn 'get_session()' workmain/ --include='*.py' | grep -v connection.py; then exit 1; fi
+          echo "none found"
