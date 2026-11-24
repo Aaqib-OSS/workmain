@@ -63,7 +63,7 @@ Not read: the bodies of the other `ActionExecutor` handlers beyond what reposito
 - **`ActionExecutor` (F13, F14).** As the issue directs, `ActionExecutor` takes no session. Its two callers stop opening a scope around `execute`. It opens a `session_scope()` for each handler that still takes a session, and builds a `UnitOfWork` for each that calls a use case. `_execute_create_time_entry` parses the start time with `workmain/utils/time_parser.parse_time`, which `docs/ARCHITECTURE.md` §2 makes the owner of clock times, so it needs no repository for that.
 - **The pull (F15).** `apply_pull` takes a `UnitOfWork(record=True)` that `_pull_entries` builds for each entry, and enters it for the import. The link path keeps `_record_clockify_link`, which `push` shares and which #281 does not convert.
 - **Tests (F3, F17, F18).** Under `docs/standards/6-testing.md` §6.2, the `db_session` tests of the four functions and of `apply_pull`'s import are replaced by tests on `fake_uow`. Each newly faked method gets a contract class run against the fake and the real repository. A test that used the functions only to seed rows seeds through repositories on `db_session` instead. The issue's third criterion says "with nothing patched". In the spec this means nothing between the command and the use case is patched. A condense path reaches the provider through `offline_provider_env` (F18), and the spec restates the criterion in those words (`docs/standards/1-workflow.md` §1.2).
-- **The issue's first criterion (F2).** The spec restates its check so that it can see every form of a call from outside `workmain/services/`, an aliased import included (`docs/standards/1-workflow.md` §1.2, "a search that cannot see every form of what it counts proves nothing"). The issue body's edit is made at close-out.
+- **The issue's first criterion (F2).** The spec restates its check so that it can see every form of a call from outside `workmain/services/`, an aliased import included (`docs/standards/1-workflow.md` §1.2, "a search covers every form of what it counts"). The issue body's edit is made at close-out.
 
 ## 4. Options
 
@@ -99,8 +99,8 @@ The question is real (F22). Read as written, the two bodies have #208's or #209'
 | Q | Question | Answer |
 | --- | --- | --- |
 | Q1 | Does the condenser stop writing, so that one use case writes the condensed summary, the condensed note and the linked entry in a single unit of work (§4 Q1, the only valid option)? | Ray, 20261118: yes. `condense_meeting` stops writing and returns the summary, and one use case writes `condensed_summary` and `condensed_at`, the condensed note and the linked entry in a single unit of work, through `MeetingsRepository`. |
-| Q2 | Does `record_condensation` live in a new `workmain/services/meetings_service.py`, with a line for it added to `docs/ARCHITECTURE.md` §2 Application (§4 Q2, the only valid option)? | |
-| Q3 | Are #208's and #209's bodies edited now to say the condense-and-link is delivered by #278 and each calls it, or at #278's close-out? | |
+| Q2 | Does `record_condensation` live in a new `workmain/services/meetings_service.py`, with a line for it added to `docs/ARCHITECTURE.md` §2 Application (§4 Q2, the only valid option)? | Ray, 20261124: yes. `record_condensation` lives in a new `workmain/services/meetings_service.py`, and `docs/ARCHITECTURE.md` §2 Application gains its line. |
+| Q3 | Are #208's and #209's bodies edited now to say the condense-and-link is delivered by #278 and each calls it, or at #278's close-out? | Ray, 20261124: now. Both bodies were edited 20261124: #208 § Also in scope (the condense-and-link sentence, and the condensation step's module) and #209 § Also in scope. |
 
 ## 6. Disposition
 
