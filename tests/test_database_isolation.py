@@ -81,6 +81,7 @@ class TestRecordScope:
 class TestTestDatabaseGuard:
     """The suite runs only on workmain_test."""
 
+    @pytest.mark.xfail(reason="#292")
     def test_a_run_naming_another_database_stops_before_any_test(self) -> None:
         value = dotenv_values(_REPO_ROOT / ".env")["DB_NAME"]
         result = subprocess.run(

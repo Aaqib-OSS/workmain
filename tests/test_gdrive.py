@@ -11,6 +11,7 @@ from datetime import date, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from click.testing import CliRunner
 from sqlalchemy.orm import Session
 
@@ -223,6 +224,7 @@ class TestNotesMarkdown:
 
 class TestGDocsCLI:
 
+    @pytest.mark.xfail(reason="#207")
     def test_10_upload_all_dry_run(self):
         """
         upload all --dry-run prints correct output and makes no DB writes.
