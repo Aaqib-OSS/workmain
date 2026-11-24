@@ -104,7 +104,7 @@ An authorization point is an action that is irreversible or reaches outside the 
 | --- | --- |
 | Executing a DB migration against the live database. Ray approves it when it is about to run, separately from his approval of the spec that contains it. Building the test database from the migrations is a step. | Implementation, as a spec step |
 | Merging to `main` | Close-out |
-| Deleting a GitHub object: an issue, label, milestone, release, or a branch on `origin`. Deleting a local branch that was never pushed is a step (§2.3). | Close-out for a branch; any stage for the rest |
+| Deleting a GitHub object: an issue, label, milestone, release, or a branch on `origin`. Deleting a local branch is a step (§2.3). | Close-out for a branch; any stage for the rest |
 | Force-pushing any branch | Any stage |
 | Changing the run state of a live service. The post-merge service restart is a step: §2.6 requires it after every `feature/*` and `hotfix/*` merge to `dev`, so close-out performs it. Every other change is an authorization point. | Close-out |
 
