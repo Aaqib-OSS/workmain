@@ -190,7 +190,7 @@ class TestConfirmationGateFormatPrompt:
 class TestActionExecutorCreateNote:
 
     def test_create_note_returns_success(self, db_session):
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         result = executor.execute({
             "action": "create_note",
             "content": "Gate 7 test note",
@@ -201,7 +201,7 @@ class TestActionExecutorCreateNote:
         assert "Note saved" in result.message
 
     def test_create_note_uses_default_tag_when_absent(self, db_session):
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         result = executor.execute({
             "action": "create_note",
             "content": "No tags provided",
@@ -209,7 +209,7 @@ class TestActionExecutorCreateNote:
         assert result.success is True
 
     def test_create_note_entity_id_is_positive_integer(self, db_session):
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         result = executor.execute({
             "action": "create_note",
             "content": "Check id type",
@@ -218,7 +218,7 @@ class TestActionExecutorCreateNote:
         assert result.entity_id > 0
 
     def test_create_note_invalid_tag_returns_invalid_tags_error(self, db_session):
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         result = executor.execute({
             "action": "create_note",
             "content": "Bad tag note",
@@ -232,7 +232,7 @@ class TestActionExecutorCreateNote:
         from datetime import date as _date
         repo = NotesRepository(db_session)
         before_count = len(repo.get_by_date(_date.today()))
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         executor.execute({
             "action": "create_note",
             "content": "Should not persist",
@@ -247,7 +247,7 @@ class TestActionExecutorCreateNote:
         db_session.flush()
         SystemStateRepository(db_session).set_int("active_client_id", client.id)
 
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         result = executor.execute({
             "action": "create_note",
             "content": "Attributed via Slack",
@@ -261,7 +261,7 @@ class TestActionExecutorCreateNote:
 class TestActionExecutorCreateTimeEntry:
 
     def test_create_time_entry_returns_success(self, db_session):
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         result = executor.execute({
             "action": "create_time_entry",
             "description": "Gate 7 time entry test",
@@ -283,7 +283,7 @@ class TestActionExecutorCreateTimeEntry:
         with patch.object(
             TimeEntriesRepository, "create", side_effect=RuntimeError("entry insert failed")
         ):
-            result = ActionExecutor(db_session).execute({
+            result = ActionExecutor().execute({
                 "action": "create_time_entry",
                 "description": description,
                 "duration_minutes": 30,
@@ -294,7 +294,7 @@ class TestActionExecutorCreateTimeEntry:
         assert db_session.query(Note).filter(Note.content == description).count() == 0
 
     def test_create_time_entry_message_contains_duration(self, db_session):
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         result = executor.execute({
             "action": "create_time_entry",
             "description": "meeting",
@@ -304,7 +304,7 @@ class TestActionExecutorCreateTimeEntry:
         assert "1h 30m" in result.message
 
     def test_create_time_entry_with_hhmm_start_time(self, db_session):
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         result = executor.execute({
             "action": "create_time_entry",
             "description": "Early standup",
@@ -315,7 +315,7 @@ class TestActionExecutorCreateTimeEntry:
         assert "09:00" in result.message
 
     def test_create_time_entry_with_colon_start_time(self, db_session):
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         result = executor.execute({
             "action": "create_time_entry",
             "description": "Afternoon sync",
@@ -327,7 +327,7 @@ class TestActionExecutorCreateTimeEntry:
 
     def test_create_time_entry_with_invalid_start_time_returns_clarification(self, db_session):
         """Invalid start_time is treated as not provided → needs_clarification (no null row)."""
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         result = executor.execute({
             "action": "create_time_entry",
             "description": "Bad time format test",
@@ -339,7 +339,7 @@ class TestActionExecutorCreateTimeEntry:
 
     def test_create_time_entry_missing_start_time_returns_clarification(self, db_session):
         """No start_time → needs_clarification; no DB row written."""
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         result = executor.execute({
             "action": "create_time_entry",
             "description": "No start time",
@@ -349,7 +349,7 @@ class TestActionExecutorCreateTimeEntry:
         assert result.error == "needs_clarification"
 
     def test_create_time_entry_zero_minutes(self, db_session):
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         result = executor.execute({
             "action": "create_time_entry",
             "description": "Zero duration",
@@ -367,7 +367,7 @@ class TestActionExecutorCreateTimeEntry:
         db_session.flush()
         SystemStateRepository(db_session).set_int("active_client_id", client.id)
 
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         result = executor.execute({
             "action": "create_time_entry",
             "description": "Attributed via Slack",
@@ -394,7 +394,7 @@ class TestActionExecutorCreateTimeEntry:
             TimeEntriesRepository,
         )
 
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         result = executor.execute({
             "action": "create_time_entry",
             "description": "Follow up with vendor on contract terms",
@@ -413,12 +413,12 @@ class TestActionExecutorCreateTimeEntry:
 class TestActionExecutorUnknownAction:
 
     def test_unknown_action_raises_action_executor_error(self, db_session):
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         with pytest.raises(ActionExecutorError, match="Unknown action_type"):
             executor.execute({"action": "launch_rockets"})
 
     def test_missing_action_key_raises_action_executor_error(self, db_session):
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         with pytest.raises(ActionExecutorError):
             executor.execute({})
 
@@ -462,7 +462,7 @@ class TestActionExecutorTaskResolutionUncapped:
         self._seed_target_task(db_session, target_content)
         self._seed_filler_tasks(db_session, run_id)
 
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         result = executor.execute({
             "action": "update_task",
             "task_description": target_content,
@@ -486,7 +486,7 @@ class TestActionExecutorTaskResolutionUncapped:
         self._seed_target_task(db_session, target_content)
         self._seed_filler_tasks(db_session, run_id, label="deferfiller")
 
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         result = executor.execute({
             "action": "defer_task",
             "task_description": target_content,
@@ -501,7 +501,7 @@ class TestActionExecutorTaskResolutionUncapped:
         self._seed_target_task(db_session, canon_content)
         self._seed_filler_tasks(db_session, run_id, count=19, label="dedupfiller")
 
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         result = executor.execute({
             "action": "deduplicate_task",
             "task_description": dup_content,
@@ -521,7 +521,7 @@ class TestActionExecutorTaskResolutionUncapped:
         with patch.object(
             TaskStatusRepository, "set_dismissed", side_effect=RuntimeError("dismiss failed")
         ):
-            result = ActionExecutor(db_session).execute({
+            result = ActionExecutor().execute({
                 "action": "deduplicate_task",
                 "task_description": dup_content,
                 "canonical_description": canon_content,
@@ -554,7 +554,7 @@ class TestActionExecutorConfirmReport:
 
     def test_confirm_report_no_report_returns_failure(self, db_session):
         """No report for sentinel date — returns success=False, no exception."""
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         result = executor.execute({
             "action": "confirm_report",
             "report_type": "daily_internal_9999",
@@ -565,7 +565,7 @@ class TestActionExecutorConfirmReport:
 
     def test_confirm_report_sets_status_confirmed(self, db_session):
         report = _seed_report_today(db_session, status="unconfirmed")
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         result = executor.execute({"action": "confirm_report", "report_type": "daily_internal"})
         db_session.refresh(report)
         assert result.success is True
@@ -575,14 +575,14 @@ class TestActionExecutorConfirmReport:
     def test_confirm_report_sets_updated_at(self, db_session):
         report = _seed_report_today(db_session, status="unconfirmed")
         before = report.updated_at
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         executor.execute({"action": "confirm_report", "report_type": "daily_internal"})
         db_session.refresh(report)
         assert report.updated_at > before
 
     def test_confirm_report_idempotent_when_already_confirmed(self, db_session):
         report = _seed_report_today(db_session, status="confirmed")
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         with patch.object(db_session, "commit") as mock_commit:
             result = executor.execute({"action": "confirm_report", "report_type": "daily_internal"})
         assert result.success is True
@@ -591,7 +591,7 @@ class TestActionExecutorConfirmReport:
 
     def test_confirm_report_no_change_when_corrected(self, db_session):
         report = _seed_report_today(db_session, status="corrected")
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         with patch.object(db_session, "commit") as mock_commit:
             result = executor.execute({"action": "confirm_report", "report_type": "daily_internal"})
         db_session.refresh(report)
@@ -605,14 +605,14 @@ class TestActionExecutorConfirmReport:
         real = ReportsRepository.confirm
         with patch.object(ReportsRepository, "confirm", autospec=True,
                           side_effect=real) as spy:
-            result = ActionExecutor(db_session).execute(
+            result = ActionExecutor().execute(
                 {"action": "confirm_report", "report_type": "daily_internal"}
             )
         spy.assert_called_once_with(ANY, report.id)
         assert result.success is True
 
     def test_confirm_report_no_report_today(self, db_session):
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         result = executor.execute({"action": "confirm_report", "report_type": "daily_internal_missing"})
         assert result.success is False
         assert result.error == "no_report"
@@ -623,7 +623,7 @@ class TestActionExecutorCorrectReport:
 
     def test_correct_report_writes_correction_note(self, db_session):
         report = _seed_report_today(db_session, status="unconfirmed")
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         result = executor.execute({
             "action": "correct_report",
             "report_type": "daily_internal",
@@ -639,7 +639,7 @@ class TestActionExecutorCorrectReport:
     def test_correct_report_corrected_content_not_touched(self, db_session):
         full_text = "## Executive Summary\n\nFull edited report text."
         report = _seed_report_today(db_session, status="confirmed", corrected_content=full_text)
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         executor.execute({
             "action": "correct_report",
             "report_type": "daily_internal",
@@ -650,7 +650,7 @@ class TestActionExecutorCorrectReport:
 
     def test_correct_report_from_unconfirmed(self, db_session):
         report = _seed_report_today(db_session, status="unconfirmed")
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         executor.execute({
             "action": "correct_report",
             "report_type": "daily_internal",
@@ -661,7 +661,7 @@ class TestActionExecutorCorrectReport:
 
     def test_correct_report_overrides_confirmed_status(self, db_session):
         report = _seed_report_today(db_session, status="confirmed")
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         executor.execute({
             "action": "correct_report",
             "report_type": "daily_internal",
@@ -672,7 +672,7 @@ class TestActionExecutorCorrectReport:
 
     def test_correct_report_status_unchanged_if_already_corrected(self, db_session):
         report = _seed_report_today(db_session, status="corrected", correction_note="old note")
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         executor.execute({
             "action": "correct_report",
             "report_type": "daily_internal",
@@ -684,7 +684,7 @@ class TestActionExecutorCorrectReport:
 
     def test_correct_report_empty_correction_string(self, db_session):
         _seed_report_today(db_session, status="unconfirmed")
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         with patch.object(db_session, "commit") as mock_commit:
             result = executor.execute({
                 "action": "correct_report",
@@ -697,7 +697,7 @@ class TestActionExecutorCorrectReport:
 
     def test_correct_report_missing_correction_field(self, db_session):
         _seed_report_today(db_session, status="unconfirmed")
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         with patch.object(db_session, "commit") as mock_commit:
             result = executor.execute({
                 "action": "correct_report",
@@ -708,7 +708,7 @@ class TestActionExecutorCorrectReport:
         mock_commit.assert_not_called()
 
     def test_correct_report_no_report_today(self, db_session):
-        executor = ActionExecutor(db_session)
+        executor = ActionExecutor()
         result = executor.execute({
             "action": "correct_report",
             "report_type": "daily_internal_missing",

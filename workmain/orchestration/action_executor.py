@@ -10,6 +10,11 @@ from datetime import date
 from datetime import time as time_type
 from typing import Optional
 
+from sqlalchemy.orm import Session
+
+from workmain.database.connection import get_db
+from workmain.database.models import Report
+
 logger = logging.getLogger(__name__)
 
 
@@ -26,15 +31,13 @@ class ActionResult:
 
 
 class ActionExecutor:
-    """Executes confirmed action dicts against the database.
-
-    Receives a SQLAlchemy session at construction; all methods share it.
-    Each execute() call runs its action in a savepoint: a failure rolls back
-    that action's writes and nothing else. The caller's scope commits.
     """
+    Executes confirmed action dicts against the database.
 
-    def __init__(self, session) -> None:
-        self.session = session
+    Each execute() call runs its action in a session_scope() of its own,
+    which commits when the action returns and rolls back when it raises.
+    The caller opens no scope around execute().
+    """
 
     # ------------------------------------------------------------------
     # Public dispatch
@@ -69,8 +72,8 @@ class ActionExecutor:
             raise ActionExecutorError(f"Unknown action_type: '{action_type}'")
 
         try:
-            with self.session.begin_nested():
-                return handler(action)
+            with get_db().session_scope() as session:
+                return handler(session, action)
         except ActionExecutorError:
             raise
         except Exception as e:
@@ -81,7 +84,7 @@ class ActionExecutor:
     # Action handlers
     # ------------------------------------------------------------------
 
-    def _execute_create_time_entry(self, action: dict) -> ActionResult:
+    def _execute_create_time_entry(self, session: Session, action: dict) -> ActionResult:
         from workmain.database.repositories.time_entries_repo import (
             TimeEntriesRepository,
         )
@@ -97,7 +100,7 @@ class ActionExecutor:
         start_time_str = action.get("start_time")
         if start_time_str:
             try:
-                entry_time = TimeEntriesRepository(self.session).parse_time(str(start_time_str))
+                entry_time = TimeEntriesRepository(session).parse_time(str(start_time_str))
             except ValueError:
                 logger.warning("Invalid start_time format '%s', treating as not provided", start_time_str)
                 entry_time = None
@@ -109,7 +112,7 @@ class ActionExecutor:
 
         try:
             entry = time_entry_service.create_time_entry(
-                self.session,
+                session,
                 description=description,
                 duration_hours=duration_hours,
                 entry_time=entry_time,
@@ -138,7 +141,7 @@ class ActionExecutor:
             entity_id=entry.id,
         )
 
-    def _execute_create_note(self, action: dict) -> ActionResult:
+    def _execute_create_note(self, session: Session, action: dict) -> ActionResult:
         from workmain.services import notes_service
         from workmain.services.exceptions import InvalidTagsError
         from workmain.utils.tag_utils import get_valid_full_names
@@ -147,7 +150,7 @@ class ActionExecutor:
         tags = action.get("tags")  # full names per schema, or None
 
         try:
-            note = notes_service.create_note(self.session, content=content, tags=tags)
+            note = notes_service.create_note(session, content=content, tags=tags)
         except InvalidTagsError as e:
             return ActionResult(
                 success=False,
@@ -158,10 +161,10 @@ class ActionExecutor:
 
         return ActionResult(success=True, message="✓ Note saved.", entity_id=note.id)
 
-    def _execute_update_task(self, action: dict) -> ActionResult:
+    def _execute_update_task(self, session: Session, action: dict) -> ActionResult:
         from workmain.database.repositories.task_status_repo import TaskStatusRepository
 
-        task_repo = TaskStatusRepository(self.session)
+        task_repo = TaskStatusRepository(session)
         tasks = task_repo.get_filtered(status="active", limit=0)
         task = self._find_task(tasks, action.get("task_description", ""))
         if task is None:
@@ -183,10 +186,10 @@ class ActionExecutor:
             task.status = "deferred"
             return ActionResult(success=True, message=f"✓ Task deferred: '{label}'.", entity_id=task.id)
 
-    def _execute_defer_task(self, action: dict) -> ActionResult:
+    def _execute_defer_task(self, session: Session, action: dict) -> ActionResult:
         from workmain.database.repositories.task_status_repo import TaskStatusRepository
 
-        task_repo = TaskStatusRepository(self.session)
+        task_repo = TaskStatusRepository(session)
         tasks = task_repo.get_filtered(status="active", limit=0)
         task = self._find_task(tasks, action.get("task_description", ""))
         if task is None:
@@ -199,7 +202,7 @@ class ActionExecutor:
         task.status = "deferred"
         return ActionResult(success=True, message=f"✓ Task deferred: '{label}'.", entity_id=task.id)
 
-    def _execute_confirm_report(self, action: dict) -> ActionResult:
+    def _execute_confirm_report(self, session: Session, action: dict) -> ActionResult:
         """Confirm today's most recent report of the given type.
 
         Confirms through ReportsRepository.confirm(), the one confirm rule:
@@ -211,14 +214,14 @@ class ActionExecutor:
         from workmain.database.repositories.reports_repo import ReportsRepository
 
         report_type = action.get("report_type", "daily_internal")
-        report = self._get_latest_report(report_type)
+        report = self._get_latest_report(session, report_type)
         if report is None:
             return ActionResult(
                 success=False,
                 message=f"No {report_type.replace('_', ' ')} found for today.",
                 error="no_report",
             )
-        if not ReportsRepository(self.session).confirm(report.id):
+        if not ReportsRepository(session).confirm(report.id):
             return ActionResult(
                 success=True,
                 message=(
@@ -233,7 +236,7 @@ class ActionExecutor:
             entity_id=report.id,
         )
 
-    def _execute_correct_report(self, action: dict) -> ActionResult:
+    def _execute_correct_report(self, session: Session, action: dict) -> ActionResult:
         """Flag a correction for today's most recent report.
 
         Phase 12 Decision 21 (locked): correction_note was added as the
@@ -265,14 +268,14 @@ class ActionExecutor:
                 message="Cannot flag correction: no correction description provided.",
                 error="missing_correction",
             )
-        report = self._get_latest_report(report_type)
+        report = self._get_latest_report(session, report_type)
         if report is None:
             return ActionResult(
                 success=False,
                 message=f"No {report_type.replace('_', ' ')} found for today.",
                 error="no_report",
             )
-        ReportsRepository(self.session).flag_correction(report.id, correction)
+        ReportsRepository(session).flag_correction(report.id, correction)
         report_label = report_type.replace("_", " ")
         return ActionResult(
             success=True,
@@ -283,10 +286,10 @@ class ActionExecutor:
             entity_id=report.id,
         )
 
-    def _execute_deduplicate_task(self, action: dict) -> ActionResult:
+    def _execute_deduplicate_task(self, session: Session, action: dict) -> ActionResult:
         from workmain.database.repositories.task_status_repo import TaskStatusRepository
 
-        task_repo = TaskStatusRepository(self.session)
+        task_repo = TaskStatusRepository(session)
         tasks = task_repo.get_filtered(status="active", limit=0)
         dup_task = self._find_task(tasks, action.get("task_description", ""))
         canonical_task = self._find_task(tasks, action.get("canonical_description", ""))
@@ -305,18 +308,18 @@ class ActionExecutor:
             entity_id=dup_task.id,
         )
 
-    def _execute_write_correction_note(self, action: dict) -> ActionResult:
+    def _execute_write_correction_note(self, session: Session, action: dict) -> ActionResult:
         from workmain.database.repositories.reports_repo import ReportsRepository
 
         report_type = action.get("report_type", "daily_internal")
-        report = self._get_latest_report(report_type)
+        report = self._get_latest_report(session, report_type)
         if report is None:
             return ActionResult(
                 success=False,
                 message="No report found to attach a correction note to.",
                 error="no_report",
             )
-        ReportsRepository(self.session).set_correction_note(report.id, action.get("note", ""))
+        ReportsRepository(session).set_correction_note(report.id, action.get("note", ""))
         return ActionResult(success=True, message="✓ Correction note saved.", entity_id=report.id)
 
     # ------------------------------------------------------------------
@@ -347,7 +350,7 @@ class ActionExecutor:
                 best_score, best = overlap, task
         return best if best_score > 0 else None
 
-    def _get_latest_report(self, report_type: str):
+    def _get_latest_report(self, session: Session, report_type: str) -> Report | None:
         """Return today's most recent report of the given type, or None."""
         from workmain.database.repositories.reports_repo import ReportsRepository
-        return ReportsRepository(self.session).get_latest_for_date(date.today(), report_type)
+        return ReportsRepository(session).get_latest_for_date(date.today(), report_type)

@@ -1358,10 +1358,8 @@ class TestDoubleExecution:
     def test_empty_result_message_posts_fallback(self, tmp_path):
         from workmain.orchestration.action_executor import ActionResult
         daemon = _make_daemon(_make_store(tmp_path))
-        with patch('workmain.daemon.daemon.get_db') as mock_db, \
-             patch('workmain.orchestration.action_executor.ActionExecutor') as mock_ae, \
+        with patch('workmain.orchestration.action_executor.ActionExecutor') as mock_ae, \
              patch.object(daemon, '_maybe_post_correction_summary'):
-            mock_db.return_value.session_scope.return_value.__enter__.return_value = MagicMock()
             mock_ae.return_value.execute.return_value = ActionResult(success=True, message='')
             daemon._execute_action({'action': 'create_note', 'content': 'x'})
         daemon._socket_client.post_message.assert_any_call('D_TEST', 'Action completed.')
