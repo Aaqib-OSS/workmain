@@ -1,6 +1,6 @@
 # A GitHub Actions run of the suite, the style check and the commit-message check — Design Study
 
-**Status:** Active
+**Status:** Shipped
 **Kind:** Design study
 **Author:** Spanner
 **Date:** 20261123

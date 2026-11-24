@@ -1,6 +1,6 @@
 # A GitHub Actions run of the suite, the style check and the commit-message check — Implementation Results
 
-**Status:** Active
+**Status:** Shipped
 **Author:** Spanner
 **Date:** 20261124
 **Spec:** `../specs/CI_WORKFLOW_SPEC.md`
@@ -75,7 +75,8 @@ Complete on the branch. The workflow `.github/workflows/tests.yml` has four repo
   - The commit-message step exits 1, giving the reason, for an absent `before`.
   - Both session-rule steps print `none found` and exit 0.
 - **`automation/style_check.py` and `automation/architecture_check.py`:** both exit 0.
-- **Live verification:** at close-out, on the runs this branch's merge pushes trigger.
+- **Close-out preflight, 20261124:** bare `pytest` 1796 passed, 0 failed, 0 skipped (note: 1 xfailed, 3 xpassed); `pytest automation/` 138 passed, 0 failed, 0 skipped.
+- **Live verification:** the runs this branch's merge pushes to `main` and `dev` trigger, and the next `dev → main` pull request. Carried to #297 with the run-checked AC rows. A `chore/*` merge has no service restart (`docs/standards/2-git.md` §2.6).
 
 ## 6. Follow-ups
 

@@ -1,6 +1,6 @@
 # A GitHub Actions run of the suite, the style check and the commit-message check — Spec
 
-**Status:** Approved
+**Status:** Shipped
 **Author:** Spanner
 **Date:** 20261124
 **Read at:** 59f73429b3c5ccfdc5b2d313cd2104090b8c8126
