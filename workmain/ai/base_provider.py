@@ -106,8 +106,17 @@ class BaseProvider(ABC):
     this class and implement the required abstract methods.
 
     Accepts a plain dict from ai_settings.json rather than a ProviderConfig
-    dataclass. Each provider reads its own required fields via config.get().
+    dataclass. Construction refuses a config that lacks a key the subclass
+    declares in REQUIRED_CONFIG_KEYS; each provider then reads its fields
+    from config.
     """
+
+    # Keys a provider's entry in config/ai_settings.json (providers.<name>)
+    # must contain. Declared on each subclass beside the code that reads them;
+    # BaseProvider requires none. Construction enforces this; ProviderManager
+    # also checks it at load, before the payload policy, so a missing key
+    # stops the load instead of being recorded as a construction failure.
+    REQUIRED_CONFIG_KEYS: set = set()
 
     # Keys a provider's payload policy file (config/providers/<name>/settings.json)
     # must contain. Declared beside the code that reads them on each subclass;
@@ -120,6 +129,11 @@ class BaseProvider(ABC):
     provider_type: ProviderType
 
     @classmethod
+    def missing_config_keys(cls, config: dict) -> list[str]:
+        """Return the declared required config keys absent from config, sorted."""
+        return sorted(cls.REQUIRED_CONFIG_KEYS - set(config))
+
+    @classmethod
     def missing_policy_keys(cls, policy: dict) -> list[str]:
         """Return the declared required keys absent from policy, sorted."""
         return sorted(cls.REQUIRED_POLICY_KEYS - set(policy))
@@ -128,22 +142,30 @@ class BaseProvider(ABC):
         """
         Initialize provider with config dict from ai_settings.json section.
 
-        Accepts raw dict to support N-provider extensibility. Each provider
-        reads its own required fields via config.get(). Previously accepted
-        ProviderConfig dataclass — changed in v1.1 Provider Foundation Sprint.
+        Accepts raw dict to support N-provider extensibility. The config is
+        checked against REQUIRED_CONFIG_KEYS first, then the policy against
+        REQUIRED_POLICY_KEYS, so both run before a subclass reads its API key
+        or builds a vendor client.
 
         Args:
-            config: Provider config section from ai_settings.json.
+            config: Provider config section from ai_settings.json. Must hold
+                every key the subclass declares in REQUIRED_CONFIG_KEYS.
             policy: Request payload policy from config/providers/<name>/settings.json,
                 loaded and validated by ProviderManager. Must hold every key
                 the subclass declares in REQUIRED_POLICY_KEYS. Defaults to an
                 empty dict.
 
         Raises:
-            ConfigurationError: If policy is missing a key this provider
-                declares required.
+            ConfigurationError: If config or policy is missing a key this
+                provider declares required.
         """
         self.config = config
+        missing = self.missing_config_keys(config)
+        if missing:
+            raise ConfigurationError(
+                f"{type(self).__name__} config is missing required "
+                f"key(s): {', '.join(missing)}"
+            )
         self.policy = policy or {}
         missing = self.missing_policy_keys(self.policy)
         if missing:

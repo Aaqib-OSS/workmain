@@ -427,11 +427,19 @@ class ProviderManager:
         return policy or {}
 
     def _load_config(self):
-        """Load provider and report-type configuration from ai_settings.json.
+        """
+        Load provider and report-type configuration from ai_settings.json.
 
         Instantiates enabled providers from PROVIDER_REGISTRY.
         Tracks providers disabled in config in _disabled, and construction
         failures in _disabled_reasons (no connectivity check).
+
+        Raises:
+            ConfigurationError: If an enabled provider's entry lacks a key its
+                class declares in REQUIRED_CONFIG_KEYS, or its payload policy
+                is unusable. Both are checked before construction, so neither
+                is recorded as a construction failure. A provider with
+                enabled: false is not checked.
         """
         from pathlib import Path
 
@@ -462,6 +470,15 @@ class ProviderManager:
             if not provider_cfg.get('enabled', True):
                 self._disabled.add(name)
                 continue
+            # Check the entry's required keys BEFORE construction, so a
+            # missing key raises out of here rather than being recorded as a
+            # construction failure by the blanket except below.
+            missing = cls.missing_config_keys(provider_cfg)
+            if missing:
+                raise ConfigurationError(
+                    "config/ai_settings.json is missing required key(s): "
+                    + ', '.join(f"providers.{name}.{key}" for key in missing)
+                )
             # Load the payload policy BEFORE construction, so an unusable
             # policy raises out of here rather than being recorded as a
             # construction failure by the blanket except below.

@@ -1,26 +1,26 @@
 # <Title> — Implementation Results
 
 **Status:** Active | Shipped | Superseded
-**Author:** Anvil (Role 3) | Spanner (Role 1)
+**Author:** Anvil | Spanner
 **Date:** YYYYMMDD
 **Spec:** `../specs/<file>_SPEC.md`
-**Released as:** vX.Y.Z (PR #N, tag vX.Y.Z)
+**Released as:** vX.Y.Z (tag vX.Y.Z) | `n/a`
 
 > Delete this block before use.
 >
-> **Filename:** subject-based, no version suffix, no date — `<SUBJECT>_RESULTS.md`.
+> **Filename:** `<SUBJECT>_RESULTS.md`, named as `docs/standards/1-workflow.md` §1.5 states.
 >
-> **Write this before the work is declared done, not after.** A results document that never gets written is the most common way a sprint's real outcome is lost — the spec says what was intended, and only this says what actually happened.
+> The implementing role writes this file as its last implementation step (§1.1 Implementation); it records what actually happened, where the spec records what was intended.
 >
-> **Released as:** the version and tag, computed at close-out from §2.5 and the current `workmain/__version__.py` — deterministic before the merge, which is when this file is committed. `n/a` on `chore/*`, which `docs/standards/2-git.md` §2.2 allows no release. The PR number, the Release URL and the confirmed restart timestamp are **not** here: they postdate this commit and are carried by the issue's closing comment.
+> **Released as:** the version and tag, which close-out computes from §2.5 and `workmain/__version__.py` before the merge commits this file. `n/a` on `chore/*`, which §2.2 gives no release. The PR number, the Release URL and the confirmed restart timestamp come later, and the issue's closing comment carries them.
 >
-> This template is advisory. Template compliance is not a Caliper review criterion.
+> Templates are advisory (§1.5).
 
 ---
 
 ## 1. Summary
 
-What shipped, in a paragraph. State plainly whether the work is complete or partial. "Partial" is a legitimate outcome; a partial delivery is not reported as complete.
+What shipped, in a paragraph, stating plainly whether the work is complete or partial. Partial is a legitimate outcome, reported as partial.
 
 ## 2. What shipped, by step
 
@@ -31,43 +31,44 @@ What shipped, in a paragraph. State plainly whether the work is complete or part
 
 ## 3. Acceptance criteria
 
-Every AC on the **approved spec**, by identifier, checked against **delivered code**. This table is written by whoever implemented the spec, as the last implementation step — Anvil on the full path, Role 1 on the direct path (`docs/standards/1-workflow.md` §1.1). They ran the ACs, so they are the only one who can fill it. Close-out verifies that every spec AC has a row and that every row is `Met` or a `Carried` citing its follow-up issue; it does not re-judge them.
+Every AC on the **approved spec**, by identifier, checked against **delivered code**. Close-out checks that every spec AC has a row and that every row is `Met`, or `Carried` with its follow-up issue, and takes the implementer's judgement as recorded. A check that names Ray stays `Not met`, with `Awaiting Ray` as its evidence, until he records it (§1.2).
 
 | AC | Status | Evidence |
 | --- | --- | --- |
 | AC1.1 | Met / **Not met** / Carried | `pytest ...` output, file:line, or command result |
+| AC1.2 | **Not met** | `Awaiting Ray`: <what he reads or runs> |
 
-This section holds only the AC table. Close-out reads every three-column table under `## 3.` as AC rows (`automation/closeout_acs.py`), so a supporting table goes under `## 5. Verification` and the AC row cites it.
+Close-out reads every three-column table under `## 3.` as AC rows (`automation/closeout_acs.py`), so this section holds the AC table alone. A supporting table goes under `## 5. Verification`, and the AC row cites it.
 
-Anything not met is listed here and carried to an issue, cited by its number — an open issue that already covers it where one exists, `docs/standards/1-workflow.md` §1.3. Do not quietly drop an unmet AC.
+Each unmet AC is listed here and carried to an issue, cited by its number: an open issue that already covers it where one exists (§1.3).
 
 ## 4. Deviations and decisions
 
-`.claude/skills/session-start/SKILL.md` § Role 3 defines a departure. Every departure is listed here with how it was handled, how it was resolved, and who resolved it. `Step stopped at` holds one of three values:
+Every departure (`.claude/skills/session-start/SKILL.md` § Role 3) is listed here with how it was handled and resolved, and who resolved it. `Step stopped at` holds one of three values:
 
-- **the step** the implementer stopped at, before the step's commit. `Resolution` is what Ray decided, and `Resolved by` is `Ray, <date>`;
-- **`within approved meaning`** — a wording or mechanical change Role 1 made without stopping while implementing its own direct-path spec, within the meaning, scope and file set Ray approved (`.claude/skills/session-start/references/spanner.md` § Working rules). Anvil never uses it. `Resolution` is the change made, and `Resolved by` is `Role 1, <date>`;
-- **`none`** — the change was made without the stop it required, which breaks the stop rule: `.claude/skills/session-start/SKILL.md` § Role 3 for Anvil, `references/spanner.md` § Working rules for Role 1. It is still listed, because a record that leaves it out hides it. `Resolution` is what was done. When the row may be written, and what `Resolved by` then holds, is `SKILL.md` § Role 3.
+- **The step number** — the implementer stopped there, before the step's commit. `Resolution` is what Ray decided; `Resolved by` is `Ray, <date>`.
+- **`within approved meaning`** — Spanner only, on its own direct-path spec: a wording or mechanical change made within the meaning, scope and file set Ray approved (`.claude/skills/session-start/references/spanner.md` § Working rules). `Resolution` is the change; `Resolved by` is `Spanner, <date>`.
+- **`none`** — the change was made without the stop it required, an unstopped departure (§1.1 Implementation review). It is listed so the record shows it. `Resolution` is what was done; when the row is written, and what `Resolved by` holds, is `SKILL.md` § Role 3.
 
 | # | Departure or ambiguity | Step stopped at | Resolution | Resolved by |
 | --- | --- | --- | --- | --- |
 
-**Decisions below the contract.** Each choice the implementer made that the spec left to it (`.claude/skills/session-start/SKILL.md` § Role 3), recorded as it was made.
+**Decisions below the contract.** Each choice the spec left to the implementer (`.claude/skills/session-start/SKILL.md` § Role 3), copied at the last step from the step commits that recorded them (.claude/skills/session-start/references/anvil.md § Working rules).
 
 | # | Step | Decision | Considered instead | Why |
 | --- | --- | --- | --- | --- |
 
 ## 5. Verification
 
-- **Test suite:** <passed> passed, <failed> failed, <skipped> skipped (baseline: <passed> passed, <failed> failed, <skipped> skipped) — form per `docs/standards/6-testing.md` §6.
+Counts are recorded in the form `docs/standards/6-testing.md` §6 states. Close-out completes the suite results and live verification (`.claude/skills/closeout/SKILL.md`).
+
+- **Test suite:** <passed> passed, <failed> failed, <skipped> skipped (baseline: the spec's §6 baseline).
 - **Defect shown before the fix** (defect fixes only, `.claude/skills/session-start/references/anvil.md` § Working rules): each test that shows the defect, with its run before the fix (failed) and after (passed).
 - **Live verification:** what was exercised against the running system, and when.
-- **Daemon restart** (`feature/*` and `hotfix/*`, per `docs/standards/2-git.md` §2.6): confirm `ActiveEnterTimestamp` postdates the `dev` merge commit.
-  - A merge is not a deployment.
 
 ## 6. Follow-ups
 
-Additional issues created by this work, or the open issue an item was added to where one already covered it (`docs/standards/1-workflow.md` §1.3), and any item deliberately left for later.
+Issues this work created or added to, including findings parked or joined to an open issue (§1.3 Findings and parked issues), and any item deliberately left for later.
 
 | Item | Description | Why deferred |
 | --- | --- | --- |

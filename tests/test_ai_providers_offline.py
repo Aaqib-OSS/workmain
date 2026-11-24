@@ -209,6 +209,8 @@ def _temp_ai_settings(tmp_path):
                 "api_key_env": "ANTHROPIC_API_KEY",
                 "retry_attempts": 1,
                 "retry_delay_seconds": 0,
+                "cost_per_1k_prompt_tokens": 0.0021,
+                "cost_per_1k_completion_tokens": 0.0137,
                 "accepts": ["system_prompt"],
             }
         },

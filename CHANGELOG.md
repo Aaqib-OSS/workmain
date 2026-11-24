@@ -3,9 +3,27 @@
 All notable changes to WorkmAIn will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+and project versioning follows `docs/standards/2-git.md` §2.5.
 
 ## [Unreleased]
+
+## [1.60.0] - 2026-11-18
+
+Claude and Gemini priced every request and every estimate at a rate written into their code whenever a rate key was missing from `config/ai_settings.json`, with no error and no warning. The rates now come only from config. `ProviderManager` refuses to load when an enabled paid provider lacks either rate key, and the error names the key. This is how it already treats a missing `max_tokens` (#155).
+
+### Changed
+
+- `workmain/ai/base_provider.py`: a provider declares the keys it requires from its `providers.<name>` entry in `REQUIRED_CONFIG_KEYS`, and `missing_config_keys()` returns the ones a config lacks. Construction refuses a missing declared key before the policy check and before any vendor client is built.
+- `workmain/ai/providers/claude.py`, `workmain/ai/providers/gemini.py`: each declares `cost_per_1k_prompt_tokens` and `cost_per_1k_completion_tokens`, and reads them with no fallback. No rate value remains in provider code.
+- `workmain/ai/provider_manager.py`: an enabled provider whose entry lacks a declared key stops the load with a `ConfigurationError` naming `providers.<name>.<key>`, before its policy is loaded. It is not recorded as a construction failure. A disabled provider is not checked.
+- `docs/AI_SETTINGS_GUIDE.md`: states that a paid provider's rates are required, set by hand in its entry, and never fetched from the vendor. § How to add a new provider covers declaring required keys, and its example config carries the rate keys.
+- `tests/test_provider_foundation.py`, `tests/test_ai_providers_offline.py`: the fixtures of 18 tests that built an enabled Claude or Gemini config without rate keys gain them. Their assertions are unchanged.
+
+### Added
+
+- `tests/test_provider_foundation.py::TestProviderConfigContract`: 14 cases covering direct construction and manager load without each rate key, disabled providers, the one comparison both paths use, and pricing at configured rates.
+
+Suite: 1801 passed, 0 failed, 0 skipped (baseline 1787 passed, 0 failed, 0 skipped).
 
 ## [1.59.0] - 2026-11-17
 

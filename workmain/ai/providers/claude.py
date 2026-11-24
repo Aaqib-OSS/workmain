@@ -51,6 +51,7 @@ class ClaudeProvider(BaseProvider):
 
     provider_type = ProviderType.CLAUDE
     REQUIRED_POLICY_KEYS = {'thinking', 'sampling'}
+    REQUIRED_CONFIG_KEYS = {'cost_per_1k_prompt_tokens', 'cost_per_1k_completion_tokens'}
 
     def __init__(self, config: dict, policy: dict = None):
         """
@@ -68,8 +69,8 @@ class ClaudeProvider(BaseProvider):
         self.model = config.get('model')
         self._retry_attempts = config.get('retry_attempts', 3)
         self._retry_delay = config.get('retry_delay_seconds', 1.0)
-        self._cost_per_1k_prompt = config.get('cost_per_1k_prompt_tokens', 0.003)
-        self._cost_per_1k_completion = config.get('cost_per_1k_completion_tokens', 0.015)
+        self._cost_per_1k_prompt = config['cost_per_1k_prompt_tokens']
+        self._cost_per_1k_completion = config['cost_per_1k_completion_tokens']
 
         api_key_env = config.get('api_key_env', 'ANTHROPIC_API_KEY')
         self._api_key = os.getenv(api_key_env)

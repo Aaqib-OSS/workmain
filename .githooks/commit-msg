@@ -61,8 +61,8 @@ cat >&2 <<'FOOTER'
 
     Step 3 of 7. Files changed, decisions made, expected test count.
 
-  Full standard: docs/standards/2-git.md §2.4
-  Do not bypass this with --no-verify — that is prohibited by the same standard.
+    Every commit runs the hooks (§2.4)
+    Full standard: docs/standards/2-git.md §2.4
 
 FOOTER
 

@@ -36,6 +36,3 @@ Rules:
 - **A test is a method of a plain class, and it takes what it needs as arguments.** Related tests share a `Test<Topic>` class. A test takes its fixtures and `parametrize` values as arguments and builds everything else in its own body.
 - **Each test checks one path**, with as many assertions as that path needs.
 
-### 6.3 Placement
-
-- Moved to §7.
