@@ -185,7 +185,7 @@ class TestSlackSetWorkspace:
         """Displays workspace_name and config file path."""
         result = _invoke('set', 'workspace')
         assert result.exit_code == 0
-        assert 'slower-midwest' in result.output
+        assert 'brindle-sound' in result.output
         assert 'config.json' in result.output
 
     @pytest.mark.xfail(reason="#214")

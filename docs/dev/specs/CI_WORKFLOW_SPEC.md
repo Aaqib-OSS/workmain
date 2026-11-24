@@ -18,6 +18,7 @@
 | 20261124 | Ray | Design study Q1–Q11 answered. The answers are in the study's §5. | Accepted. |
 | 20261124 | Ray | Markers are not strict: `@pytest.mark.xfail(reason="#<owning issue>")` (Q11). A marked test that passes reports as xpassed. | Accepted. Step 2. |
 | 20261124 | Ray | Spec approved, with Step 2's worktree created by `git worktree add --detach "$(mktemp -d)" HEAD`. | Accepted. |
+| 20261124 | Ray | Deviation approved: `tests/test_slack_channel_config.py::TestSlackSetWorkspace::test_slack_set_workspace_shows_config` asserted on a value listed in `DEV_REAL_VALUES`. Its assertion now uses an invented value (`CLAUDE.md` § Client Reference). History stays as it is, as with #276. AC1.5's check allows the one line. | Accepted. Ray approved the amendment to AC1.5 with the deviation, so **Status** stays `Approved`. |
 | 20261124 | Ray | No Caliper review. | Review is `n/a` (`docs/standards/1-workflow.md` §1.1). |
 | 20261124 | Spanner | The draft workflow in the issue's comment is the basis for Step 3, with four changes. <br>(a) A range or base that cannot be read fails the run and says why (design study F19). <br>(b) The `python-dotenv` pin is read from `requirements.txt` (F20). <br>(c) The style step prints its exit status (F21). <br>(d) The comments do not cite the study (`docs/standards/3-code.md` §3, opening). | Accepted by Ray, 20261124. |
 
@@ -347,7 +348,7 @@ Issue edits at close-out:
 | AC1.2 | A push to `main` runs the same suite, and its result shows on the commit | The run on the push that merges this branch to `main` shows a bare `pytest` and its summary line in its log |
 | AC1.3 | The suite connects as a role that is not a superuser | That run's role step shows `rolsuper`, `rolcreatedb` and `rolcreaterole` all `f` for `workmain_user` |
 | AC1.4 | The known failures are marked, so the run starts green | That run's summary shows 0 failed |
-| AC1.5 | A marker is the only change to any test | `git diff main -- tests/` adds only `@pytest.mark.xfail(reason="#<N>")` lines and `import pytest` lines |
+| AC1.5 | A marker is the only change to any test, apart from the approved replacement of a real value | `git diff main -- tests/` adds only `@pytest.mark.xfail(reason="#<N>")` lines and `import pytest` lines, plus the one assertion line in `test_slack_set_workspace_shows_config` that replaces a real value with an invented one |
 | AC2.1 | A pull request to `main` runs the same suite and shows its result on the pull request | `gh pr checks <N>` on the next `dev → main` pull request lists this workflow's jobs beside CodeQL's |
 | AC3.1 | The run checks the changed lines with `automation/style_check.py` and shows its exit status | The style job's log holds `automation/style_check.py exit <n>` |
 | AC3.2 | The workflow holds no real value | Ray reads `.github/workflows/tests.yml` for any real value |

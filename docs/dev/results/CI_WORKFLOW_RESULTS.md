@@ -29,7 +29,7 @@ Complete on the branch. The workflow `.github/workflows/tests.yml` has four repo
 | AC1.2 | **Not met** | `Awaiting Ray`: the run on the push that merges this branch to `main` |
 | AC1.3 | **Not met** | `Awaiting Ray`: that run's role step shows `f`, `f`, `f` for `workmain_user` |
 | AC1.4 | **Not met** | `Awaiting Ray`: that run's summary shows 0 failed. The local clean run (§5) showed 0 failed, 4 xfailed |
-| AC1.5 | Met | `git diff main -- tests/` adds six lines: four `@pytest.mark.xfail(reason="#<N>")` and two `import pytest`. It removes nothing |
+| AC1.5 | Met | `git diff main -- tests/` adds four `@pytest.mark.xfail(reason="#<N>")` lines and two `import pytest` lines. Its only other change replaces the asserted value in `test_slack_set_workspace_shows_config` with an invented one |
 | AC2.1 | **Not met** | `Awaiting Ray`: `gh pr checks <N>` on the next `dev → main` pull request |
 | AC3.1 | **Not met** | `Awaiting Ray`: the style job's log holds `automation/style_check.py exit <n>`. A local run of the step printed `automation/style_check.py exit 0` |
 | AC3.2 | **Not met** | `Awaiting Ray`: a reading of `.github/workflows/tests.yml` for any real value |
@@ -46,6 +46,7 @@ Complete on the branch. The workflow `.github/workflows/tests.yml` has four repo
 | 1 | The spec changes the "real-value check not run" message, and an existing assertion in `automation/style_check_test.py` checked the old wording | within approved meaning | The assertion now checks the new wording | Spanner, 20261124 |
 | 2 | `test_values_are_split_on_commas_with_whitespace_and_empty_entries_dropped` read `os.environ` once `environ` had a default | within approved meaning | It passes `{}`, so a value exported in the shell cannot change its result | Spanner, 20261124 |
 | 3 | The spec expected 137 automation tests. The empty-value test is parametrized over `""` and `" , ,"`, so 138 | within approved meaning | Recorded here | Spanner, 20261124 |
+| 4 | `test_slack_set_workspace_shows_config` asserted on a value listed in `DEV_REAL_VALUES` | none | Its assertion now uses an invented value, which Ray approved as a deviation. Locally the test now reports xfailed, because it reads the live `~/.workmain/` config until #214 makes it set up its own | Ray, 20261124 |
 
 **Decisions below the contract.**
 
@@ -57,7 +58,7 @@ Complete on the branch. The workflow `.github/workflows/tests.yml` has four repo
 
 ## 5. Verification
 
-- **Application suite, local bare `pytest`:** 1796 passed, 0 failed, 0 skipped. Note: 4 xpassed. Baseline: 1800 passed, 0 failed, 0 skipped.
+- **Application suite, local bare `pytest`:** 1796 passed, 0 failed, 0 skipped. Note: 3 xpassed, 1 xfailed. Baseline: 1800 passed, 0 failed, 0 skipped.
 - **Application suite, clean run** (Step 2: a detached worktree under `mktemp -d`, an empty `HOME`, `env -i`, output piped, `python -m pytest`):
   - Before the markers: 1791 passed, 4 failed, 5 skipped.
   - After: 1791 passed, 0 failed, 5 skipped. Note: 4 xfailed.
@@ -80,4 +81,4 @@ Complete on the branch. The workflow `.github/workflows/tests.yml` has four repo
 
 | Item | Description | Why deferred |
 | --- | --- | --- |
-| Real value in a test | `tests/test_slack_channel_config.py::TestSlackSetWorkspace::test_slack_set_workspace_shows_config` asserts on a string that is a value listed in `DEV_REAL_VALUES`. The file is tracked, and the line predates this branch | An existing defect outside this scope. It is reported to Ray, and becomes an issue only if he says so (`docs/standards/1-workflow.md` §1.3) |
+| Real value in a test | Fixed on this branch by Ray's deviation (§4 row 4). Earlier commits still hold the value, as with #276 | History is not rewritten |
