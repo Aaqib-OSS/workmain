@@ -4,6 +4,7 @@
 **Kind:** Design study
 **Author:** Spanner (Role 1)
 **Date:** 20261117
+**Read at:** `df06370`
 **Originating item:** Issue #278
 
 ---
@@ -110,8 +111,8 @@ The question is real (F23). #300 is about each command splitting its own comma-d
 | Q1 | Does the condenser stop writing, so that one use case writes the condensed summary, the condensed note and the linked entry in a single unit of work (§4 Q1, the only valid option)? | Ray, 20261118: yes. `condense_meeting` stops writing and returns the summary, and one use case writes `condensed_summary` and `condensed_at`, the condensed note and the linked entry in a single unit of work, through `MeetingsRepository`. |
 | Q2 | Does `record_condensation` live in a new `workmain/services/meetings_service.py`, with a line for it added to `docs/ARCHITECTURE.md` §2 Application (§4 Q2, the only valid option)? | Ray, 20261124: yes. `record_condensation` lives in a new `workmain/services/meetings_service.py`, and `docs/ARCHITECTURE.md` §2 Application gains its line. |
 | Q3 | Are #208's and #209's bodies edited now to say the condense-and-link is delivered by #278 and each calls it, or at #278's close-out? | Ray, 20261124: now. Both bodies were edited 20261124: #208 § Also in scope (the condense-and-link sentence, and the condensation step's module) and #209 § Also in scope. |
-| Q4 | Is parked #295 folded into #278, or left parked (§4 Q4)? | |
-| Q5 | Is parked #300 folded into #278, or left parked (§4 Q5)? | |
+| Q4 | Is parked #295 folded into #278, or left parked (§4 Q4)? | Ray, 20261124: left parked. |
+| Q5 | Is parked #300 folded into #278, or left parked (§4 Q5)? | Ray, 20261124: left parked. |
 
 ## 6. Disposition
 
