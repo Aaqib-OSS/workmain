@@ -1,6 +1,6 @@
 # Two defects in the tests workflow's first runs — Spec
 
-**Status:** Approved
+**Status:** Shipped
 **Author:** Spanner
 **Date:** 20261124
 **Read at:** 1367734de27a4020aeaa105b7ac14f637a450484

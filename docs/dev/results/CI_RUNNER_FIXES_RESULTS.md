@@ -1,6 +1,6 @@
 # Two defects in the tests workflow's first runs — Implementation Results
 
-**Status:** Active
+**Status:** Shipped
 **Author:** Spanner
 **Date:** 20261124
 **Spec:** `../specs/CI_RUNNER_FIXES_SPEC.md`
@@ -45,7 +45,8 @@ Both criteria are checked on the run that this branch's merge push to `main` tri
 
 - **Every `run:` value**, loaded with `yaml.safe_load`, has balanced quotes. The install step's value holds the whole command through `requirements.txt`, and runs locally in `bash -e` with exit 0.
 - **`CREATE DATABASE … LOCALE 'C.UTF-8'`** was not run locally, because the local role cannot create databases. The run checks it.
-- **Suites:** unchanged from #297's close-out. No test or application file changed.
+- **Close-out preflight, 20261124:** bare `pytest` 1796 passed, 0 failed, 0 skipped (note: 1 xfailed, 3 xpassed). No test or application file changed.
+- **Live verification:** the run triggered by this branch's merge push to `main`. Carried to #297 with both AC rows. A `chore/*` merge has no service restart (`docs/standards/2-git.md` §2.6).
 
 ## 6. Follow-ups
 
