@@ -11,8 +11,9 @@ history and is never checked.
 
 Every changed line, in a file of any type, and every commit message since the
 branch left its base are also checked for the real values listed in
-DEV_REAL_VALUES, read from .env in the main working tree, so a linked
-worktree reads the same file. The report names where a value is,
+DEV_REAL_VALUES, read from the environment when it lists any, and
+otherwise from .env in the main working tree, so a linked worktree
+reads the same file. The report names where a value is,
 never the value. With no values listed the check cannot run, and fails.
 Requires git, ruff and python-dotenv.
 
@@ -21,12 +22,13 @@ Exit 0 when every changed line passes, 1 otherwise.
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Sequence
+from typing import Mapping, Sequence
 
 from dotenv import dotenv_values
 
@@ -113,20 +115,33 @@ def changed_lines(base: str) -> dict[str, set[int] | None]:
 # ---------------------------------------------------------------- real values
 
 
-def real_values(env: Path) -> list[str]:
+def _entries(raw: str) -> list[str]:
+    """Split a DEV_REAL_VALUES value on commas, dropping whitespace and empty entries."""
+    return [entry.strip() for entry in raw.split(",") if entry.strip()]
+
+
+def real_values(env: Path, environ: Mapping[str, str] | None = None) -> list[str]:
     """
-    List the real values a `.env` file names in DEV_REAL_VALUES.
+    List the real values DEV_REAL_VALUES names, from the environment or a `.env` file.
+
+    The environment wins when its DEV_REAL_VALUES lists at least one entry, so
+    a CI run passes the values without writing a file. An empty or unset value
+    there falls through to the file.
 
     Args:
-        env: The `.env` file to read.
+        env: The `.env` file to read when the environment lists no values.
+        environ: The environment to read; the process's own when None.
 
     Returns:
         The comma-separated entries of DEV_REAL_VALUES, in order, each with the
-        whitespace around it dropped and empty entries left out. Empty when the
-        file, the key or its value is missing.
+        whitespace around it dropped and empty entries left out. Empty when
+        neither the environment nor the file lists any.
     """
-    raw = dotenv_values(env).get(REAL_VALUES_KEY) or ""
-    return [entry.strip() for entry in raw.split(",") if entry.strip()]
+    environ = os.environ if environ is None else environ
+    from_environment = _entries(environ.get(REAL_VALUES_KEY) or "")
+    if from_environment:
+        return from_environment
+    return _entries(dotenv_values(env).get(REAL_VALUES_KEY) or "")
 
 
 def _value_patterns(values: Sequence[str]) -> list[re.Pattern]:
@@ -404,7 +419,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"  commit {short} — holds value {position} of {REAL_VALUES_KEY}")
     if not values:
         print(
-            f"  real-value check not run: {REAL_VALUES_KEY} is not set in .env in the main working tree"
+            f"  real-value check not run: {REAL_VALUES_KEY} is not set in the environment or in .env in the main working tree"
         )
     failed = bool(violations) or bool(commits) or not values
     print("\nFAIL" if failed else "\nPASS")
