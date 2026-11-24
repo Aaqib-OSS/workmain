@@ -25,19 +25,19 @@ Complete on the branch. The workflow `.github/workflows/tests.yml` has four repo
 
 | AC | Status | Evidence |
 | --- | --- | --- |
-| AC1.1 | **Not met** | `Awaiting Ray`: the run on the push that merges this branch to `dev`, its `pytest` summary line, and the counts written in §6 form in §5 |
-| AC1.2 | **Not met** | `Awaiting Ray`: the run on the push that merges this branch to `main` |
-| AC1.3 | **Not met** | `Awaiting Ray`: that run's role step shows `f`, `f`, `f` for `workmain_user` |
-| AC1.4 | **Not met** | `Awaiting Ray`: that run's summary shows 0 failed. The local clean run (§5) showed 0 failed, 4 xfailed |
+| AC1.1 | Carried | Carried to #297. Ray, 20261124: the run on the push that merges this branch to `dev`, its `pytest` summary line, and the counts written in §6 form in §5 |
+| AC1.2 | Carried | Carried to #297. Ray, 20261124: the run on the push that merges this branch to `main` |
+| AC1.3 | Carried | Carried to #297. Ray, 20261124: that run's role step shows `f`, `f`, `f` for `workmain_user` |
+| AC1.4 | Carried | Carried to #297. Ray, 20261124: that run's summary shows 0 failed. The local clean run (§5) showed 0 failed, 4 xfailed |
 | AC1.5 | Met | `git diff main -- tests/` adds four `@pytest.mark.xfail(reason="#<N>")` lines and two `import pytest` lines. Its only other change replaces the asserted value in `test_slack_set_workspace_shows_config` with an invented one |
-| AC2.1 | **Not met** | `Awaiting Ray`: `gh pr checks <N>` on the next `dev → main` pull request |
-| AC3.1 | **Not met** | `Awaiting Ray`: the style job's log holds `automation/style_check.py exit <n>`. A local run of the step printed `automation/style_check.py exit 0` |
-| AC3.2 | **Not met** | `Awaiting Ray`: a reading of `.github/workflows/tests.yml` for any real value |
+| AC2.1 | Carried | Carried to #297. Ray, 20261124: `gh pr checks <N>` on the next `dev → main` pull request |
+| AC3.1 | Carried | Carried to #297. Ray, 20261124: the style job's log holds `automation/style_check.py exit <n>`. A local run of the step printed `automation/style_check.py exit 0` |
+| AC3.2 | Carried | Carried to #297. Ray, 20261124: a reading of `.github/workflows/tests.yml` for any real value |
 | AC3.3 | Met | `pytest automation/style_check_test.py` passes, including `test_values_in_the_environment_are_used_over_the_file`, `test_an_environment_value_with_no_entries_falls_through_to_the_file` (two cases) and `test_main_reads_the_values_from_the_environment_without_printing_them` |
-| AC4.1 | **Not met** | `Awaiting Ray`: the run's time-zone step prints `PST` or `PDT` |
-| AC5.1 | **Not met** | `Awaiting Ray`: the commit-message job prints one `-> exit <n>` line per commit. A local run over `origin/main..8cda7aa` printed seven lines, each `-> exit 0` |
+| AC4.1 | Carried | Carried to #297. Ray, 20261124: the run's time-zone step prints `PST` or `PDT` |
+| AC5.1 | Carried | Carried to #297. Ray, 20261124: the commit-message job prints one `-> exit <n>` line per commit. A local run over `origin/main..8cda7aa` printed seven lines, each `-> exit 0` |
 | AC5.2 | Met | The commit-message `run:` block, run locally in `bash -e` with `EVENT=push` and an absent `BEFORE`, printed "Range … cannot be read from this clone…" and exited 1. The style step with an absent `BASE` did the same |
-| AC6.1 | **Not met** | `Awaiting Ray`: the session-rules job shows `none found` twice. A local run of both steps printed `none found` and exited 0 |
+| AC6.1 | Carried | Carried to #297. Ray, 20261124: the session-rules job shows `none found` twice. A local run of both steps printed `none found` and exited 0 |
 
 ## 4. Deviations and decisions
 
