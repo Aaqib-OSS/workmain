@@ -52,6 +52,7 @@ Not read: the bodies of the other `ActionExecutor` handlers beyond what reposito
 | F20 | Baseline: `python3 automation/architecture_check.py` prints `PASS`. `pytest --collect-only -q` collects 1787 tests. | Run 20261117 on `df06370` | Low |
 | F21 | No application-layer module owns a write to the `meetings` table. `docs/ARCHITECTURE.md` §2 gives `notes_service` every note write and `time_entry_service` every time-entry write, and lists no meetings service. §1 says "A service owns one domain". Today the condensed summary is written by a capability (F8). Moving it into a use case (Q1) needs an owner for it in the application layer. | `docs/ARCHITECTURE.md` §1 Application row, §2 Application | High |
 | F22 | #208 and #209 each say that condensing a meeting and linking its entry "becomes one service", made by whichever of the two lands first. Once Q1's use case exists, that is this issue's work, and neither body says so. | issue #208 § Also in scope; issue #209 body line 44 | Medium |
+| F23 | The `docs/standards/1-workflow.md` §1.3 search by file, run over every file the spec changes, returns two `parked` issues: #295 (`CLAUDE.md`, `docs/ARCHITECTURE.md`) and #300 (`workmain/cli/commands/notes.py`, `workmain/cli/commands/time.py`). It also returns, unparked: #281 #278 (`clockify_service.py`); #267 #219 #230 #159 (`meetings_repo.py`); #267 #141 #208 (`note_condenser.py`); #169 #34 #36 #31 #32 #30 #33 (`action_executor.py`); #209 #73 #228 #141 (`notes.py`); #139 #208 #230 #280 #141 #142 (`meetings.py`); #281 #216 (`time.py`); #69 #281 #142 (`clockify.py`); #67 #261 #235 #254 (`daemon.py`); #254 (`slack_eod.py`); #219 #255 (`tests/mocks/fake_unit_of_work.py`); #161 #267 #188 #40 #140 #110 #240 #297 #254 (`CLAUDE.md`); #260 #263 #261 #255 #262 #147 #159 #205 #211 #212 #208 (`docs/ARCHITECTURE.md`); #287 (`test_action_executor.py`); #102 (`test_orchestration.py`); #281 (`test_clockify_service.py`, `test_clockify.py`); #288 (`test_meetings_merge.py`, `test_meetings_reschedule.py`); #209 #288 (`test_notes_add.py`); #209 #287 #141 (`test_notes_log.py`); #208 (`test_meetings_track.py`, `test_meetings_condense.py`); #216 #281 (`test_time_add.py`); #260 #288 #280 #208 (`test_cost_display.py`); #188 #288 #287 (`test_compare_providers.py`). No result for `notes_service.py`, `time_entry_service.py`, `test_fake_unit_of_work.py`, `test_notes_service.py`, `test_time_entry_service.py` or `test_note_condenser.py`. | `gh issue list --state open --search "\"<path>\" in:body"` per file, run 20261124 on `f52ef42` | Medium |
 
 ### Settled by rule, recorded here so the spec can cite it
 
@@ -94,6 +95,14 @@ The question is real (F21). The use case writes a meeting's summary, a note and 
 
 The question is real (F22). Read as written, the two bodies have #208's or #209's recon plan a condensation service this issue already delivers. The options are to edit both bodies now, saying the condense-and-link is `meetings_service.record_condensation`, delivered by #278, which each calls; or at this issue's close-out. Recommendation: now. Both issues are blocked by #278, so neither is in progress, and an edit made now means no reader meets the stale text while #278 is open.
 
+### Q4 — Parked #295: fold in or leave parked
+
+The question is real (F23, `docs/standards/1-workflow.md` §1.3). #295 is about providers using values written in code when a key is missing from `config/ai_settings.json`. It names `CLAUDE.md` and `docs/ARCHITECTURE.md` for § Local Model Definitions and the provider config owner, not for anything this issue edits. Its size, read from the code: ten defaults across three provider classes in `workmain/ai/providers/`, plus `ProviderManager`'s model check, a change to `capability-ai-llm` that this issue doesn't touch. Recommendation: leave it parked.
+
+### Q5 — Parked #300: fold in or leave parked
+
+The question is real (F23). #300 is about each command splitting its own comma-delimited option. `notes.py` and `time.py` hold five of its eight copies, in the parsing at the top of each command, which §1 Out of scope leaves as it is (the rest of each command is #209's and #216's). Its size: a comma-list `ParamType` in `workmain/cli/params.py` and eight call sites across four command files. Folding it in would add a CLI parameter change to a write-path conversion. Recommendation: leave it parked. #300 already names #209 and #216 as the issues that meet those lines.
+
 ## 5. Open questions
 
 | Q | Question | Answer |
@@ -101,6 +110,8 @@ The question is real (F22). Read as written, the two bodies have #208's or #209'
 | Q1 | Does the condenser stop writing, so that one use case writes the condensed summary, the condensed note and the linked entry in a single unit of work (§4 Q1, the only valid option)? | Ray, 20261118: yes. `condense_meeting` stops writing and returns the summary, and one use case writes `condensed_summary` and `condensed_at`, the condensed note and the linked entry in a single unit of work, through `MeetingsRepository`. |
 | Q2 | Does `record_condensation` live in a new `workmain/services/meetings_service.py`, with a line for it added to `docs/ARCHITECTURE.md` §2 Application (§4 Q2, the only valid option)? | Ray, 20261124: yes. `record_condensation` lives in a new `workmain/services/meetings_service.py`, and `docs/ARCHITECTURE.md` §2 Application gains its line. |
 | Q3 | Are #208's and #209's bodies edited now to say the condense-and-link is delivered by #278 and each calls it, or at #278's close-out? | Ray, 20261124: now. Both bodies were edited 20261124: #208 § Also in scope (the condense-and-link sentence, and the condensation step's module) and #209 § Also in scope. |
+| Q4 | Is parked #295 folded into #278, or left parked (§4 Q4)? | |
+| Q5 | Is parked #300 folded into #278, or left parked (§4 Q5)? | |
 
 ## 6. Disposition
 
