@@ -60,12 +60,12 @@ class NotesRepository:
     def create(
         self,
         content: str,
-        tags: List[str],
-        project_id: Optional[int] = None,
-        meeting_id: Optional[int] = None,
+        tags: list[str],
+        project_id: int | None = None,
+        meeting_id: int | None = None,
         source: str = 'ad-hoc',
-        created_at: Optional[datetime] = None,
-        client_id: Optional[int] = None,
+        created_at: datetime | None = None,
+        client_id: int | None = None,
     ) -> Note:
         """
         Create a new note.
