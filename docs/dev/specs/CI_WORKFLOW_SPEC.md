@@ -1,6 +1,6 @@
 # A GitHub Actions run of the suite, the style check and the commit-message check — Spec
 
-**Status:** Draft
+**Status:** Approved
 **Author:** Spanner
 **Date:** 20261124
 **Read at:** 59f73429b3c5ccfdc5b2d313cd2104090b8c8126
@@ -17,6 +17,7 @@
 | --- | --- | --- | --- |
 | 20261124 | Ray | Design study Q1–Q11 answered. The answers are in the study's §5. | Accepted. |
 | 20261124 | Ray | Markers are not strict: `@pytest.mark.xfail(reason="#<owning issue>")` (Q11). A marked test that passes reports as xpassed. | Accepted. Step 2. |
+| 20261124 | Ray | Spec approved, with Step 2's worktree created by `git worktree add --detach "$(mktemp -d)" HEAD`. | Accepted. |
 | 20261124 | Ray | No Caliper review. | Review is `n/a` (`docs/standards/1-workflow.md` §1.1). |
 | 20261124 | Spanner | The draft workflow in the issue's comment is the basis for Step 3, with four changes. <br>(a) A range or base that cannot be read fails the run and says why (design study F19). <br>(b) The `python-dotenv` pin is read from `requirements.txt` (F20). <br>(c) The style step prints its exit status (F21). <br>(d) The comments do not cite the study (`docs/standards/3-code.md` §3, opening). | Accepted by Ray, 20261124. |
 
@@ -112,7 +113,7 @@ reads the same file. The report names where a value is,
 
 ### Step 2 — Mark the baseline failures
 
-Run the suite once locally, without `.env` or `~/.workmain/`, with its output piped. Use a detached worktree of the branch, `HOME` set to an empty directory, and `DB_*` exported with `DB_NAME=workmain_test`, as `python -m pytest`, so the worktree's `workmain` is imported. Mark each test that fails with `@pytest.mark.xfail(reason="#<owning issue>")`, adding `import pytest` where it is missing. A failure no open issue owns is reported to Ray in one line.
+Run the suite once locally, without `.env` or `~/.workmain/`, with its output piped. Create the worktree with `git worktree add --detach "$(mktemp -d)" HEAD`, as Caliper does, so no directory above it holds a `.env`. `HOME` set to an empty directory, and `DB_*` exported with `DB_NAME=workmain_test`, as `python -m pytest`, so the worktree's `workmain` is imported. Mark each test that fails with `@pytest.mark.xfail(reason="#<owning issue>")`, adding `import pytest` where it is missing. A failure no open issue owns is reported to Ray in one line.
 
 **Proof that the change is behaviour-neutral** (`docs/standards/2-git.md` §2.2): `git diff main -- tests/` adds only those decorator lines and `import pytest` lines, and removes nothing.
 
