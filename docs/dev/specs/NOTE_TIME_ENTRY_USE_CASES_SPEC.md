@@ -60,6 +60,7 @@
 | 20261124 | Caliper (post-implementation) | No findings. | n/a |
 | 20261124 | Ray | The second post-implementation review's existing defect is folded into #278: `time_entry_service.create_time_entry` writes its task note itself with `uow.notes.create` (`time_entry_service.py:118`), though `docs/ARCHITECTURE.md` §2 gives `notes_service.py` every note write. The deleted `CLAUDE.md` section had allowed it by naming two modules. | §1 Scope, R17, DR10, Steps 6 and 7, AC9.1. #278's body gains the criterion. |
 | 20261124 | Spanner | The issue-body edit of 20261124 that replaced the `CLAUDE.md` criterion wrote it as two criteria, so the spec's AC6.2, AC7.1 and AC8.1 no longer mapped to the issue criterion of their number (`docs/standards/1-workflow.md` §1.2, sub-ACs). | #278's body merges them into one sixth criterion with two checks, matching AC6.1 and AC6.2; the new criterion is the ninth, AC9.1. |
+| 20261124 | Caliper (post-implementation) | No findings. | n/a |
 
 ---
 
