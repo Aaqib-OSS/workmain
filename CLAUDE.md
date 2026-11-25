@@ -140,16 +140,6 @@ Different fields, different write paths. **Each field has its own writers.**
 - `client_id` is system-derived in Slack context.
 - `project_id` resolution from Slack is deferred indefinitely (no ProjectsRepository).
 
-### Note Write-Path Convergence - Source of Truth
-
-All note and paired-TimeEntry creation in `workmain/` goes through the service layer:
-
-- `notes_service.create_note()` - pure-note writes; also the first half of every paired write.
-- `time_entry_service.create_time_entry()` - task-shaped paired write (`source='task'`, meeting_id never reaches the Note - intentional).
-- `time_entry_service.create_paired_time_entry()` - the TimeEntry half of a meeting/condensed/Clockify pair; derives meeting_id and client_id from the created Note.
-
-No file under `workmain/` outside `notes_service.py` calls `TaskStatusRepository.ensure_active` or `.set_dismissed_by_tag_removal` directly. The CF→TaskStatus hook fires from `notes_service.apply_cf_hook_on_create()` and `apply_cf_hook_on_tag_update()` (any tag-mutating update, e.g. `notes edit`). No direct `NotesRepository.create()` or `TimeEntriesRepository.create()` call exists in `workmain/` outside those two service modules.
-
 ### Client Reference
 
 WorkmAIn is developed while in live use, and the repository is public. Until development no longer runs against live data, everything published from this repository — a tracked file, a commit message, or issue or pull request text — stands in for each real value, in one of the two forms below. A real value is a client's name, or an identifier of the operator's Slack workspace, its channels or users, a report recipient or a Drive location, as held in `.env`, `~/.workmain/` or the database. The operator's own name as authorship is not one.

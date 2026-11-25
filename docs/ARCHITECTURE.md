@@ -54,7 +54,7 @@ The three entry points (CLI, daemon, Slack Socket Mode) are the three surfaces, 
 
 ### Application
 
-- `workmain/services/notes_service.py` — every note write, and the carry-forward to task-status hook (`CLAUDE.md` § Note Write-Path Convergence).
+- `workmain/services/notes_service.py` — every note write, and the carry-forward to task-status hook.
 - `workmain/services/time_entry_service.py` — every time-entry write, including the time-entry half of every paired write.
 - `workmain/services/meetings_service.py` — meeting records, and a meeting's condensation.
 - `workmain/services/tasks_service.py` — the task lifecycle.
