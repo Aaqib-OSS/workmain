@@ -21,7 +21,7 @@ class TaskStatusRepository:
     """
 
     def __init__(self, session: Session) -> None:
-        self.session = session
+        self._session = session
 
     # ------------------------------------------------------------------
     # Creation
@@ -44,8 +44,8 @@ class TaskStatusRepository:
                 f"A task_status record already exists for note {note_id}."
             )
         ts = TaskStatus(note_id=note_id, status='active')
-        self.session.add(ts)
-        self.session.flush()
+        self._session.add(ts)
+        self._session.flush()
         return ts
 
     def ensure_active(self, note_id: int) -> TaskStatus:
@@ -76,7 +76,7 @@ class TaskStatusRepository:
             ts.completed_at = None
             ts.forwarding_note_id = None
             ts.updated_at = datetime.now()
-            self.session.flush()
+            self._session.flush()
 
         return ts
 
@@ -101,7 +101,7 @@ class TaskStatusRepository:
         ts.status = 'completed'
         ts.completed_at = now
         ts.updated_at = now
-        self.session.flush()
+        self._session.flush()
         return ts
 
     def set_dismissed(self, note_id: int) -> TaskStatus:
@@ -121,7 +121,7 @@ class TaskStatusRepository:
         ts.status = 'dismissed'
         ts.completed_at = now
         ts.updated_at = now
-        self.session.flush()
+        self._session.flush()
         return ts
 
     def set_forwarding_note(self, task_status_id: int, note_id: int) -> None:
@@ -138,14 +138,14 @@ class TaskStatusRepository:
         Raises:
             ValueError: If no task_status record exists with task_status_id.
         """
-        ts = self.session.query(TaskStatus).filter(TaskStatus.id == task_status_id).first()
+        ts = self._session.query(TaskStatus).filter(TaskStatus.id == task_status_id).first()
         if ts is None:
             raise ValueError(
                 f"No task_status record exists with id {task_status_id}."
             )
         ts.forwarding_note_id = note_id
         ts.updated_at = datetime.now()
-        self.session.flush()
+        self._session.flush()
 
     def set_dismissed_by_tag_removal(self, note_id: int) -> Optional[TaskStatus]:
         """Dismiss task when carry-forward tag is removed via notes edit.
@@ -166,7 +166,7 @@ class TaskStatusRepository:
         ts.status = 'dismissed'
         ts.completed_at = now
         ts.updated_at = now
-        self.session.flush()
+        self._session.flush()
         return ts
 
     # ------------------------------------------------------------------
@@ -183,7 +183,7 @@ class TaskStatusRepository:
             TaskStatus or None.
         """
         return (
-            self.session.query(TaskStatus)
+            self._session.query(TaskStatus)
             .filter(TaskStatus.note_id == note_id)
             .first()
         )
@@ -254,7 +254,7 @@ class TaskStatusRepository:
         and/or limit() as needed.
         """
         q = (
-            self.session.query(TaskStatus)
+            self._session.query(TaskStatus)
             .join(Note, TaskStatus.note_id == Note.id)
         )
 

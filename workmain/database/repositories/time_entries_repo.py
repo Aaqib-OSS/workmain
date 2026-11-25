@@ -35,7 +35,7 @@ class TimeEntriesRepository:
         Args:
             session: SQLAlchemy database session
         """
-        self.session = session
+        self._session = session
         self.model = TimeEntry  # For direct SQLAlchemy queries when needed
     
     def _validate_client_project_consistency(
@@ -50,7 +50,7 @@ class TimeEntriesRepository:
         """
         if project_id is None or client_id is None:
             return
-        project = self.session.query(Project).filter(
+        project = self._session.query(Project).filter(
             Project.id == project_id
         ).first()
         if project is None:
@@ -111,9 +111,9 @@ class TimeEntriesRepository:
             created_at=created_at or datetime.now(),
         )
 
-        self.session.add(time_entry)
-        self.session.flush()
-        self.session.refresh(time_entry)
+        self._session.add(time_entry)
+        self._session.flush()
+        self._session.refresh(time_entry)
 
         return time_entry
     
@@ -127,7 +127,7 @@ class TimeEntriesRepository:
         Returns:
             TimeEntry object or None if not found
         """
-        return self.session.query(TimeEntry).filter(
+        return self._session.query(TimeEntry).filter(
             TimeEntry.id == entry_id
         ).first()
     
@@ -143,7 +143,7 @@ class TimeEntriesRepository:
         Returns:
             TimeEntry object or None if not found
         """
-        return self.session.query(TimeEntry).filter(
+        return self._session.query(TimeEntry).filter(
             TimeEntry.clockify_id == clockify_id
         ).first()
     
@@ -157,7 +157,7 @@ class TimeEntriesRepository:
         Returns:
             List of TimeEntry objects
         """
-        return self.session.query(TimeEntry).options(
+        return self._session.query(TimeEntry).options(
             joinedload(TimeEntry.note)
         ).filter(
             TimeEntry.meeting_id == meeting_id
@@ -190,7 +190,7 @@ class TimeEntriesRepository:
         Returns:
             List of TimeEntry objects
         """
-        query = self.session.query(TimeEntry).options(
+        query = self._session.query(TimeEntry).options(
             joinedload(TimeEntry.note), joinedload(TimeEntry.project)
         ).filter(
             TimeEntry.entry_date == target_date
@@ -218,7 +218,7 @@ class TimeEntriesRepository:
         Returns:
             List of TimeEntry objects
         """
-        query = self.session.query(TimeEntry).options(
+        query = self._session.query(TimeEntry).options(
             joinedload(TimeEntry.note), joinedload(TimeEntry.project)
         ).filter(
             and_(
@@ -255,7 +255,7 @@ class TimeEntriesRepository:
         Returns:
             List of TimeEntry objects
         """
-        query = self.session.query(TimeEntry).options(
+        query = self._session.query(TimeEntry).options(
             joinedload(TimeEntry.note), joinedload(TimeEntry.project)
         ).filter(
             and_(
@@ -346,8 +346,8 @@ class TimeEntriesRepository:
         if note_id is not None:
             entry.note_id = note_id
 
-        self.session.flush()
-        self.session.refresh(entry)
+        self._session.flush()
+        self._session.refresh(entry)
 
         return entry
     
@@ -366,8 +366,8 @@ class TimeEntriesRepository:
         if not entry:
             return False
         
-        self.session.delete(entry)
-        self.session.flush()
+        self._session.delete(entry)
+        self._session.flush()
         
         return True
     
@@ -386,7 +386,7 @@ class TimeEntriesRepository:
         Returns:
             Total hours as Decimal
         """
-        query = self.session.query(
+        query = self._session.query(
             func.sum(TimeEntry.duration_hours)
         ).filter(
             TimeEntry.entry_date == target_date
@@ -419,7 +419,7 @@ class TimeEntriesRepository:
         
         end_of_week = start_of_week + timedelta(days=4)
         
-        query = self.session.query(
+        query = self._session.query(
             func.sum(TimeEntry.duration_hours)
         ).filter(
             and_(
@@ -447,7 +447,7 @@ class TimeEntriesRepository:
         Returns:
             List of (category, total_hours) tuples
         """
-        results = self.session.query(
+        results = self._session.query(
             TimeEntry.category,
             func.sum(TimeEntry.duration_hours)
         ).filter(
@@ -477,7 +477,7 @@ class TimeEntriesRepository:
         
         end_of_week = start_of_week + timedelta(days=4)
         
-        results = self.session.query(
+        results = self._session.query(
             TimeEntry.category,
             func.sum(TimeEntry.duration_hours)
         ).filter(
@@ -498,7 +498,7 @@ class TimeEntriesRepository:
         Returns:
             List of TimeEntry objects without clockify_id
         """
-        return self.session.query(TimeEntry).options(
+        return self._session.query(TimeEntry).options(
             joinedload(TimeEntry.note), joinedload(TimeEntry.project)
         ).filter(
             TimeEntry.clockify_id.is_(None)
@@ -511,7 +511,7 @@ class TimeEntriesRepository:
         Returns:
             List of TimeEntry objects with note and project loaded
         """
-        return self.session.query(TimeEntry).options(
+        return self._session.query(TimeEntry).options(
             joinedload(TimeEntry.note), joinedload(TimeEntry.project)
         ).order_by(TimeEntry.entry_date, TimeEntry.entry_time).all()
 
@@ -522,7 +522,7 @@ class TimeEntriesRepository:
         Returns:
             Number of entries without clockify_id
         """
-        return self.session.query(func.count(TimeEntry.id)).filter(
+        return self._session.query(func.count(TimeEntry.id)).filter(
             TimeEntry.clockify_id.is_(None)
         ).scalar()
 
@@ -533,7 +533,7 @@ class TimeEntriesRepository:
         Returns:
             Latest synced_at, or None when nothing has been synced
         """
-        return self.session.query(func.max(TimeEntry.synced_at)).scalar()
+        return self._session.query(func.max(TimeEntry.synced_at)).scalar()
 
     def mark_as_synced(
         self,
@@ -558,8 +558,8 @@ class TimeEntriesRepository:
         entry.clockify_id = clockify_id
         entry.synced_at = datetime.now()
         
-        self.session.flush()
-        self.session.refresh(entry)
+        self._session.flush()
+        self._session.refresh(entry)
         
         return entry
     
@@ -578,7 +578,7 @@ class TimeEntriesRepository:
             List of TimeEntry objects ordered by entry_date DESC, entry_time DESC.
         """
         return (
-            self.session.query(TimeEntry)
+            self._session.query(TimeEntry)
             .join(Note, TimeEntry.note_id == Note.id)
             .options(contains_eager(TimeEntry.note))
             .filter(func.lower(Note.content).contains(query.lower()))
@@ -601,7 +601,7 @@ class TimeEntriesRepository:
             List of TimeEntry objects (empty if none).
         """
         return (
-            self.session.query(TimeEntry)
+            self._session.query(TimeEntry)
             .filter(TimeEntry.note_id == note_id)
             .order_by(TimeEntry.entry_date.desc())
             .all()
@@ -617,7 +617,7 @@ class TimeEntriesRepository:
         Returns:
             List of TimeEntry objects
         """
-        return self.session.query(TimeEntry).order_by(
+        return self._session.query(TimeEntry).order_by(
             desc(TimeEntry.entry_date),
             desc(TimeEntry.entry_time)
         ).limit(limit).all()
@@ -625,7 +625,7 @@ class TimeEntriesRepository:
     def get_most_recent_since(self, since: datetime) -> Optional[TimeEntry]:
         """Most recently created TimeEntry with created_at >= since, or None."""
         return (
-            self.session.query(TimeEntry)
+            self._session.query(TimeEntry)
             .filter(TimeEntry.created_at >= since)
             .order_by(desc(TimeEntry.created_at))
             .first()
