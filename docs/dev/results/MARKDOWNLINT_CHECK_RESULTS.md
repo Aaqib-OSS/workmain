@@ -80,7 +80,7 @@ Complete. `automation/style_check.py` now runs markdownlint-cli2 0.24.2 against 
 
 | Item | Description | Why deferred |
 | --- | --- | --- |
-| `npm audit` | 5 low-severity advisories, all one transitive KaTeX advisory (GHSA-238p-pmpm-9mq7) under `markdownlint` 0.42.2, the same version the editor bundles. The only fix npm offers is markdownlint-cli2 0.16.0, a downgrade. Reported to Ray in one line | It is an issue only on Ray's word (§1.3) |
+| `npm audit` | 5 low-severity advisories, all one transitive KaTeX advisory (GHSA-238p-pmpm-9mq7) under `markdownlint` 0.42.2, the same version the editor bundles. The only fix npm offers is markdownlint-cli2 0.16.0, a downgrade. KaTeX is installed but never loaded: `markdownlint/lib/micromark-parse.mjs:7` imports only the syntax extension `math`, and KaTeX is imported only by the extension's HTML renderer, `micromark-extension-math/lib/html.js:6`, which nothing loads | No issue, Ray 20261125 |
 | Caliper findings | Three standards gaps and one existing defect, in the spec's Decision Log | Each is an issue only on Ray's word (§1.3) |
 | Existing findings | The 96 findings of design study F5 and the two wraps of F14, in files this work did not touch | Fixed when a branch touches them (spec §1) |
 | Editor reload | The editor reads `.markdownlint-cli2.jsonc` and loads the rule through `modulePaths` once `npm ci --prefix automation` has run in the main working tree | AC1.12 |
