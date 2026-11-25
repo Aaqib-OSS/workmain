@@ -1,9 +1,13 @@
 # <Title> — Implementation Results
 
 **Status:** Active | Shipped | Superseded
+
 **Author:** Anvil | Spanner
+
 **Date:** YYYYMMDD
+
 **Spec:** `../specs/<file>_SPEC.md`
+
 **Released as:** vX.Y.Z (tag vX.Y.Z) | `n/a`
 
 > Delete this block before use.

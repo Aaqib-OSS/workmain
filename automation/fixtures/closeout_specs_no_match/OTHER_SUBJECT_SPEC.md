@@ -1,6 +1,7 @@
 # Fixture — Spec
 
 **Status:** Approved
+
 **Branch:** `chore/issue-1-other-branch`
 
 ## 5. Acceptance criteria

@@ -1,10 +1,15 @@
 # <Title> — Design Study | Recon
 
 **Status:** Active | Shipped | Superseded
+
 **Kind:** Design study | Recon
+
 **Author:** Spanner
+
 **Date:** YYYYMMDD
+
 **Read at:** <commit SHA the read was taken at>
+
 **Originating item:** Issue #N
 
 > Delete this block before use.

@@ -1,6 +1,7 @@
 # Fixture — Implementation Results
 
 **Status:** Shipped
+
 **Spec:** `docs/dev/specs/FIXTURE_SPEC.md`
 
 ## 3. Acceptance criteria
