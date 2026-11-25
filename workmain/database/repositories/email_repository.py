@@ -21,7 +21,7 @@ class EmailRepository:
     """
 
     def __init__(self, session: Session):
-        self.session = session
+        self._session = session
 
     # ------------------------------------------------------------------
     # Recipient identity methods
@@ -30,7 +30,7 @@ class EmailRepository:
     def get_all_recipients(self) -> list[Recipient]:
         """Return all recipients ordered by ID."""
         return (
-            self.session.query(Recipient)
+            self._session.query(Recipient)
             .options(selectinload(Recipient.assignments))
             .order_by(Recipient.id)
             .all()
@@ -38,11 +38,11 @@ class EmailRepository:
 
     def get_recipient_by_id(self, id: int) -> Optional[Recipient]:
         """Return recipient by primary key, or None if not found."""
-        return self.session.query(Recipient).filter(Recipient.id == id).first()
+        return self._session.query(Recipient).filter(Recipient.id == id).first()
 
     def get_recipient_by_email(self, email: str) -> Optional[Recipient]:
         """Return recipient by email address, or None if not found."""
-        return self.session.query(Recipient).filter(
+        return self._session.query(Recipient).filter(
             Recipient.email == email.lower().strip()
         ).first()
 
@@ -62,9 +62,9 @@ class EmailRepository:
             return existing
 
         recipient = Recipient(email=email)
-        self.session.add(recipient)
-        self.session.flush()
-        self.session.refresh(recipient)
+        self._session.add(recipient)
+        self._session.flush()
+        self._session.refresh(recipient)
         return recipient
 
     def remove_recipient(self, id: int) -> None:
@@ -76,8 +76,8 @@ class EmailRepository:
         """
         recipient = self.get_recipient_by_id(id)
         if recipient:
-            self.session.delete(recipient)
-            self.session.flush()
+            self._session.delete(recipient)
+            self._session.flush()
 
     # ------------------------------------------------------------------
     # Assignment methods
@@ -94,7 +94,7 @@ class EmailRepository:
             List of ReportRecipient records with recipient relationship loaded
         """
         return (
-            self.session.query(ReportRecipient)
+            self._session.query(ReportRecipient)
             .filter(ReportRecipient.report_type == report_type)
             .join(ReportRecipient.recipient)
             .order_by(ReportRecipient.recipient_type, Recipient.email)
@@ -125,7 +125,7 @@ class EmailRepository:
         Returns:
             List of ReportRecipient records.
         """
-        query = self.session.query(ReportRecipient).options(
+        query = self._session.query(ReportRecipient).options(
             joinedload(ReportRecipient.recipient)
         ).filter(
             ReportRecipient.report_type == template_name
@@ -166,7 +166,7 @@ class EmailRepository:
             raise ValueError(f"Recipient ID {recipient_id} not found")
 
         existing = (
-            self.session.query(ReportRecipient)
+            self._session.query(ReportRecipient)
             .filter(
                 ReportRecipient.recipient_id == recipient_id,
                 ReportRecipient.report_type == report_type,
@@ -177,7 +177,7 @@ class EmailRepository:
         if existing:
             if existing.recipient_type != role:
                 existing.recipient_type = role
-                self.session.flush()
+                self._session.flush()
             return existing
 
         assignment = ReportRecipient(
@@ -186,9 +186,9 @@ class EmailRepository:
             recipient_type=role,
             client_id=client_id,
         )
-        self.session.add(assignment)
-        self.session.flush()
-        self.session.refresh(assignment)
+        self._session.add(assignment)
+        self._session.flush()
+        self._session.refresh(assignment)
         return assignment
 
     def unassign_recipient(
@@ -211,7 +211,7 @@ class EmailRepository:
             client_id: Client scope to target (None = global assignment)
         """
         assignment = (
-            self.session.query(ReportRecipient)
+            self._session.query(ReportRecipient)
             .filter(
                 ReportRecipient.recipient_id == recipient_id,
                 ReportRecipient.report_type == report_type,
@@ -220,8 +220,8 @@ class EmailRepository:
             .first()
         )
         if assignment:
-            self.session.delete(assignment)
-            self.session.flush()
+            self._session.delete(assignment)
+            self._session.flush()
 
 
 def get_email_repository(session: Session) -> EmailRepository:

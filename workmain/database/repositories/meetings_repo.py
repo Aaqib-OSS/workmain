@@ -32,7 +32,7 @@ class MeetingsRepository:
         Args:
             session: SQLAlchemy database session
         """
-        self.session = session
+        self._session = session
     
     def create(
         self,
@@ -77,9 +77,9 @@ class MeetingsRepository:
             client_id=client_id,
         )
         
-        self.session.add(meeting)
-        self.session.flush()
-        self.session.refresh(meeting)
+        self._session.add(meeting)
+        self._session.flush()
+        self._session.refresh(meeting)
         
         return meeting
     
@@ -109,7 +109,7 @@ class MeetingsRepository:
         start_dt = datetime.combine(start_date, time.min)
         end_dt = datetime.combine(end_date, time.max)
 
-        query = self.session.query(Meeting).filter(
+        query = self._session.query(Meeting).filter(
             and_(
                 Meeting.start_time >= start_dt,
                 Meeting.start_time <= end_dt
@@ -131,7 +131,7 @@ class MeetingsRepository:
         Returns:
             Meeting object or None if not found
         """
-        return self.session.query(Meeting).filter(Meeting.id == meeting_id).first()
+        return self._session.query(Meeting).filter(Meeting.id == meeting_id).first()
     
     def get_by_title(self, title: str, exact: bool = True) -> Optional[Meeting]:
         """
@@ -145,11 +145,11 @@ class MeetingsRepository:
             Meeting object or None if not found
         """
         if exact:
-            return self.session.query(Meeting).filter(
+            return self._session.query(Meeting).filter(
                 Meeting.title == title
             ).order_by(Meeting.start_time.desc()).first()
         else:
-            return self.session.query(Meeting).filter(
+            return self._session.query(Meeting).filter(
                 func.lower(Meeting.title) == func.lower(title)
             ).order_by(Meeting.start_time.desc()).first()
     
@@ -164,7 +164,7 @@ class MeetingsRepository:
         Returns:
             List of Meeting objects
         """
-        return self.session.query(Meeting).filter(
+        return self._session.query(Meeting).filter(
             func.lower(Meeting.title).contains(func.lower(search_term)),
             Meeting.is_cancelled.is_(False),
         ).order_by(Meeting.start_time.desc()).limit(limit).all()
@@ -188,7 +188,7 @@ class MeetingsRepository:
             # Secondary sort: proximity to today (ascending), so today's instance
             # always ranks before future or past recurring instances with the same score
             matches = (
-                self.session.query(
+                self._session.query(
                     Meeting,
                     func.similarity(Meeting.title, title).label('similarity')
                 )
@@ -214,7 +214,7 @@ class MeetingsRepository:
                 f"PostgreSQL trigram search failed, using fallback: {str(e)}"
             )
 
-            all_meetings = self.session.query(Meeting).all()
+            all_meetings = self._session.query(Meeting).all()
             matches = []
 
             for meeting in all_meetings:
@@ -245,7 +245,7 @@ class MeetingsRepository:
         start_of_day = datetime.combine(target_date, datetime.min.time())
         end_of_day = datetime.combine(target_date, datetime.max.time())
 
-        return self.session.query(Meeting).filter(
+        return self._session.query(Meeting).filter(
             and_(
                 Meeting.start_time >= start_of_day,
                 Meeting.start_time <= end_of_day
@@ -267,7 +267,7 @@ class MeetingsRepository:
             List of non-cancelled Meeting objects
         """
         return (
-            self.session.query(Meeting)
+            self._session.query(Meeting)
             .filter(Meeting.start_time >= datetime.combine(target_date, time.min))
             .filter(Meeting.start_time < datetime.combine(target_date, time.max))
             .filter(Meeting.is_cancelled.is_(False))
@@ -295,7 +295,7 @@ class MeetingsRepository:
         start_of_day = datetime.combine(target_date, datetime.min.time())
         end_of_day = datetime.combine(target_date, datetime.max.time())
 
-        return self.session.query(Meeting).filter(
+        return self._session.query(Meeting).filter(
             and_(
                 func.lower(Meeting.title) == func.lower(title),
                 Meeting.start_time >= start_of_day,
@@ -326,7 +326,7 @@ class MeetingsRepository:
         from datetime import timedelta
         future = now + timedelta(days=days)
         
-        return self.session.query(Meeting).filter(
+        return self._session.query(Meeting).filter(
             and_(
                 Meeting.start_time >= now,
                 Meeting.start_time <= future,
@@ -344,7 +344,7 @@ class MeetingsRepository:
         Returns:
             List of Meeting objects
         """
-        return self.session.query(Meeting).order_by(
+        return self._session.query(Meeting).order_by(
             Meeting.start_time.desc()
         ).limit(limit).all()
     
@@ -358,7 +358,7 @@ class MeetingsRepository:
         Returns:
             List of Meeting objects
         """
-        query = self.session.query(Meeting).filter(
+        query = self._session.query(Meeting).filter(
             Meeting.is_cancelled.is_(False)
         ).order_by(Meeting.start_time.desc())
 
@@ -388,7 +388,7 @@ class MeetingsRepository:
         Returns:
             Number of notes (excluding condensed summary notes; optionally ifo/date-scoped)
         """
-        query = self.session.query(Note).filter(
+        query = self._session.query(Note).filter(
             Note.meeting_id == meeting_id,
             Note.source != 'condensed'
         )
@@ -412,7 +412,7 @@ class MeetingsRepository:
             Number of notes whose meeting_id is the meeting's
         """
         return (
-            self.session.query(func.count(Note.id))
+            self._session.query(func.count(Note.id))
             .filter(Note.meeting_id == meeting_id)
             .scalar()
         ) or 0
@@ -426,12 +426,12 @@ class MeetingsRepository:
             them or None)
         """
         count = (
-            self.session.query(func.count(Meeting.id))
+            self._session.query(func.count(Meeting.id))
             .filter(Meeting.outlook_id.isnot(None))
             .scalar()
         ) or 0
         latest = (
-            self.session.query(func.max(Meeting.created_at))
+            self._session.query(func.max(Meeting.created_at))
             .filter(Meeting.outlook_id.isnot(None))
             .scalar()
         )
@@ -450,7 +450,7 @@ class MeetingsRepository:
             ordered by start_time
         """
         return (
-            self.session.query(Meeting)
+            self._session.query(Meeting)
             .filter(
                 Meeting.outlook_id.isnot(None),
                 Meeting.start_time >= start,
@@ -471,7 +471,7 @@ class MeetingsRepository:
             Meeting or None
         """
         return (
-            self.session.query(Meeting)
+            self._session.query(Meeting)
             .filter(Meeting.outlook_id == outlook_id)
             .first()
         )
@@ -489,7 +489,7 @@ class MeetingsRepository:
         if not outlook_ids:
             return []
         return (
-            self.session.query(Meeting)
+            self._session.query(Meeting)
             .filter(Meeting.outlook_id.in_(list(outlook_ids)))
             .order_by(Meeting.start_time)
             .all()
@@ -515,7 +515,7 @@ class MeetingsRepository:
             Matching Meeting or None
         """
         return (
-            self.session.query(Meeting)
+            self._session.query(Meeting)
             .filter(
                 Meeting.outlook_id.is_(None),
                 func.lower(Meeting.title) == title.lower(),
@@ -541,7 +541,7 @@ class MeetingsRepository:
             Total number of user-authored, non-ifo notes across the entire series
         """
         return (
-            self.session.query(Note)
+            self._session.query(Note)
             .join(Meeting, Note.meeting_id == Meeting.id)
             .filter(
                 Meeting.outlook_recurring_id == outlook_recurring_id,
@@ -561,7 +561,7 @@ class MeetingsRepository:
         Returns:
             List of Meeting objects
         """
-        return self.session.query(Meeting).filter(
+        return self._session.query(Meeting).filter(
             Meeting.outlook_recurring_id == outlook_recurring_id
         ).order_by(Meeting.start_time).all()
     
@@ -608,8 +608,8 @@ class MeetingsRepository:
         if is_manually_modified is not None:
             meeting.is_manually_modified = is_manually_modified
 
-        self.session.flush()
-        self.session.refresh(meeting)
+        self._session.flush()
+        self._session.refresh(meeting)
 
         return meeting
 
@@ -634,8 +634,8 @@ class MeetingsRepository:
         meeting.condensed_summary = summary
         meeting.condensed_at = condensed_at
 
-        self.session.flush()
-        self.session.refresh(meeting)
+        self._session.flush()
+        self._session.refresh(meeting)
 
         return meeting
 
@@ -657,7 +657,7 @@ class MeetingsRepository:
         from datetime import datetime as dt
         cutoff = dt.combine(from_date, dt.min.time())
         return (
-            self.session.query(Meeting)
+            self._session.query(Meeting)
             .filter(
                 Meeting.outlook_recurring_id == outlook_recurring_id,
                 Meeting.start_time >= cutoff
@@ -708,7 +708,7 @@ class MeetingsRepository:
             mtg.is_manually_modified = True
             count += 1
         if count:
-            self.session.flush()
+            self._session.flush()
         return count
     
     def rename(self, meeting_id: int, new_title: str) -> Optional[Meeting]:
@@ -742,11 +742,11 @@ class MeetingsRepository:
             return False
         
         # Move all notes from source to destination
-        self.session.query(Note).filter(
+        self._session.query(Note).filter(
             Note.meeting_id == from_meeting_id
         ).update({Note.meeting_id: to_meeting_id})
         
-        self.session.flush()
+        self._session.flush()
         
         return True
     
@@ -768,12 +768,12 @@ class MeetingsRepository:
         
         if not delete_notes:
             # Unlink notes instead of deleting them
-            self.session.query(Note).filter(
+            self._session.query(Note).filter(
                 Note.meeting_id == meeting_id
             ).update({Note.meeting_id: None})
         
-        self.session.delete(meeting)
-        self.session.flush()
+        self._session.delete(meeting)
+        self._session.flush()
         
         return True
     

@@ -32,7 +32,7 @@ class NotesRepository:
         Args:
             session: SQLAlchemy database session
         """
-        self.session = session
+        self._session = session
     
     def _validate_client_project_consistency(
         self,
@@ -46,7 +46,7 @@ class NotesRepository:
         """
         if project_id is None or client_id is None:
             return
-        project = self.session.query(Project).filter(
+        project = self._session.query(Project).filter(
             Project.id == project_id
         ).first()
         if project is None:
@@ -104,9 +104,9 @@ class NotesRepository:
             client_id=client_id,
         )
         
-        self.session.add(note)
-        self.session.flush()
-        self.session.refresh(note)
+        self._session.add(note)
+        self._session.flush()
+        self._session.refresh(note)
         
         return note
     
@@ -120,7 +120,7 @@ class NotesRepository:
         Returns:
             Note object or None if not found
         """
-        return self.session.query(Note).filter(Note.id == note_id).first()
+        return self._session.query(Note).filter(Note.id == note_id).first()
     
     def get_by_date(
         self,
@@ -139,7 +139,7 @@ class NotesRepository:
         Returns:
             List of Note objects
         """
-        query = self.session.query(Note).options(
+        query = self._session.query(Note).options(
             joinedload(Note.meeting), joinedload(Note.project)
         ).filter(Note.created_date == target_date)
         
@@ -191,7 +191,7 @@ class NotesRepository:
         Returns:
             List of Note objects
         """
-        query = self.session.query(Note).options(
+        query = self._session.query(Note).options(
             joinedload(Note.meeting), joinedload(Note.project)
         ).filter(
             and_(
@@ -213,7 +213,7 @@ class NotesRepository:
     def get_most_recent_since(self, since: datetime) -> Optional[Note]:
         """Most recently created Note with created_at >= since, or None."""
         return (
-            self.session.query(Note)
+            self._session.query(Note)
             .filter(Note.created_at >= since)
             .order_by(desc(Note.created_at))
             .first()
@@ -246,7 +246,7 @@ class NotesRepository:
         Returns:
             List of Note objects
         """
-        query = self.session.query(Note).filter(
+        query = self._session.query(Note).filter(
             and_(
                 Note.created_date >= start_date,
                 Note.created_date <= end_date
@@ -285,7 +285,7 @@ class NotesRepository:
             List of Note objects ordered by relevance
         """
         # Use PostgreSQL full-text search
-        query = self.session.query(Note).filter(
+        query = self._session.query(Note).filter(
             Note.searchable.op('@@')(func.plainto_tsquery('english', keyword))
         )
         
@@ -354,8 +354,8 @@ class NotesRepository:
         if client_id is not None:
             note.client_id = client_id
 
-        self.session.flush()
-        self.session.refresh(note)
+        self._session.flush()
+        self._session.refresh(note)
 
         return note
     
@@ -374,8 +374,8 @@ class NotesRepository:
         if not note:
             return False
         
-        self.session.delete(note)
-        self.session.flush()
+        self._session.delete(note)
+        self._session.flush()
         
         return True
     
@@ -396,28 +396,28 @@ class NotesRepository:
             List of Note objects
         """
         if not include_recurring:
-            return self.session.query(Note).filter(
+            return self._session.query(Note).filter(
                 Note.meeting_id == meeting_id
             ).order_by(Note.created_at).all()
         
         # Get the meeting to check if it's recurring
-        meeting = self.session.query(Meeting).filter(Meeting.id == meeting_id).first()
+        meeting = self._session.query(Meeting).filter(Meeting.id == meeting_id).first()
         
         if not meeting or not meeting.outlook_recurring_id:
             # Not recurring, return notes for this meeting only
-            return self.session.query(Note).filter(
+            return self._session.query(Note).filter(
                 Note.meeting_id == meeting_id
             ).order_by(Note.created_at).all()
         
         # Get all meetings with same recurring ID
-        recurring_meetings = self.session.query(Meeting).filter(
+        recurring_meetings = self._session.query(Meeting).filter(
             Meeting.outlook_recurring_id == meeting.outlook_recurring_id
         ).all()
         
         meeting_ids = [m.id for m in recurring_meetings]
         
         # Get notes for all instances
-        return self.session.query(Note).filter(
+        return self._session.query(Note).filter(
             Note.meeting_id.in_(meeting_ids)
         ).order_by(Note.created_at).all()
 
@@ -443,7 +443,7 @@ class NotesRepository:
             List of Note objects ordered by created_at ascending.
         """
         notes = (
-            self.session.query(Note)
+            self._session.query(Note)
             .join(Meeting, Note.meeting_id == Meeting.id)
             .filter(func.lower(Meeting.title) == func.lower(title))
             .order_by(Note.created_at.desc())
@@ -469,7 +469,7 @@ class NotesRepository:
         Returns:
             List of Note objects
         """
-        return self.session.query(Note).filter(
+        return self._session.query(Note).filter(
             Note.project_id == project_id
         ).order_by(Note.created_at).all()
     
@@ -490,7 +490,7 @@ class NotesRepository:
         Returns:
             List of Note objects
         """
-        query = self.session.query(Note).filter(
+        query = self._session.query(Note).filter(
             Note.tags.op('@>')([tag_full_name])  # PostgreSQL @> operator
         )
         
@@ -511,7 +511,7 @@ class NotesRepository:
         Returns:
             Number of notes
         """
-        return self.session.query(Note).filter(
+        return self._session.query(Note).filter(
             Note.created_date == target_date
         ).count()
     
@@ -530,7 +530,7 @@ class NotesRepository:
             List of Note objects ordered by created_at DESC.
         """
         return (
-            self.session.query(Note)
+            self._session.query(Note)
             .filter(func.lower(Note.content).contains(query.lower()))
             .order_by(Note.created_at.desc())
             .limit(limit)
@@ -571,7 +571,7 @@ class NotesRepository:
         Returns:
             List of Note objects ordered by created_at descending.
         """
-        query = self.session.query(Note).options(
+        query = self._session.query(Note).options(
             joinedload(Note.meeting), joinedload(Note.project)
         )
 

@@ -58,13 +58,13 @@
   ```python
   class SomethingRepository:
       def __init__(self, session: Session) -> None:
-          self.session = session
+          self._session = session
 
       def create(self, name: str) -> Something:
           obj = Something(name=name)
-          self.session.add(obj)
-          self.session.flush()
-          self.session.refresh(obj)
+          self._session.add(obj)
+          self._session.flush()
+          self._session.refresh(obj)
           return obj
   ```
 

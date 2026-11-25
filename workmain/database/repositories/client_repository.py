@@ -28,7 +28,7 @@ class ClientRepository:
     RESERVED_NAME = 'internal'
 
     def __init__(self, session: Session) -> None:
-        self.session = session
+        self._session = session
 
     # ------------------------------------------------------------------
     # Validation
@@ -61,32 +61,32 @@ class ClientRepository:
         if self.get_by_name(name) is not None:
             raise ValueError(f"A client named '{name}' already exists.")
         client = Client(name=name, is_active=False)
-        self.session.add(client)
-        self.session.flush()
-        self.session.refresh(client)
+        self._session.add(client)
+        self._session.flush()
+        self._session.refresh(client)
         return client
 
     def get_by_id(self, client_id: int) -> Optional[Client]:
         """Return client by ID, or None if not found."""
-        return self.session.query(Client).filter(Client.id == client_id).first()
+        return self._session.query(Client).filter(Client.id == client_id).first()
 
     def get_by_name(self, name: str) -> Optional[Client]:
         """Return client by name (case-insensitive), or None if not found."""
         from sqlalchemy import func
-        return self.session.query(Client).filter(
+        return self._session.query(Client).filter(
             func.lower(Client.name) == name.strip().lower()
         ).first()
 
     def find_by_name_fuzzy(self, name: str) -> List[Client]:
         """Return clients whose names contain the search string (case-insensitive)."""
         from sqlalchemy import func
-        return self.session.query(Client).filter(
+        return self._session.query(Client).filter(
             func.lower(Client.name).contains(name.strip().lower())
         ).order_by(Client.name).all()
 
     def list_all(self) -> List[Client]:
         """Return all clients ordered by name."""
-        return self.session.query(Client).order_by(Client.name).all()
+        return self._session.query(Client).order_by(Client.name).all()
 
     def delete(self, client_id: int) -> bool:
         """Delete a client by ID. ON DELETE SET NULL handles data record unlinking.
@@ -97,8 +97,8 @@ class ClientRepository:
         client = self.get_by_id(client_id)
         if client is None:
             return False
-        self.session.delete(client)
-        self.session.flush()
+        self._session.delete(client)
+        self._session.flush()
         return True
 
     def count_linked_records(self, client_id: int) -> Dict[str, int]:
@@ -120,7 +120,7 @@ class ClientRepository:
             ('time_entries', TimeEntry),
         )
         return {
-            key: self.session.query(model).filter(model.client_id == client_id).count()
+            key: self._session.query(model).filter(model.client_id == client_id).count()
             for key, model in tables
         }
 
@@ -138,8 +138,8 @@ class ClientRepository:
             client.name = kwargs['name']
         if 'slack_channel' in kwargs:
             client.slack_channel = kwargs['slack_channel']
-        self.session.flush()
-        self.session.refresh(client)
+        self._session.flush()
+        self._session.refresh(client)
         return client
 
     # ------------------------------------------------------------------
@@ -165,13 +165,13 @@ class ClientRepository:
         if client is None:
             raise ValueError(f"No client with ID {client_id}.")
 
-        self.session.query(Client).filter(Client.is_active == True).update(
+        self._session.query(Client).filter(Client.is_active == True).update(
             {Client.is_active: False}, synchronize_session='fetch'
         )
         client.is_active = True
-        SystemStateRepository(self.session).set_int('active_client_id', client_id)
-        self.session.flush()
-        self.session.refresh(client)
+        SystemStateRepository(self._session).set_int('active_client_id', client_id)
+        self._session.flush()
+        self._session.refresh(client)
         return client
 
     def clear_active(self) -> None:
@@ -179,11 +179,11 @@ class ClientRepository:
         1. Clear is_active on any currently active client.
         2. Delete active_client_id from system_state.
         """
-        self.session.query(Client).filter(Client.is_active == True).update(
+        self._session.query(Client).filter(Client.is_active == True).update(
             {Client.is_active: False}, synchronize_session='fetch'
         )
-        SystemStateRepository(self.session).delete('active_client_id')
-        self.session.flush()
+        SystemStateRepository(self._session).delete('active_client_id')
+        self._session.flush()
 
     def get_active(self) -> Optional[Client]:
         """Return the active client, or None if in internal mode.
@@ -191,10 +191,10 @@ class ClientRepository:
         Fast path: reads active_client_id from system_state.
         Safety net: falls back to SELECT WHERE is_active=TRUE if key absent.
         """
-        state_repo = SystemStateRepository(self.session)
+        state_repo = SystemStateRepository(self._session)
         client_id = state_repo.get_int('active_client_id')
         if client_id is not None:
             client = self.get_by_id(client_id)
             if client is not None:
                 return client
-        return self.session.query(Client).filter(Client.is_active == True).first()
+        return self._session.query(Client).filter(Client.is_active == True).first()

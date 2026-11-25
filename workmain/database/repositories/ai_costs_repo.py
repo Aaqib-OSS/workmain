@@ -16,7 +16,7 @@ class AiCostRepository:
     """Repository for ai_costs table operations."""
 
     def __init__(self, session: Session):
-        self.session = session
+        self._session = session
 
     def create(
         self,
@@ -77,9 +77,9 @@ class AiCostRepository:
             context_label=context_label,
             created_at=datetime.now(timezone.utc),
         )
-        self.session.add(record)
-        self.session.flush()
-        self.session.refresh(record)
+        self._session.add(record)
+        self._session.flush()
+        self._session.refresh(record)
         return record
 
     def link_report(self, ids: List[int], report_id: int) -> None:
@@ -92,10 +92,10 @@ class AiCostRepository:
         """
         if not ids:
             return
-        self.session.query(AiCost).filter(AiCost.id.in_(ids)).update(
+        self._session.query(AiCost).filter(AiCost.id.in_(ids)).update(
             {AiCost.report_id: report_id}, synchronize_session=False
         )
-        self.session.flush()
+        self._session.flush()
 
     def get_by_ids(self, ids: List[int]) -> List[AiCost]:
         """
@@ -107,7 +107,7 @@ class AiCostRepository:
         if not ids:
             return []
         return (
-            self.session.query(AiCost)
+            self._session.query(AiCost)
             .filter(AiCost.id.in_(ids))
             .order_by(AiCost.id)
             .all()
@@ -130,7 +130,7 @@ class AiCostRepository:
             (AiCost, Report) pairs ordered by Report.report_date descending,
             then AiCost.id descending.
         """
-        query = self.session.query(AiCost, Report).join(
+        query = self._session.query(AiCost, Report).join(
             Report, AiCost.report_id == Report.id
         )
         if provider:
@@ -167,7 +167,7 @@ class AiCostRepository:
         Returns:
             List of AiCost records ordered by created_at descending.
         """
-        query = self.session.query(AiCost)
+        query = self._session.query(AiCost)
 
         if interaction_type:
             query = query.filter(AiCost.interaction_type == interaction_type)
@@ -202,7 +202,7 @@ class AiCostRepository:
         Returns:
             The dict `summarize` returns.
         """
-        query = self.session.query(AiCost)
+        query = self._session.query(AiCost)
 
         if interaction_type:
             query = query.filter(AiCost.interaction_type == interaction_type)
