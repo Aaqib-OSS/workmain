@@ -30,6 +30,16 @@
 | 20261125 | Ray | The new tests follow the inline `repo` harness; AC1 is restated (design study Q4) | §5 note on AC1 |
 | 20261125 | Ray | The config file names every rule the check enforces, and the one-line-per-paragraph rule is `markdownlint-rule-single-line-paragraphs`, not a rule of our own (design study Q5) | DR6, DR7, Step 2 |
 | 20261125 | Ray | Header fields are separated by a blank line (design study Q6) | DR9, Step 1 |
+| 20261125 | Caliper | 4, Spec defect, blocking: DR2 and DR5 read exit 1 as "findings" without requiring that any finding was parsed, so a markdownlint-cli2 that fails while loading passes the check silently. `markdownlint-cli2-bin.mjs:5` loads `./markdownlint-cli2.mjs` with a static `import`, outside the `try`/`catch` at `:13-18` that turns errors into exit 2. Run 20261125 in the scratchpad: with `markdownlint` deleted from `node_modules` (a broken install), node exits 1, stderr holds only `ERR_MODULE_NOT_FOUND` and stdout is empty. As specified, that gives zero violations and `PASS`. A Node older than 22 failing at load would take the same path; this was not run. No criterion exercises the case, and AC1.8 and AC2.1 read green either way. Options: (a) exit 1 with no stderr line parsed as a finding stops with `SystemExit` naming stderr; (b) also require the stdout `Summary: <n> issue(s) in <m> file(s)` count to equal the number of findings parsed (forms seen in runs: `0 issues in 0 files`, `1 issue in 1 file`, `6 issues in 1 file`); (c) add `markdownlint-cli2-formatter-json`, which needs a second pinned package and an `outputFormatters` entry the editor ignores. Recommendation: (b), stated in DR2, with a criterion and test that runs a broken install and asserts `SystemExit`. | Accepted, Spanner 20261125. Option (b), widened: DR2 also requires the stdout `Linting: <n> file(s)` count to equal the number of paths passed, so a run that linted fewer files than it was given stops too. A broken install, reproduced 20261125 (exit 1, empty stdout), stops with `SystemExit`. AC1.13 and its test added. The finding's "Ray rules on the options" is set aside: a spec defect is Spanner's to fix (`.claude/skills/session-start/SKILL.md` § Role 2) |
+| 20261125 | Caliper | 2, Spec defect, non-blocking: Step 2's `repo` fixture links "the repository's `automation/node_modules`", which is the test file's `ROOT`. In a linked worktree that folder does not exist, so the markdownlint tests skip, and §6's "0 skipped" fails. DR2 finds the tool through `_main_worktree()`; the fixture should do the same. Separately, the config copy must be committed in the base commit, not left untracked: AC1.6's linked worktree only holds committed files, and without the config markdownlint-cli2 runs its own default rules. The spec states neither point. | Accepted. Step 2's fixture links `automation/node_modules` from the main working tree of the repository the test file is in, found as DR2 finds it, and commits the config copy in the base commit |
+| 20261125 | Caliper | 2 (§1.2 "a criterion's check is one that can produce the answer"), Spec defect, non-blocking: AC1.8 asks for "this spec, the design study, the three templates and the results artifact among its changed files", but `main` prints only the number of changed files (`automation/style_check.py:412-415`). The check needs a command that lists them, such as `git diff --name-only <merge-base>` together with `git ls-files --others --exclude-standard`, or the clause comes out. `PASS` only shows markdownlint ran once the blocking finding above is resolved. | Accepted. AC1.8's check lists the changed files with `git diff --name-only $(git merge-base HEAD main)` and `git ls-files --others --exclude-standard` |
+| 20261125 | Caliper | 1, Spec defect, non-blocking: on a `chore/*` (direct path) branch, §1.2 asks each step to quote the text it replaces. Step 2 quotes neither the docstring text DR8 replaces (`automation/style_check.py:6`, `:18`) nor its replacement. It also does not quote the `check` loop it rewrites (`:364-368`), which only §2 cites. Steps 3 and 4 do quote. Either quote these, or record in the Decision Log that this spec takes the full-path form for Step 2. | Accepted. Step 2 quotes the docstring text DR8 replaces and the two `check` blocks it rewrites, each with its replacement. The new `markdownlint_violations` and the deletion of `markdown_violations` and `_BLOCK_START` stay stated by contract and by symbol, as the direct path's precedent `docs/archive/specs/REAL_VALUE_CHECK_SPEC.md` Step 1 does for new code |
+| 20261125 | Caliper | 2, Spec defect, non-blocking: the §2 callers row lists four results for the search it names, but the search also returns `docs/standards/3-code.md:5`, as the design study's §2 lists. That line's statement stays true; the row should list it so the evidence matches the search. | Accepted. §2 callers row lists `docs/standards/3-code.md:5` |
+| 20261125 | Caliper | 1, Standards gap, non-blocking: §1.1 assumes every direct-path step only copies out text the spec quotes. No standard covers a `chore/*` step that writes new tooling code and its tests. | Recorded. Reported to Ray in one line; an issue only on his word (§1.3) |
+| 20261125 | Caliper | 1, Standards gap, non-blocking: §7 names no location for linter or editor config at the repository root (`.markdownlint-cli2.jsonc`, as with `.markdownlint.json` and `pyproject.toml` today). Only `alembic.ini` has a row. | Recorded. Reported to Ray in one line; an issue only on his word (§1.3) |
+| 20261125 | Caliper | 1, Standards gap, non-blocking: §6.2 says "A test is a method of a plain class" without saying whether that covers the `automation/` suites. `automation/style_check_test.py` uses module-level functions, and the new tests follow it (design study Q4). | Recorded. Reported to Ray in one line; an issue only on his word (§1.3) |
+| 20261125 | Caliper | 4, Existing defect, non-blocking: `changed_lines` records no line for a pure-deletion hunk: `+N,0` gives `range(N, N)` at `automation/style_check.py:105-107`. A finding a deletion causes is therefore never reported, for example `MD022` after deleting the blank line under a heading, or ruff's equivalent. DR4's next-line rule does not reach it. | Recorded. Reported to Ray in one line; an issue only on his word (§1.3) |
+| 20261125 | Caliper | Pass at 5a20638, full: 48 items checked, 1 blocking, 8 non-blocking. | n/a |
 
 ---
 
@@ -64,7 +74,7 @@
 | The module docstring states what is checked and `Requires git, ruff and python-dotenv.` | `automation/style_check.py:1-21` |
 | `.markdownlint.json` is the repository's only markdownlint config, and §1.5 its only citation outside `docs/archive/` | `.markdownlint.json`; `git grep -n -i markdownlint -- . ':!docs/archive'` |
 | markdownlint-cli2 0.24.2 (markdownlint 0.42.2) is what the editor runs, and needs Node 22 or later. It finds `.markdownlint-cli2.jsonc` in its working directory | design study F3, F4; `markdownlint-cli2 --help` |
-| markdownlint-cli2 prints each finding to stderr as `<path>:<line>[:<column>] error <rule names> <description>[ [<detail>]]`, and progress to stdout. It exits 0 with no findings, 1 with findings, 2 on an error. A path prefixed with `:` is read literally | run 20261125 in the scratchpad |
+| markdownlint-cli2 prints each finding to stderr as `<path>:<line>[:<column>] error <rule names> <description>[ [<detail>]]`, and progress to stdout. It exits 0 with no findings, 1 with findings, 2 on an error it catches. A failure while loading, such as a broken install, also exits 1, with nothing on stdout. A run that lints prints `Linting: <n> file(s)` and `Summary: <k> issue(s) in <m> file(s)` to stdout. A path prefixed with `:` is read literally | run 20261125 in the scratchpad |
 | The config Step 2 quotes, with `"default": false` and 48 rules named, reports the same 96 findings as `.markdownlint.json` over the live Markdown, line for line, plus `single-line-paragraphs` | design study F18 |
 | `single-line-paragraphs` reports a soft-wrapped paragraph on its first line and on every continuation line, and reports consecutive `**Field:** value` header lines. With a blank line between fields it reports nothing | design study F14, F15 |
 | Named by package in `customRules`, the rule is found next to the markdownlint-cli2 that runs it, from a worktree with no `node_modules`; a `modulePaths` entry that does not exist is not an error | design study F17 |
@@ -74,13 +84,13 @@
 | pytest's default `norecursedirs` and ruff's default exclusions both include `node_modules` | pytest and ruff defaults; `pyproject.toml:1-8` sets neither |
 | `.github/workflows/tests.yml` job `style` sets up Python and installs ruff and python-dotenv; it sets up no Node | `.github/workflows/tests.yml:86-137` |
 | `actions/setup-node` v7.1.0 is commit `949feb2413d6458794dcd2491c4babbbce0c15c1` | `gh api repos/actions/setup-node/git/ref/tags/v7.1.0`, 20261125 |
-| Callers of `style_check.py`: `.claude/skills/closeout/SKILL.md:35` (P7), `.claude/skills/session-start/references/anvil.md:46` (step 5), `.claude/skills/session-start/references/caliper.md:52` (I6, `--base`, detached worktree), `.github/workflows/tests.yml:135`. No caller's command line changes | `git grep -n style_check -- . ':!docs/archive' ':!automation/style_check*.py'` |
+| Callers of `style_check.py`: `.claude/skills/closeout/SKILL.md:35` (P7), `.claude/skills/session-start/references/anvil.md:46` (step 5), `.claude/skills/session-start/references/caliper.md:52` (I6, `--base`, detached worktree), `.github/workflows/tests.yml:135`. `docs/standards/3-code.md:5` describes the module, and stays true. No caller's command line changes | `git grep -n style_check -- . ':!docs/archive' ':!automation/style_check*.py'` |
 | `pytest automation/`: 138 passed, 0 failed, 0 skipped | run 20261125 |
 
 ## 3. Design rules
 
 - **DR1 — The tools and their versions.** markdownlint-cli2 `0.24.2` and markdownlint-rule-single-line-paragraphs `0.2.0`, exact, in `automation/package.json` `devDependencies`, with the whole tree pinned by `automation/package-lock.json`.
-- **DR2 — Where the tool is found.** `<main working tree>/automation/node_modules/.bin/markdownlint-cli2`, where the main working tree is `_main_worktree()`, so a linked worktree such as Caliper's I6 uses the main tree's install, as it uses the main tree's `.env`. When there are Markdown paths to check and that file does not exist, the check stops with `SystemExit("markdownlint-cli2 was not found (npm ci --prefix automation)")`. When markdownlint-cli2 exits other than 0 or 1, the check stops with `SystemExit` naming its stderr.
+- **DR2 — Where the tool is found.** `<main working tree>/automation/node_modules/.bin/markdownlint-cli2`, where the main working tree is `_main_worktree()`, so a linked worktree such as Caliper's I6 uses the main tree's install, as it uses the main tree's `.env`. When there are Markdown paths to check and that file does not exist, the check stops with `SystemExit("markdownlint-cli2 was not found (npm ci --prefix automation)")`. The check stops with `SystemExit` naming markdownlint-cli2's stderr when it exits other than 0 or 1, when its stdout `Linting: <n> file(s)` line is missing or `<n>` is not the number of paths passed, or when its stdout `Summary: <k> issue(s)` line is missing or `<k>` is not the number of findings parsed. A markdownlint-cli2 that fails while loading exits 1 with nothing on stdout, so only these counts tell it from a run with findings (Decision Log, Caliper).
 - **DR3 — Which files.** Every changed path ending `.md` that exists, after `SKIPPED`, passed in one run, each prefixed with `:`, with `ROOT` as the working directory, so markdownlint-cli2 reads `ROOT/.markdownlint-cli2.jsonc` as the editor does. No `--config` is passed.
 - **DR4 — Which findings are reported.** A markdownlint finding is reported when its line, the line before it or the line after it is a changed line, or when its file is wholly changed. It is printed at the line markdownlint reports. Every other violation keeps the existing changed-line filter.
 - **DR5 — The report.** Each finding is printed in the existing form, `<path>:<line> — <message>`, where `<message>` is markdownlint's text after `error` and the space that follows it. It counts in the summary line's violation total and in the exit code.
@@ -94,7 +104,7 @@
 | Step | Deliverable | Files | ACs |
 | --- | --- | --- | --- |
 | 1 | The blank-line header form: DR9 | `docs/dev/specs/_TEMPLATE_SPEC.md`, `docs/dev/design/_TEMPLATE_DESIGN.md`, `docs/dev/results/_TEMPLATE_RESULTS.md`, the 14 files `git ls-files 'automation/fixtures/closeout_*.md' 'automation/fixtures/closeout_*/*.md'` lists | AC1.11 |
-| 2 | The pinned tools, the config, the check and its tests: DR1–DR8 | `automation/package.json`, `automation/package-lock.json`, `.gitignore`, `.markdownlint-cli2.jsonc`, `.markdownlint.json` (deleted), `automation/style_check.py`, `automation/style_check_test.py` | AC1.1–AC1.7, AC1.9, AC1.10 |
+| 2 | The pinned tools, the config, the check and its tests: DR1–DR8 | `automation/package.json`, `automation/package-lock.json`, `.gitignore`, `.markdownlint-cli2.jsonc`, `.markdownlint.json` (deleted), `automation/style_check.py`, `automation/style_check_test.py` | AC1.1–AC1.7, AC1.9, AC1.10, AC1.13 |
 | 3 | CI installs Node and the tools | `.github/workflows/tests.yml` | AC2.1 |
 | 4 | §1.5 names the config and the check | `docs/standards/1-workflow.md` | AC3.1 |
 | 5 | The results artifact | `docs/dev/results/MARKDOWNLINT_CHECK_RESULTS.md` | AC1.8, AC1.12, all |
@@ -204,9 +214,78 @@ Step 1 comes first so that, once Step 2 turns the rule on, no file this branch a
   }
   ```
 
-- `automation/style_check.py` gains `markdownlint_violations(paths: list[str]) -> list[Violation]`, which runs the tool per DR2 and DR3 and returns one `(path, line, line, message)` entry per finding with DR5's message. `check` runs it on the DR3 paths and applies DR4 to its entries. `markdown_violations` and `_BLOCK_START` are removed (DR6). `check`'s and `main`'s signatures are unchanged. The module docstring is updated per DR8.
+- `automation/style_check.py` gains `markdownlint_violations(paths: list[str]) -> list[Violation]`, which runs the tool per DR2 and DR3 and returns one `(path, line, line, message)` entry per finding with DR5's message, and an empty list for no paths without running the tool. `markdown_violations` and `_BLOCK_START` are removed (DR6). `check`'s and `main`'s signatures are unchanged.
+- In `check`, replace:
+
+  ```python
+      for path in changes:
+          if path.endswith(".md") and (ROOT / path).exists():
+              found += markdown_violations(
+                  path, (ROOT / path).read_text(encoding="utf-8")
+              )
+  ```
+
+  with:
+
+  ```python
+      nearby = markdownlint_violations(
+          [p for p in changes if p.endswith(".md") and (ROOT / p).exists()]
+      )
+  ```
+
+  and replace its return:
+
+  ```python
+      return sorted(
+          v
+          for v in found
+          if changes.get(v[0]) is None
+          or any(n in changes[v[0]] for n in range(v[1], v[2] + 1))
+      )
+  ```
+
+  with, per DR4:
+
+  ```python
+      def touched(v: Violation, reach: int) -> bool:
+          lines = changes.get(v[0])
+          return lines is None or any(
+              n in lines for n in range(v[1] - reach, v[2] + reach + 1)
+          )
+
+      return sorted(
+          [v for v in found if touched(v, 0)] + [v for v in nearby if touched(v, 1)]
+      )
+  ```
+
+- In the module docstring, per DR8, replace:
+
+  ```text
+  Python lines are checked with ruff, configured in pyproject.toml. Python lines
+  are also checked for citations of the process that produced them (§3). Markdown
+  lines are checked for hard wrapping (docs/standards/1-workflow.md §1.5). Only
+  lines the branch added or changed are checked, against the point where it left
+  its base branch, so code is brought up to the rules as it is touched rather than
+  all at once. Uncommitted and untracked files count as changed. CHANGELOG.md is
+  history and is never checked.
+  ```
+
+  with:
+
+  ```text
+  Python lines are checked with ruff, configured in pyproject.toml. Python lines
+  are also checked for citations of the process that produced them (§3). Markdown
+  lines are checked with markdownlint-cli2 against .markdownlint-cli2.jsonc
+  (docs/standards/1-workflow.md §1.5). Only lines the branch added or changed are
+  checked, against the point where it left its base branch, so code is brought up
+  to the rules as it is touched rather than all at once; a markdownlint finding on
+  the line next to a changed line counts as well. Uncommitted and untracked files
+  count as changed. CHANGELOG.md is history and is never checked.
+  ```
+
+  and replace `Requires git, ruff and python-dotenv.` with `Requires git, ruff, python-dotenv, and Node 22 or later with the tools npm ci --prefix automation installs.`
 - `automation/style_check_test.py`:
-  - The `repo` fixture writes a copy of the repository's `.markdownlint-cli2.jsonc` into the temporary repository, and links the repository's `automation/node_modules` into the temporary repository's `automation/`, ignored there, so every test runs the real tools against the real config. The base `docs/guide.md` keeps a wrapped paragraph from before the branch, placed so that no test's added lines sit next to it unless the test means them to.
+  - The `repo` fixture writes a copy of the repository's `.markdownlint-cli2.jsonc` into the temporary repository and commits it in the base commit, so a linked worktree of it holds the config. It links `automation/node_modules` from the main working tree of the repository the test file is in, found with `git rev-parse --path-format=absolute --git-common-dir` as DR2 finds it, into the temporary repository's `automation/`, ignored there, so every test runs the real tools against the real config, including when the suite runs in a linked worktree. The base `docs/guide.md` keeps a wrapped paragraph from before the branch, placed so that no test's added lines sit next to it unless the test means them to.
   - The five tests of `markdown_violations` alone that §2 names are removed with it, together with their helper `_wrapped`.
   - `test_a_wrapped_line_added_to_an_existing_document_is_reported`, `test_a_wrapped_line_that_predates_the_branch_is_not_reported` and `test_main_exits_1_on_a_violation_and_0_without` keep their names and what they test, now through `single-line-paragraphs`.
   - Tests that run markdownlint are skipped when it is not installed in the repository, as the ruff tests are skipped without ruff.
@@ -271,11 +350,12 @@ AC1 is restated (§1.2; design study Q4). The issue's criterion names `.markdown
 | AC1.5 | With Markdown to check and markdownlint-cli2 not installed, the check stops and names the install command | `test_the_check_stops_when_markdownlint_cli2_is_not_installed` passes, asserting `SystemExit` with `npm ci --prefix automation` in its message |
 | AC1.6 | Run in a linked worktree, as Caliper's I6 runs it, the check uses the main working tree's install, `single-line-paragraphs` included | `test_markdownlint_is_found_from_a_linked_worktree` passes, running `main` with `--base` from a linked worktree that has no `automation/node_modules`, on a branch adding a wrapped paragraph, and asserting a `single-line-paragraphs` violation |
 | AC1.7 | A paragraph the branch writes across two lines is reported, and one written before the branch is not | `test_a_wrapped_line_added_to_an_existing_document_is_reported` passes, asserting `single-line-paragraphs` violations at the added lines only, and `test_a_wrapped_line_that_predates_the_branch_is_not_reported` passes |
-| AC1.8 | On this repository the check runs the config on this branch's Markdown | `npm ci --prefix automation`, then `python3 automation/style_check.py` on this branch, prints `PASS`, with this spec, the design study, the three templates and the results artifact among its changed files |
+| AC1.8 | On this repository the check runs the config on this branch's Markdown | `npm ci --prefix automation`, then `python3 automation/style_check.py` on this branch prints `PASS`, and `git diff --name-only $(git merge-base HEAD main)` with `git ls-files --others --exclude-standard` lists this spec, the design study, the three templates and the results artifact |
 | AC1.9 | Every rule the check reports is one the config names | `node automation/node_modules/.bin/markdownlint-cli2` run from the repository root over every tracked `.md` outside `SKIPPED` reports only rule names that appear as keys in `.markdownlint-cli2.jsonc` |
-| AC1.10 | The style-check suite passes, the removed tests being exactly the five §2 names | `pytest automation/` reports 139 passed, 0 failed, 0 skipped: 138, less the five, plus the six AC1.1–AC1.6 name |
+| AC1.10 | The style-check suite passes, the removed tests being exactly the five §2 names | `pytest automation/` reports 140 passed, 0 failed, 0 skipped: 138, less the five, plus the seven AC1.1–AC1.6 and AC1.13 name |
 | AC1.11 | No template or closeout fixture holds two consecutive header field lines | `node automation/node_modules/.bin/markdownlint-cli2` over the 17 files Step 1 lists reports no `single-line-paragraphs` finding, and `pytest automation/` passes |
 | AC1.12 | The editor reports what the check reports | Ray opens a Markdown file in VS Code, adds a paragraph wrapped across two lines and a fenced block with no language, and reads a `single-line-paragraphs` and an `MD040` warning |
+| AC1.13 | A markdownlint-cli2 that fails without linting stops the check instead of passing it | `test_a_markdownlint_cli2_that_fails_to_load_stops_the_check` passes, running the check against a tool that exits 1 with nothing on stdout and asserting `SystemExit` |
 | AC2.1 | The CI `style` job runs markdownlint as part of the check | The `style` job's log on this branch's pull request shows the `npm ci --prefix automation` step and `automation/style_check.py exit 0` |
 | AC3.1 | §1.5 names the config that governs Markdown formatting and the check that enforces it | Ray reads `docs/standards/1-workflow.md` §1.5 **Writing.**, first item, for `.markdownlint-cli2.jsonc` and `automation/style_check.py` |
 
@@ -284,7 +364,7 @@ The command line is the only entry path to the check (§2 callers). AC1.1 and AC
 ## 6. Test plan
 
 - **Baseline before this work:** `automation/`: 138 passed, 0 failed, 0 skipped (§2). `tests/`: unchanged by this work, which touches nothing under `workmain/` or `tests/`; close-out runs it.
-- **Expected after:** `automation/`: 139 passed, 0 failed, 0 skipped, with ruff and the Node tools installed (AC1.10).
+- **Expected after:** `automation/`: 140 passed, 0 failed, 0 skipped, with ruff and the Node tools installed (AC1.10).
 - **Test files:** `automation/style_check_test.py`, changed as Step 2 states. Step 1's fixture edits are exercised by the existing `automation/closeout_acs_test.py`.
 
 ## 7. Risks and rollback
