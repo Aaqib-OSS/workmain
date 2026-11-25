@@ -77,3 +77,6 @@ Thumbs.db
 .coverage
 htmlcov/
 test_notes-*.md
+
+# Node, for automation/ tooling
+automation/node_modules/
