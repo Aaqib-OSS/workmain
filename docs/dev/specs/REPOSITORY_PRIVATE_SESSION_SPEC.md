@@ -17,7 +17,9 @@
 | --- | --- | --- | --- |
 | 20261124 | Ray | Branch type `feature/*`: the change edits `workmain/**` and `tests/**`, and a rename is not provable behaviour-neutral by AST equality (`docs/standards/2-git.md` §2.2). | Branch field. |
 | 20261125 | Ray | No rule is added to `docs/standards/4-database.md` §4.3. Its first bullet already states that all data access goes through a repository, so only the example changes (design study Q1, withdrawn). | DR5, Step 2. |
-| 20261125 | Ray | Criterion 2's search becomes a standing step in `.github/workflows/tests.yml`'s `session-rules` job, on this branch (design study Q2). | DR6, Step 3, AC2.2. |
+| 20261125 | Ray | Criterion 2's search becomes a standing step in `.github/workflows/tests.yml`'s `session-rules` job, on this branch (design study Q2). | DR6, Step 3, AC2.2, AC2.3. |
+| 20261125 | Ray | AC1.1's search also becomes a standing `session-rules` step, in DR6's form. The `_session` step alone cannot see a repository written from the old pattern: one that keeps a public `self.session`, such as #161's `ProjectsRepository`, passes it, and DR4's test misses it unless the class is in `UnitOfWork.REPOSITORIES`. AC1.1 runs once, at close-out. | DR6, Step 3, AC1.4, AC1.5, §7. |
+| 20261125 | Ray | The criterion that the CI step runs (AC2.2, as first drafted) had no point where it is checked: it needs the pull request's CI run, which exists only from `/closeout` feature step 3, after Step 4 writes the results artifact. Each standing step now has a local criterion, checked at Step 4 (AC1.4, AC2.2), and a run criterion, checked at feature step 3 and recorded at feature step 4 (AC1.5, AC2.3). The run criteria are written `Carried` to #283 at Step 4, because preflight P6 runs before the push and accepts only `Met` or `Carried`. That follows the precedent in `docs/archive/results/CI_WORKFLOW_RESULTS.md` (#297). | §5, Step 4. |
 | 20261125 | Spanner | The issue's second criterion's check misses a read by name (`getattr(x, '_session')`) and `scripts/`, which builds repositories (design study F5, F13). It also matches only lowercase names, and its `grep -v` drops a whole line that holds `self._session` and another read. AC2.1 restates it as one PCRE search over every form. The issue body's edit is made at close-out (`docs/standards/1-workflow.md` §1.2). | AC2.1. |
 
 ---
@@ -29,7 +31,7 @@
 - The 12 repository modules in `workmain/database/repositories/`: each repository holds its session as `self._session` instead of `self.session`.
 - `tests/test_unit_of_work.py`: the four tests that read a repository's `session` (R4) get the session another way, and one new test shows no repository has a `session` attribute.
 - `docs/standards/4-database.md` §4.3: the repository example's code block.
-- `.github/workflows/tests.yml`: one new step in the `session-rules` job.
+- `.github/workflows/tests.yml`: two new steps in the `session-rules` job.
 - The results artifact, `docs/dev/results/REPOSITORY_PRIVATE_SESSION_RESULTS.md`.
 
 **Out of scope:**
@@ -74,7 +76,7 @@ Verified at `1f625e5`. `workmain/`, `tests/`, `docs/standards/` and `.github/` a
   - `TestRecordUnitOfWork::test_default_runs_on_session_scope`: the session a `UnitOfWork()` runs on has the server's default `lock_timeout`, which differs from `RECORD_LOCK_TIMEOUT`.
 - **DR4 — One new test shows no repository exposes a session.** In `tests/test_unit_of_work.py` `TestUnitOfWork`, it builds each class in `UnitOfWork.REPOSITORIES` on `db_session` and asserts the instance has no `session` attribute. It does not read `_session`.
 - **DR5 — §4.3's example shows `self._session`.** Only its code block changes (Step 2).
-- **DR6 — The `session-rules` job runs AC2.1's search on every run.** The step fails when the search matches, and fails when `git grep` errors (exit above 1), so an error cannot read as `none found`. It prints `none found` otherwise. Its text is Step 3's.
+- **DR6 — The `session-rules` job runs AC1.1's search and AC2.1's search on every run, one step each.** Each step fails when its search matches, and fails when the search errors (exit above 1), so an error cannot read as `none found`. It prints `none found` otherwise. Their text is Step 3's.
 
 ## 4. Steps
 
@@ -82,8 +84,8 @@ Verified at `1f625e5`. `workmain/`, `tests/`, `docs/standards/` and `.github/` a
 | --- | --- | --- |
 | 1 | DR1, DR2, DR3, DR4. One step, because the rename breaks the four tests in R4 (`docs/standards/1-workflow.md` §1.2). The suite is green at its commit. | the 12 repository modules in R1; `tests/test_unit_of_work.py` |
 | 2 | DR5: §4.3's example, as quoted below. | `docs/standards/4-database.md` |
-| 3 | DR6: the new `session-rules` step, as quoted below. | `.github/workflows/tests.yml` |
-| 4 | The results artifact, checking every criterion in §5 against the delivered code. | `docs/dev/results/REPOSITORY_PRIVATE_SESSION_RESULTS.md` |
+| 3 | DR6: the two new `session-rules` steps, as quoted below. It follows Step 1, before which AC1.1's search matches the 202 lines in R2. | `.github/workflows/tests.yml` |
+| 4 | The results artifact. Rows AC1.1–AC1.4, AC2.1, AC2.2, AC3.1 and AC4.1 are checked against the delivered code and written `Met` with their evidence. Rows AC1.5 and AC2.3 need the pull request's run, so they are written `Carried`, citing #283, with the run to read and the local evidence AC1.4 and AC2.2 recorded (Decision Log, 20261125). | `docs/dev/results/REPOSITORY_PRIVATE_SESSION_RESULTS.md` |
 
 **Step 2.** In `docs/standards/4-database.md` §4.3, replace:
 
@@ -117,9 +119,22 @@ with:
 
 The fence and its indentation stay as they are in the file.
 
-**Step 3.** In `.github/workflows/tests.yml`, append to the `session-rules` job's `steps`, after the `No get_session() outside connection.py` step:
+**Step 3.** In `.github/workflows/tests.yml`, append to the `session-rules` job's `steps`, after the `No get_session() outside connection.py` step, in this order:
 
 ```yaml
+      # docs/standards/4-database.md §4.3: data access goes through a
+      # repository's methods, and a repository holds its session as
+      # `_session`, as §4.3's example does. A public `self.session` hands the
+      # session to any code holding the repository. grep exits 1 when nothing
+      # matches; above 1 is an error, which fails the step.
+      - name: No public session attribute in a repository
+        run: |
+          status=0
+          grep -rnE 'self\.session\b' workmain/database/repositories/ || status=$?
+          if [ "$status" -eq 0 ]; then exit 1; fi
+          if [ "$status" -ne 1 ]; then echo "grep exit $status"; exit "$status"; fi
+          echo "none found"
+
       # docs/standards/4-database.md §4.3: data access goes through a
       # repository's methods, so nothing outside the repositories reads a
       # repository's session: no `<name>._session` other than `self._session`,
@@ -147,12 +162,17 @@ The change renames an attribute. Every entry path that reaches a repository, whe
 | AC1.1 | No repository module refers to a public `session` attribute | `grep -rnE 'self\.session\b' workmain/database/repositories/` returns no hits |
 | AC1.2 | No repository built on a session has a `session` attribute | `pytest tests/test_unit_of_work.py` passes, with DR4's test iterating every class in `UnitOfWork.REPOSITORIES` |
 | AC1.3 | §4.3's example shows a repository holding its session as `_session` | `grep -nE 'self\.session\b' docs/standards/4-database.md` returns no hits, and `grep -cE 'self\._session\b' docs/standards/4-database.md` prints `4` |
+| AC1.4 | The step `No public session attribute in a repository` passes on a clean tree, fails on a match, and fails on a search error | Its `run:` block, run in `bash -e` from the repository root at the branch tip, prints `none found` and exits 0. In a scratch worktree with a `self.session` line added to one repository module, it prints that line and exits 1. Run from a directory with no `workmain/database/repositories/`, it prints `grep exit 2` and exits 2 |
+| AC1.5 | Every push and pull request to `dev` or `main` runs AC1.1's search | `/closeout` feature step 3: the `session-rules` job of the run on the pull request that merges this branch to `dev` shows `none found` under `No public session attribute in a repository`. Recorded at feature step 4 |
 | AC2.1 | No code outside the repositories reads another object's `_session`, by attribute or by name | ``git grep -nP "(?<!\bself)\._session\b\|['\"]_session['\"]" -- workmain tests automation scripts ':!workmain/database/repositories' ':!scripts/baseline'`` prints nothing and exits 1 |
-| AC2.2 | Every push and pull request to `dev` or `main` runs AC2.1's search | The `session-rules` job of the run on the pull request that merges this branch to `dev` shows `none found` under the step `No read of a repository's session outside the repositories` |
+| AC2.2 | The step `No read of a repository's session outside the repositories` passes on a clean tree, fails on a match, and fails on a search error | Its `run:` block, run in `bash -e` from the repository root at the branch tip, prints `none found` and exits 0. In a scratch worktree with a `repo._session` line added to a module under `workmain/` outside the repositories, it prints that line and exits 1. Run from a directory outside any git repository, it prints `git grep exit 128` and exits 128 |
+| AC2.3 | Every push and pull request to `dev` or `main` runs AC2.1's search | `/closeout` feature step 3: the `session-rules` job of the run on the pull request that merges this branch to `dev` shows `none found` under `No read of a repository's session outside the repositories`. Recorded at feature step 4 |
 | AC3.1 | The four tests in R4 check what DR3 states without reading a repository's session | `pytest tests/test_unit_of_work.py::TestUnitOfWork::test_repositories_built_on_its_session_while_entered tests/test_unit_of_work.py::TestUnitOfWork::test_repositories_absent_after_commit_raises tests/test_unit_of_work.py::TestRecordUnitOfWork` passes; AC2.1's search, run over `tests/`, prints nothing; and `grep -nE '\.session\b' tests/test_unit_of_work.py` returns no hits |
 | AC4.1 | The full suite passes | A bare `pytest` reports 0 failed |
 
-AC1.1 is the issue's first check, unchanged. AC2.1 restates the issue's second (Decision Log, 20261125). AC3.1 widens the issue's third from `TestRecordUnitOfWork` to all four tests in R4.
+AC1.1 is the issue's first check, unchanged. AC2.1 restates the issue's second (Decision Log, 20261125). AC3.1 widens the issue's third from `TestRecordUnitOfWork` to all four tests in R4. AC1.4, AC1.5, AC2.2 and AC2.3 keep AC1.1's and AC2.1's searches running after close-out.
+
+**Where each criterion is checked.** Step 4 checks every criterion except AC1.5 and AC2.3 and records it `Met`. AC1.5 and AC2.3 need the pull request's run, which first exists at `/closeout` feature step 3 (`.claude/skills/closeout/references/feature.md`). Close-out preflight P6 runs before that push and accepts only `Met` or `Carried` rows (`.claude/skills/closeout/SKILL.md` P6). So Step 4 writes them `Carried`, citing #283, with the run to read. Feature step 4, which records "the criteria step 3's run checked", sets each to `Met` with the run's evidence.
 
 ## 6. Test plan
 
@@ -162,8 +182,8 @@ AC1.1 is the issue's first check, unchanged. AC2.1 restates the issue's second (
 
 ## 7. Risks and rollback
 
-- **A repository branch written before this lands.** A later branch that adds a repository method from the old example writes `self.session`, which raises `AttributeError` when called. The suite catches it wherever the method is tested, and AC1.1's search finds it. No other branch touches these files today (design study F11).
-- **The new CI step is report-only**, like the rest of `tests.yml`, so a match shows on the run but does not block a merge.
-- **`git grep -P` needs git built with PCRE.** Ubuntu's git is; if a runner's is not, `git grep` errors, and DR6 makes the step fail rather than pass.
+- **A repository written from the old pattern.** A later branch can add a repository, such as #161's `ProjectsRepository`, that keeps a public `self.session`, or a method on an existing one that uses `self.session`. The method raises `AttributeError` on an existing repository, and the suite catches it wherever the method is tested. A new repository's `self.session` raises nothing, and DR4's test misses it unless the class is in `UnitOfWork.REPOSITORIES`. The `No public session attribute in a repository` step (DR6) finds either one on the branch's pull request. No other branch touches these files today (design study F11).
+- **The new CI steps are report-only**, like the rest of `tests.yml`, so a match shows on the run but does not block a merge.
+- **`git grep -P` needs git built with PCRE.** Ubuntu's git is. If a runner's git is not, `git grep` errors, and DR6 makes the step fail rather than pass.
 - **Existing defect, outside scope:** the two existing `session-rules` steps treat a `grep` error (exit 2) as `none found`, because `if grep ...; then exit 1; fi` reads any non-zero exit as no match.
 - **Rollback:** each step is one commit. Reverting Step 1 restores `self.session` and the four tests together. Steps 2 and 3 revert on their own.
