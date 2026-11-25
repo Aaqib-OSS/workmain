@@ -3,7 +3,9 @@ Tests for automation/style_check.py.
 
 Each test that needs a branch builds a git repository in a temporary folder,
 commits a base on main, cuts a working branch from it, and points the module
-at it. Tests that run ruff are skipped when ruff is not installed.
+at it. Tests that run ruff are skipped when ruff is not installed, and tests
+that run markdownlint-cli2 when it is not installed in this repository's main
+working tree (npm ci --prefix automation).
 """
 
 import importlib.util
@@ -21,6 +23,19 @@ sc = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(sc)
 
 needs_ruff = pytest.mark.skipif(shutil.which("ruff") is None, reason="ruff is not installed")
+
+# This repository's main working tree, whose automation/node_modules every test repository links.
+MAIN = Path(
+    subprocess.run(
+        ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        cwd=ROOT, capture_output=True, text=True, check=True,
+    ).stdout.strip()
+).parent
+NODE_MODULES = MAIN / "automation" / "node_modules"
+needs_markdownlint = pytest.mark.skipif(
+    not (NODE_MODULES / ".bin" / "markdownlint-cli2").exists(),
+    reason="markdownlint-cli2 is not installed (npm ci --prefix automation)",
+)
 
 PYPROJECT = """
 [tool.ruff]
@@ -41,7 +56,8 @@ VALUE = "Qzx"
 ENV = f"DEV_REAL_VALUES={VALUE}\n"
 
 BASE = {
-    ".gitignore": ".env\n",
+    ".gitignore": ".env\nautomation/node_modules\n",
+    ".markdownlint-cli2.jsonc": (ROOT / ".markdownlint-cli2.jsonc").read_text(),
     "pyproject.toml": PYPROJECT,
     "workmain/__init__.py": '"""\nThe application.\n"""\n',
     "workmain/old.py": (
@@ -53,7 +69,7 @@ BASE = {
         "def untyped(x):\n"
         "    return os.sep\n"
     ),
-    "docs/guide.md": "# Guide\n\nOne paragraph,\nwrapped before this branch existed.\n",
+    "docs/guide.md": "# Guide\n\nOne paragraph,\nwrapped before this branch existed.\n\nA last paragraph on one line.\n",
     "CHANGELOG.md": "# Changelog\n\n- An entry\n  wrapped long ago.\n",
 }
 
@@ -76,8 +92,9 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Build:
 
     Returns:
         A function that commits BASE on main, writes an ignored `.env` listing
-        VALUE, cuts `branch` from main, writes its `changes` into the working
-        tree uncommitted, and returns the root.
+        VALUE, links this repository's automation/node_modules in ignored,
+        cuts `branch` from main, writes its `changes` into the working tree
+        uncommitted, and returns the root.
     """
 
     def build(changes: Dict[str, str], branch: str = "chore/test") -> Path:
@@ -86,6 +103,8 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Build:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text)
         (tmp_path / ".env").write_text(ENV)
+        (tmp_path / "automation").mkdir(exist_ok=True)
+        (tmp_path / "automation" / "node_modules").symlink_to(NODE_MODULES, target_is_directory=True)
         _git(tmp_path, "init", "-q", "-b", "main")
         _git(tmp_path, "add", "-A")
         _git(tmp_path, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "base")
@@ -123,40 +142,6 @@ def test_a_feature_branch_is_compared_with_dev() -> None:
 def test_any_other_branch_is_compared_with_main() -> None:
     assert sc.base_branch("chore/x") == "main"
     assert sc.base_branch("hotfix/issue-2-y") == "main"
-
-
-# ---------------------------------------------------------------- Markdown
-
-def _wrapped(text: str) -> list:
-    """The line numbers `markdown_violations` reports for `text`."""
-    return [line for _, line, _, _ in sc.markdown_violations("x.md", text)]
-
-
-def test_a_paragraph_broken_across_lines_is_hard_wrapped() -> None:
-    assert _wrapped("First half of a sentence\nand its second half.\n") == [2]
-
-
-def test_a_list_item_broken_across_lines_is_hard_wrapped() -> None:
-    assert _wrapped("- An item that runs\n  onto a second line.\n") == [2]
-
-
-def test_blocks_of_their_own_are_not_wrapping() -> None:
-    text = (
-        "# Heading\n"
-        "- one\n- two\n1. first\n2. second\n"
-        "| a | b |\n| --- | --- |\n"
-        "> a quote\n"
-        "**Status:** Draft\n**Branch:** `chore/x`\n"
-    )
-    assert _wrapped(text) == []
-
-
-def test_fenced_code_and_front_matter_are_not_checked() -> None:
-    assert _wrapped("---\nname: x\ndescription: y\n---\n\n```text\nline one\nline two\n```\n") == []
-
-
-def test_a_line_after_an_explicit_break_is_not_wrapping() -> None:
-    assert _wrapped("Ends with two spaces  \nthen continues.\n\nEnds with a backslash\\\nthen continues.\n") == []
 
 
 # ---------------------------------------------------------------- history citations
@@ -239,22 +224,115 @@ def test_an_unsorted_import_is_caught_wherever_the_block_was_touched(repo: Build
     assert found[0][1] == 3
 
 
+@needs_markdownlint
 def test_a_wrapped_line_added_to_an_existing_document_is_reported(repo: Build) -> None:
     root = repo({"docs/guide.md": BASE["docs/guide.md"] + "\nA new paragraph,\nalso wrapped.\n"})
-    assert [(path, line) for path, line, _, _ in violations(root)] == [("docs/guide.md", 7)]
+    found = violations(root)
+    assert [(path, line) for path, line, _, _ in found] == [("docs/guide.md", 8), ("docs/guide.md", 9)]
+    assert all(message.startswith("single-line-paragraphs ") for _, _, _, message in found)
 
 
+@needs_markdownlint
 def test_a_wrapped_line_that_predates_the_branch_is_not_reported(repo: Build) -> None:
     root = repo({"docs/guide.md": BASE["docs/guide.md"] + "\nA new paragraph on one line.\n"})
     assert violations(root) == []
 
 
 @needs_ruff
+@needs_markdownlint
 def test_main_exits_1_on_a_violation_and_0_without(repo: Build) -> None:
     root = repo({"docs/guide.md": BASE["docs/guide.md"] + "\nNew,\nwrapped.\n"})
     assert sc.main([]) == 1
     (root / "docs" / "guide.md").write_text(BASE["docs/guide.md"] + "\nNew, on one line.\n")
     assert sc.main([]) == 0
+
+
+# ---------------------------------------------------------------- markdownlint
+
+def _stub(folder: Path, script: str) -> Path:
+    """Install a stand-in markdownlint-cli2 running `script` under `folder`, and return `folder`."""
+    tool = folder / "automation" / "node_modules" / ".bin" / "markdownlint-cli2"
+    tool.parent.mkdir(parents=True)
+    tool.write_text(f"#!/usr/bin/env bash\n{script}\n")
+    tool.chmod(0o755)
+    return folder
+
+
+@needs_markdownlint
+def test_a_markdownlint_finding_on_a_changed_line_is_reported(
+        repo: Build, capsys: pytest.CaptureFixture) -> None:
+    repo({"docs/guide.md": BASE["docs/guide.md"] + "\n```\ncode\n```\n"})
+    assert sc.main([]) == 1
+    assert "docs/guide.md:8 — MD040/" in capsys.readouterr().out
+
+
+@needs_markdownlint
+def test_a_markdownlint_finding_on_an_untouched_line_is_not_reported(repo: Build) -> None:
+    root = repo({})
+    fenced = "# Fenced\n\n```\ncode\n```\n\nOne line.\n\nAnother line.\n"
+    (root / "docs" / "fenced.md").write_text(fenced)
+    _git(root, "checkout", "-q", "main")
+    _commit(root, "a finding before the branch")
+    _git(root, "checkout", "-q", "-B", "chore/test", "main")
+    (root / "docs" / "fenced.md").write_text(fenced.replace("Another line.", "Another line, changed."))
+    assert sc.changed_lines("main")["docs/fenced.md"] == {9}
+    assert violations(root) == []
+
+
+@needs_markdownlint
+def test_a_markdownlint_finding_next_to_a_changed_line_is_reported(repo: Build) -> None:
+    root = repo({"docs/guide.md": BASE["docs/guide.md"].replace("# Guide\n", "# Guide\nAdded under the heading.\n")})
+    found = [(path, line, message.split("/")[0]) for path, line, _, message in violations(root)]
+    assert found == [("docs/guide.md", 1, "MD022")]
+
+
+@needs_markdownlint
+def test_a_rule_the_config_does_not_name_is_not_reported(repo: Build) -> None:
+    long_line = "A line well over eighty characters long, " * 3 + "with <b>inline HTML</b> in it.\n"
+    root = repo({"docs/guide.md": BASE["docs/guide.md"] + "\n" + long_line})
+    assert violations(root) == []
+
+
+def test_the_check_stops_when_markdownlint_cli2_is_not_installed(
+        repo: Build, monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory) -> None:
+    repo({"docs/guide.md": BASE["docs/guide.md"] + "\nNew, on one line.\n"})
+    monkeypatch.setattr(sc, "_main_worktree", lambda: tmp_path_factory.mktemp("no_tools"))
+    with pytest.raises(SystemExit, match=r"npm ci --prefix automation"):
+        violations(sc.ROOT)
+
+
+@needs_markdownlint
+def test_markdownlint_is_found_from_a_linked_worktree(
+        repo: Build, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch,
+        tmp_path_factory: pytest.TempPathFactory) -> None:
+    root = repo({"docs/guide.md": BASE["docs/guide.md"] + "\nA new paragraph,\nalso wrapped.\n"})
+    _commit(root, "add a wrapped paragraph")
+    worktree = tmp_path_factory.mktemp("worktree")
+    _git(root, "worktree", "add", "-q", "--detach", str(worktree), "chore/test")
+    assert not (worktree / "automation" / "node_modules").exists()
+    monkeypatch.setattr(sc, "ROOT", worktree)
+    assert sc.main(["--base", "main"]) == 1
+    assert "docs/guide.md:8 — single-line-paragraphs " in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        "exit 1",
+        "echo 'Linting: 1 file'; echo 'Summary: 1 issue in 1 file'; echo 'not a finding' >&2; exit 1",
+        "echo 'Linting: 2 files'; echo 'Summary: 1 issue in 1 file'; "
+        "echo 'docs/guide.md:8 error MD040/fenced-code-language Fenced code' >&2; exit 1",
+    ],
+    ids=["nothing on stdout", "summary counts an unparsed finding", "linting counts another file"],
+)
+def test_a_markdownlint_cli2_that_fails_to_load_stops_the_check(
+        repo: Build, monkeypatch: pytest.MonkeyPatch,
+        tmp_path_factory: pytest.TempPathFactory, script: str) -> None:
+    repo({"docs/guide.md": BASE["docs/guide.md"] + "\nNew, on one line.\n"})
+    folder = _stub(tmp_path_factory.mktemp("stub"), script)
+    monkeypatch.setattr(sc, "_main_worktree", lambda: folder)
+    with pytest.raises(SystemExit, match=r"markdownlint-cli2 failed"):
+        violations(sc.ROOT)
 
 
 # ---------------------------------------------------------------- real values
@@ -288,6 +366,7 @@ def test_an_environment_value_with_no_entries_falls_through_to_the_file(tmp_path
     assert sc.real_values(env, {"DEV_REAL_VALUES": raw}) == ["Qzx"]
 
 
+@needs_markdownlint
 def test_main_reads_the_values_from_the_environment_without_printing_them(
         repo: Build, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
     root = repo({"docs/guide.md": BASE["docs/guide.md"] + "\nWritten for vrell today.\n"})
@@ -295,7 +374,7 @@ def test_main_reads_the_values_from_the_environment_without_printing_them(
     monkeypatch.setenv("DEV_REAL_VALUES", "Vrell")
     assert sc.main([]) == 1
     out = capsys.readouterr().out
-    assert "docs/guide.md:6 — holds value 1 of DEV_REAL_VALUES" in out
+    assert "docs/guide.md:8 — holds value 1 of DEV_REAL_VALUES" in out
     assert "vrell" not in out.lower()
 
 
@@ -310,15 +389,17 @@ def test_a_value_inside_a_longer_word_is_not_matched() -> None:
     assert sc.real_value_violations("x.md", "aqzxb\nqzx9 and 9qzx\n", [VALUE]) == []
 
 
+@needs_markdownlint
 def test_a_listed_value_on_a_changed_line_fails_without_printing_it(
         repo: Build, capsys: pytest.CaptureFixture) -> None:
     repo({"docs/guide.md": BASE["docs/guide.md"] + "\nWritten for qzx today.\n"})
     assert sc.main([]) == 1
     out = capsys.readouterr().out
-    assert "docs/guide.md:6 — holds value 1 of DEV_REAL_VALUES" in out
+    assert "docs/guide.md:8 — holds value 1 of DEV_REAL_VALUES" in out
     assert VALUE.lower() not in out.lower()
 
 
+@needs_markdownlint
 def test_a_listed_value_on_an_untouched_line_is_not_reported(repo: Build) -> None:
     repo({"docs/notes.md": f"{VALUE} was here.\n\nA new line.\n"})
     assert sc.check({"docs/notes.md": {3}}, [VALUE]) == []
@@ -327,6 +408,7 @@ def test_a_listed_value_on_an_untouched_line_is_not_reported(repo: Build) -> Non
 
 @pytest.mark.parametrize("env", [None, "OTHER_KEY=1\n", "DEV_REAL_VALUES=\n"],
                          ids=["no-env-file", "no-key", "empty-value"])
+@needs_markdownlint
 def test_without_listed_values_the_check_fails_with_a_message(
         repo: Build, capsys: pytest.CaptureFixture, env: Optional[str]) -> None:
     root = repo({"docs/guide.md": BASE["docs/guide.md"] + "\nNew, on one line.\n"})
@@ -340,6 +422,7 @@ def test_without_listed_values_the_check_fails_with_a_message(
     assert "real-value check not run: DEV_REAL_VALUES is not set in the environment or in .env in the main working tree" in out
 
 
+@needs_markdownlint
 def test_values_are_read_from_the_main_working_tree_in_a_linked_worktree(
         repo: Build, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch,
         tmp_path_factory: pytest.TempPathFactory) -> None:
@@ -351,10 +434,11 @@ def test_values_are_read_from_the_main_working_tree_in_a_linked_worktree(
     monkeypatch.setattr(sc, "ROOT", worktree)
     assert sc.main(["--base", "main"]) == 1
     out = capsys.readouterr().out
-    assert "docs/guide.md:6 — holds value 1 of DEV_REAL_VALUES" in out
+    assert "docs/guide.md:8 — holds value 1 of DEV_REAL_VALUES" in out
     assert "real-value check not run" not in out
 
 
+@needs_markdownlint
 def test_a_listed_value_in_a_branch_commit_message_fails_without_printing_it(
         repo: Build, capsys: pytest.CaptureFixture) -> None:
     root = repo({"docs/first.md": "First.\n"})
