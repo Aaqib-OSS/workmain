@@ -13,3 +13,6 @@ Where the development process keeps its own files. Where application code lives,
 | Utilities, diagnostics and demos | `scripts/` |
 | Alembic's configuration, `alembic.ini` | repository root |
 | Non-application dev tooling, its tests (`*_test.py`) and their fixtures | `automation/` |
+| CI workflows | `.github/workflows/` |
+
+The checks that enforce these standards live in `automation/` and `.github/workflows/`.

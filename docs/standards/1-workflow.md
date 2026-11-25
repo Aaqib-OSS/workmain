@@ -11,7 +11,7 @@
 
 | Stage | Full path | Direct path |
 | --- | --- | --- |
-| Recon | Required | Where the work turns up options or questions whose answers change it |
+| Recon | Required | Where the change must find every site of a rule, or spans documents that may contradict each other |
 | Analysis | Required | Where Recon ran |
 | Spec | Required | Required |
 | Review | Required | Ray decides at the start |
@@ -22,7 +22,7 @@
 
 **What shows each stage done.** Each stage is done when its artifact or field shows it. The condition is the same on both paths unless the stage says otherwise.
 
-- **Recon** — Spanner makes a read-only pass and records its findings verbatim in `docs/dev/design/`. Fixes belong to the spec, and suggestions to the design study's options. Where the findings turn up options, a trade-off, or questions whose answers change the work, the artifact is a design study: it adds the options with a recommendation and the open questions (`docs/dev/design/_TEMPLATE_DESIGN.md`). Recon also runs §1.3's search by file for every file the work will change, and the artifact lists what it returns. On the direct path, recon earns its place when the change spans documents that may contradict each other, and every site of a rule has to be found before the change can be specified.
+- **Recon** — Spanner reads, read-only, what the work will touch, and records what it finds verbatim in `docs/dev/design/`. It reads the source the work will change, every check that enforces a rule the work touches in the locations §7 names, and the issues §1.3's search by file returns for every file the work will change, and lists each in its findings. Where the findings turn up options, a trade-off, or questions whose answers change the work, the artifact is a design study (`docs/dev/design/_TEMPLATE_DESIGN.md`): it adds the options with a recommendation, and the open questions. A fix recon finds belongs to the spec.
   - *Done when* a `docs/dev/design/` artifact names the issue in its `**Originating item:**` field.
   - Where no recon runs, the spec's `**Design study:**` field reads `n/a`, which `/closeout`'s `P5a` accepts on a `chore/*` spec alone.
 - **Analysis** — Ray and Spanner answer the design artifact's open questions. Each decision in the spec's Decision Log cites the question it answers.
@@ -134,7 +134,7 @@ An authorization point is an action that is irreversible or reaches outside the 
 
 - **A rule has one home:** `CLAUDE.md`, a `docs/standards/` file, or a role's skill reference, as `CLAUDE.md`'s opening states. Everywhere else cites it. Text that ships alongside code follows `docs/standards/3-code.md`.
 - **A new rule or standard requires Ray's approval.** The method a fix used stays in that fix's own artifacts.
-- **A change to a rule searches the whole document set** — `CLAUDE.md`, the standards, the skills and the templates — for every other statement of it, and corrects each one. A historical citation in `docs/archive/` stays as written; a live, forward-looking reference is repointed.
+- **A change to a rule searches the whole document set** — `CLAUDE.md`, the standards, the skills, the templates, and the locations §7 names — for every statement, check and citation of it, and corrects each one. A historical citation in `docs/archive/` stays as written; a live, forward-looking reference is repointed.
 
 ### 1.6 Sequencing
 
