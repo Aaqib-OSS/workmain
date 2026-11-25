@@ -1,6 +1,6 @@
 # The note and time-entry write family on the unit of work — Design Study
 
-**Status:** Active
+**Status:** Shipped
 **Kind:** Design study
 **Author:** Spanner (Role 1)
 **Date:** 20261117
@@ -118,4 +118,4 @@ The question is real (F23). #300 is about each command splitting its own comma-d
 
 What happened to this study. Filled in when the work lands:
 
-- Promoted to:
+- Promoted to: `../specs/NOTE_TIME_ENTRY_USE_CASES_SPEC.md`, and the `workmain/services/meetings_service.py` line in `docs/ARCHITECTURE.md` §2 (Q2)

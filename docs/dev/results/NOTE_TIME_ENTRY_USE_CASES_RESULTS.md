@@ -1,6 +1,6 @@
 # The note and time-entry write family on the unit of work — Implementation Results
 
-**Status:** Active
+**Status:** Shipped
 **Author:** Anvil (Role 3)
 **Date:** 20261124
 **Spec:** `../specs/NOTE_TIME_ENTRY_USE_CASES_SPEC.md`
@@ -79,6 +79,7 @@ The pre-implementation discrepancies D1 to D3 are Decision Log rows in the spec,
 
 - **Test suite:** 1850 passed, 0 failed, 0 skipped (note: 1 xfailed, 3 xpassed), 1854 collected. Baseline: 1796 passed, 0 failed, 0 skipped (note: 1 xfailed, 3 xpassed), the spec's §6.
 - **Defect shown before the fix:** n/a; this is a conversion, not a defect fix.
+- **Close-out preflight, 20261124:** bare `pytest` at `3e0387b`: 1850 passed, 0 failed, 0 skipped (note: 1 xfailed, 3 xpassed). `architecture_check` and `style_check` print `PASS`; `closeout_acs.py` exits 0.
 - **Live verification:** none run. The CLI paths run on the working branch (`docs/standards/2-git.md` §2.6). The daemon and Slack paths wait for close-out's restart.
 
 **Former call sites.** Each R2 site outside `workmain/services/`, and R4's `clockify.py:168`. Old lines are at `6716907`, new lines at `b3819e0`, and every move is commit `207e8a0`.
@@ -157,4 +158,4 @@ The pre-implementation discrepancies D1 to D3 are Decision Log rows in the spec,
 
 | Item | Description | Why deferred |
 | --- | --- | --- |
-| Issue body edits | AC1.1's and AC3.1's restated checks (spec Decision Log, Spanner rows of 20261118) are edited into #278's body. | Close-out's (`docs/standards/1-workflow.md` §1.2). |
+| Issue body edits | AC1.1's and AC3.1's restated checks (spec Decision Log, Spanner rows of 20261118) are edited into #278's body. | Done at close-out, 20261124 (`docs/standards/1-workflow.md` §1.2). |

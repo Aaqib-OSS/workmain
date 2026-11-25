@@ -1,6 +1,6 @@
 # The note and time-entry write family on the unit of work — Spec
 
-**Status:** Approved
+**Status:** Shipped
 **Author:** Spanner (Role 1)
 **Date:** 20261118
 **Read at:** `6716907`
