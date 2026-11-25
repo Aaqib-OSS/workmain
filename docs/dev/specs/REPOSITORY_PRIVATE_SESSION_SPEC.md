@@ -1,6 +1,6 @@
 # Repositories hold their session privately — Spec
 
-**Status:** Draft
+**Status:** Approved
 **Author:** Spanner
 **Date:** 20261125
 **Read at:** `1f625e5`
@@ -28,6 +28,7 @@
 | 20261125 | Caliper | 4, Standards gap, non-blocking: §1.2 requires a call-site search of the whole repository. #188 forbids any document citing `scripts/baseline/`, and the spec leaves that directory out of R4 and R5 without saying the rename leaves it working. No rule says how a spec covers a call site in restricted code. | Recorded. It becomes an issue only when Ray says so. The pass's sentence describing what the restricted scripts do is left out of this row, because #188 bars any document from citing them. |
 | 20261125 | Caliper | n/a, Existing defect, non-blocking: the two existing `session-rules` steps use `if grep ...; then exit 1; fi`, so a `grep` error (exit 2) prints `none found`. The spec's §7 already records this. | Recorded in §7. It becomes an issue only when Ray says so. |
 | 20261125 | Caliper | Pass at 9e6f28d, full: 34 items checked, 0 blocking, 6 non-blocking. | n/a |
+| 20261125 | Ray | Spec approved. | **Status:** Approved. |
 
 ---
 
