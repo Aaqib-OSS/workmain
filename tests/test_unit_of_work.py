@@ -49,6 +49,17 @@ def _sessions_opened() -> Iterator[List[Session]]:
         yield opened
 
 
+def _recording(repository_class: type, built: list[Session]) -> type:
+    """A subclass of repository_class that records the session it is constructed with."""
+
+    class Recording(repository_class):
+        def __init__(self, session: Session) -> None:
+            built.append(session)
+            super().__init__(session)
+
+    return Recording
+
+
 class TestScopeState:
     """scope_open() is true exactly while a session_scope() is open on its thread."""
 
@@ -99,13 +110,26 @@ class TestUnitOfWork:
     """The unit of work holds every repository and its transaction, and nothing else."""
 
     def test_repositories_built_on_its_session_while_entered(self) -> None:
-        with _sessions_opened() as opened:
-            with UnitOfWork() as uow:
-                for name, repository_class in UnitOfWork.REPOSITORIES.items():
-                    repository = getattr(uow, name)
-                    assert isinstance(repository, repository_class)
-                    assert repository.session is opened[0]
+        originals = dict(UnitOfWork.REPOSITORIES)
+        built: dict[str, list[Session]] = {name: [] for name in originals}
+        with pytest.MonkeyPatch.context() as mp:
+            for name, repository_class in originals.items():
+                mp.setitem(UnitOfWork.REPOSITORIES, name, _recording(repository_class, built[name]))
+            with _sessions_opened() as opened:
+                with UnitOfWork() as uow:
+                    for name, repository_class in originals.items():
+                        assert isinstance(getattr(uow, name), repository_class)
+                        assert len(built[name]) == 1
+                        assert built[name][0] is opened[0]
         assert len(opened) == 1
+
+    @pytest.mark.parametrize(
+        'repository_class',
+        list(UnitOfWork.REPOSITORIES.values()),
+        ids=list(UnitOfWork.REPOSITORIES),
+    )
+    def test_repository_has_no_session_attribute(self, repository_class: type, db_session: Session) -> None:
+        assert not hasattr(repository_class(db_session), 'session')
 
     def test_repositories_absent_after_exit(self) -> None:
         uow = UnitOfWork()
@@ -136,10 +160,10 @@ class TestUnitOfWork:
             raise RuntimeError("commit failed")
 
         uow = UnitOfWork()
-        with pytest.MonkeyPatch.context() as mp:
+        with pytest.MonkeyPatch.context() as mp, _sessions_opened() as opened:
             with pytest.raises(RuntimeError, match="commit failed"):
                 with uow:
-                    mp.setattr(uow.system_state.session, 'commit', failing_commit)
+                    mp.setattr(opened[0], 'commit', failing_commit)
         for name in UnitOfWork.REPOSITORIES:
             assert not hasattr(uow, name)
 
@@ -258,13 +282,17 @@ class TestRecordUnitOfWork:
     """A record unit of work runs on record_scope(), the default one on session_scope()."""
 
     def test_record_runs_on_record_scope(self) -> None:
-        with UnitOfWork(record=True) as uow:
-            value = uow.system_state.session.execute(text('SHOW lock_timeout')).scalar()
+        with _sessions_opened() as opened:
+            with UnitOfWork(record=True):
+                value = opened[0].execute(text('SHOW lock_timeout')).scalar()
+        assert len(opened) == 1
         assert value == RECORD_LOCK_TIMEOUT
 
     def test_default_runs_on_session_scope(self, db_session: Session) -> None:
         server_default = db_session.execute(text('SHOW lock_timeout')).scalar()
-        with UnitOfWork() as uow:
-            value = uow.system_state.session.execute(text('SHOW lock_timeout')).scalar()
+        with _sessions_opened() as opened:
+            with UnitOfWork():
+                value = opened[0].execute(text('SHOW lock_timeout')).scalar()
+        assert len(opened) == 1
         assert value == server_default
         assert value != RECORD_LOCK_TIMEOUT

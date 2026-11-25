@@ -17,18 +17,18 @@ class SystemStateRepository:
     """Repository for the system_state KV table."""
 
     def __init__(self, session: Session) -> None:
-        self.session = session
+        self._session = session
 
     def get(self, key: str) -> Optional[str]:
         """Return the string value for key, or None if absent."""
-        row = self.session.query(SystemState).filter(
+        row = self._session.query(SystemState).filter(
             SystemState.key == key
         ).first()
         return row.value if row else None
 
     def set(self, key: str, value: str) -> None:
         """Upsert key with value."""
-        row = self.session.query(SystemState).filter(
+        row = self._session.query(SystemState).filter(
             SystemState.key == key
         ).first()
         if row:
@@ -36,18 +36,18 @@ class SystemStateRepository:
             row.updated_at = datetime.now(timezone.utc)
         else:
             row = SystemState(key=key, value=value)
-            self.session.add(row)
-        self.session.flush()
+            self._session.add(row)
+        self._session.flush()
 
     def delete(self, key: str) -> bool:
         """Delete key. Returns True if deleted, False if not found."""
-        row = self.session.query(SystemState).filter(
+        row = self._session.query(SystemState).filter(
             SystemState.key == key
         ).first()
         if not row:
             return False
-        self.session.delete(row)
-        self.session.flush()
+        self._session.delete(row)
+        self._session.flush()
         return True
 
     def get_bool(self, key: str, default: bool = False) -> bool:

@@ -30,7 +30,7 @@ class ReportsRepository:
         Args:
             session: Database session
         """
-        self.session = session
+        self._session = session
     
     def create(
         self,
@@ -81,9 +81,9 @@ class ReportsRepository:
             client_id=client_id,
         )
         
-        self.session.add(report)
-        self.session.flush()
-        self.session.refresh(report)
+        self._session.add(report)
+        self._session.flush()
+        self._session.refresh(report)
         
         return report
     
@@ -97,7 +97,7 @@ class ReportsRepository:
         Returns:
             Report object or None
         """
-        return self.session.query(Report).filter(Report.id == report_id).first()
+        return self._session.query(Report).filter(Report.id == report_id).first()
     
     def list_reports(
         self,
@@ -121,7 +121,7 @@ class ReportsRepository:
         Returns:
             List of Report objects
         """
-        query = self.session.query(Report)
+        query = self._session.query(Report)
 
         if report_type:
             query = query.filter(Report.report_type == report_type)
@@ -154,7 +154,7 @@ class ReportsRepository:
         Returns:
             The report with the highest ID on that date, or None
         """
-        query = self.session.query(Report).filter(Report.report_date == report_date)
+        query = self._session.query(Report).filter(Report.report_date == report_date)
 
         if report_type:
             query = query.filter(Report.report_type == report_type)
@@ -181,7 +181,7 @@ class ReportsRepository:
         Returns:
             List of Report objects
         """
-        query = self.session.query(Report)
+        query = self._session.query(Report)
 
         if report_type:
             query = query.filter(Report.report_type == report_type)
@@ -214,7 +214,7 @@ class ReportsRepository:
         Returns:
             List of Report objects with slack_message_ts set
         """
-        query = self.session.query(Report).filter(Report.slack_message_ts.isnot(None))
+        query = self._session.query(Report).filter(Report.slack_message_ts.isnot(None))
 
         if report_type:
             query = query.filter(Report.report_type == report_type)
@@ -256,7 +256,7 @@ class ReportsRepository:
         report.corrected_content = edited_body
         report.status = 'corrected'
         report.updated_at = datetime.now()
-        self.session.flush()
+        self._session.flush()
         if note:
             self.set_correction_note(report_id, note)
 
@@ -276,7 +276,7 @@ class ReportsRepository:
         if report is None:
             return
         report.correction_note = note
-        self.session.flush()
+        self._session.flush()
 
     def confirm(self, report_id: int) -> bool:
         """Confirm an unconfirmed report.
@@ -296,7 +296,7 @@ class ReportsRepository:
             return False
         report.status = 'confirmed'
         report.updated_at = datetime.now()
-        self.session.flush()
+        self._session.flush()
         return True
 
     def flag_correction(self, report_id: int, note: str) -> None:
@@ -319,7 +319,7 @@ class ReportsRepository:
         self.set_correction_note(report_id, note)
         report.status = 'corrected'
         report.updated_at = datetime.now()
-        self.session.flush()
+        self._session.flush()
 
     def record_slack_post(
         self,
@@ -345,7 +345,7 @@ class ReportsRepository:
         report.slack_message_ts = message_ts
         report.slack_channel = channel
         report.slack_workspace_name = workspace_name
-        self.session.flush()
+        self._session.flush()
         return True
 
     def get_filtered(
@@ -366,7 +366,7 @@ class ReportsRepository:
         matches correction_note only (ILIKE). limit=None returns
         unbounded results.
         """
-        q = self.session.query(Report)
+        q = self._session.query(Report)
         if status:
             q = q.filter(Report.status == status)
         if report_type:

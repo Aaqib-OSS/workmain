@@ -21,7 +21,7 @@ class GDriveRepository:
         Args:
             session: SQLAlchemy session instance.
         """
-        self.session = session
+        self._session = session
 
     def record_upload(
         self,
@@ -55,9 +55,9 @@ class GDriveRepository:
             upload_date=upload_date,
             created_at=datetime.now(timezone.utc),
         )
-        self.session.add(record)
-        self.session.flush()
-        self.session.refresh(record)
+        self._session.add(record)
+        self._session.flush()
+        self._session.refresh(record)
         return record
 
     def get_uploads_for_date(self, upload_date: date) -> List[GDriveUpload]:
@@ -71,7 +71,7 @@ class GDriveRepository:
             List of GDriveUpload records ordered by created_at ascending.
         """
         return (
-            self.session.query(GDriveUpload)
+            self._session.query(GDriveUpload)
             .filter(GDriveUpload.upload_date == upload_date)
             .order_by(GDriveUpload.created_at.asc())
             .all()
@@ -91,7 +91,7 @@ class GDriveRepository:
             List of GDriveUpload records ordered by created_at descending.
         """
         return (
-            self.session.query(GDriveUpload)
+            self._session.query(GDriveUpload)
             .filter(GDriveUpload.upload_type == upload_type)
             .order_by(GDriveUpload.created_at.desc())
             .limit(limit)
@@ -109,7 +109,7 @@ class GDriveRepository:
             List of GDriveUpload records ordered by created_at descending.
         """
         return (
-            self.session.query(GDriveUpload)
+            self._session.query(GDriveUpload)
             .order_by(GDriveUpload.created_at.desc())
             .limit(limit)
             .all()
@@ -132,7 +132,7 @@ class GDriveRepository:
             True if a matching record exists, False otherwise.
         """
         return (
-            self.session.query(GDriveUpload)
+            self._session.query(GDriveUpload)
             .filter(
                 GDriveUpload.filename == filename,
                 GDriveUpload.upload_date == upload_date,

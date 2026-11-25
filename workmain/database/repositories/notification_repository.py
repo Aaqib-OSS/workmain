@@ -33,7 +33,7 @@ class NotificationConfigRepository:
     """
 
     def __init__(self, session: Session) -> None:
-        self.session = session
+        self._session = session
         self._state = SystemStateRepository(session)
 
     def get_config(self) -> NotificationConfigData:
@@ -45,8 +45,8 @@ class NotificationConfigRepository:
         method = self._state.get('notify_method') or 'wsl-notify'
         enabled = self._state.get_bool('notify_enabled', default=True)
 
-        method_row = self.session.query(SystemState).filter_by(key='notify_method').first()
-        enabled_row = self.session.query(SystemState).filter_by(key='notify_enabled').first()
+        method_row = self._session.query(SystemState).filter_by(key='notify_method').first()
+        enabled_row = self._session.query(SystemState).filter_by(key='notify_enabled').first()
 
         updated_at = datetime.now(timezone.utc)
         if method_row and method_row.updated_at and enabled_row and enabled_row.updated_at:

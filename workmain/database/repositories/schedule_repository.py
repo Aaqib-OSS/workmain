@@ -15,7 +15,7 @@ class ScheduleExceptionRepository:
     """Repository for schedule_exceptions table."""
 
     def __init__(self, session: Session) -> None:
-        self.session = session
+        self._session = session
 
     def add_holiday(self, holiday_date: date, name: Optional[str] = None) -> ScheduleException:
         """Add a single-day holiday exception.
@@ -33,9 +33,9 @@ class ScheduleExceptionRepository:
             end_date=holiday_date,
             name=name,
         )
-        self.session.add(exception)
-        self.session.flush()
-        self.session.refresh(exception)
+        self._session.add(exception)
+        self._session.flush()
+        self._session.refresh(exception)
         return exception
 
     def add_timeoff(self, start: date, end: date,
@@ -56,15 +56,15 @@ class ScheduleExceptionRepository:
             end_date=end,
             reason=reason,
         )
-        self.session.add(exception)
-        self.session.flush()
-        self.session.refresh(exception)
+        self._session.add(exception)
+        self._session.flush()
+        self._session.refresh(exception)
         return exception
 
     def list_all(self) -> List[ScheduleException]:
         """Return all schedule exceptions sorted by start_date ascending."""
         return (
-            self.session.query(ScheduleException)
+            self._session.query(ScheduleException)
             .order_by(ScheduleException.start_date.asc())
             .all()
         )
@@ -79,7 +79,7 @@ class ScheduleExceptionRepository:
             List of matching ScheduleException records.
         """
         return (
-            self.session.query(ScheduleException)
+            self._session.query(ScheduleException)
             .filter(ScheduleException.type == exception_type)
             .order_by(ScheduleException.start_date.asc())
             .all()
@@ -95,7 +95,7 @@ class ScheduleExceptionRepository:
             ScheduleException or None.
         """
         return (
-            self.session.query(ScheduleException)
+            self._session.query(ScheduleException)
             .filter(ScheduleException.id == exception_id)
             .first()
         )
@@ -110,7 +110,7 @@ class ScheduleExceptionRepository:
             True if the date is covered by any holiday or time-off range.
         """
         return (
-            self.session.query(ScheduleException)
+            self._session.query(ScheduleException)
             .filter(
                 ScheduleException.start_date <= check_date,
                 ScheduleException.end_date >= check_date,
@@ -130,6 +130,6 @@ class ScheduleExceptionRepository:
         exception = self.get_by_id(exception_id)
         if exception is None:
             return False
-        self.session.delete(exception)
-        self.session.flush()
+        self._session.delete(exception)
+        self._session.flush()
         return True
