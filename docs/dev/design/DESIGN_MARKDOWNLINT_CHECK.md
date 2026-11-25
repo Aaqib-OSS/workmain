@@ -37,7 +37,7 @@
 | F9 | Unverified: which Node version `ubuntu-latest` provides. The `style` job installs Python only, and no step sets up Node. | `.github/workflows/tests.yml:86-137` |
 | F10 | markdownlint-cli2 prints each finding as `<path>:<line>[:<column>] error <MDnnn>/<name> <description> [<detail>]`, and exits 1 when it finds any, as ruff does. It has no built-in JSON output; JSON needs the separate `markdownlint-cli2-formatter-json` package, set in a `.markdownlint-cli2.*` file. | `markdownlint-cli2 --help`; output, §2 |
 | F11 | The existing tests write their Markdown inline into a temporary git repository; none reads a fixture file. Issue AC1's check names "tests in `automation/` with fixture files". | `automation/style_check_test.py:45` `BASE`, `:69` `repo` |
-| F12 | Existing defect, outside scope: CI's bare `pytest` collects `tests/` only, so `automation/` tests, `style_check_test.py` among them, run in no CI job. | `pyproject.toml:2` `testpaths = ["tests"]`; `docs/standards/6-testing.md:5` |
+| F12 | `automation/` tests are a separate suite, reached by `pytest automation/`; CI's bare `pytest` collects `tests/` only, by design. AC1's check is therefore a local `pytest automation/style_check_test.py` run, not a CI log. | `pyproject.toml:2` `testpaths = ["tests"]`; `docs/standards/6-testing.md:5` |
 
 ## 4. Governing rules and options
 
@@ -72,10 +72,10 @@ The decision left is how the tool is pinned and installed. Q1 holds it; the opti
 
 | Q | Question | Answer |
 | --- | --- | --- |
-| Q1 | How is markdownlint-cli2 pinned and installed (§4 Options A and B)? The problem is real: the check needs Node 22 or later (F4), CI sets up no Node (F9), and the version must match the editor's (F3). Recommendation: Option A. | |
-| Q2 | Is the rule set trimmed before the check is turned on, as the issue asks? The live findings (F5) and the archive's (F6) are all formatting defects the editor already flags, including `MD050` on unbackticked dunders. None clashes with a house rule, and the changed-line filter keeps existing findings from blocking. Recommendation: no trim; `.markdownlint.json` stays as it is. | |
-| Q3 | Does the check also report a finding on a line next to a changed line? The problem is real: a paragraph added under an existing heading is reported on the heading's line and would pass (F8). Options: (a) keep only changed lines and document the miss; (b) also keep a markdownlint finding on the line directly before or after a changed line, at the cost of sometimes reporting an existing finding next to an edit; (c) check the whole of every touched file, which fails a branch that edits any of the 7 files in F5. Recommendation: (b). The finding it adds is one line, fixed in the file the branch is already editing. | |
-| Q4 | Issue AC1's check names "fixture files", and the existing tests write Markdown inline (F11). Do the new tests follow the existing inline form, with the spec restating AC1 in its §5 under §1.2? Recommendation: yes, follow the harness and restate AC1. | |
+| Q1 | How is markdownlint-cli2 pinned and installed (§4 Options A and B)? The problem is real: the check needs Node 22 or later (F4), CI sets up no Node (F9), and the version must match the editor's (F3). Recommendation: Option A. | Q1 answered 20261125: Option A. |
+| Q2 | Is the rule set trimmed before the check is turned on, as the issue asks? The live findings (F5) and the archive's (F6) are all formatting defects the editor already flags, including `MD050` on unbackticked dunders. None clashes with a house rule, and the changed-line filter keeps existing findings from blocking. Recommendation: no trim; `.markdownlint.json` stays as it is. | Q2 answered 20261125: no trim. |
+| Q3 | Does the check also report a finding on a line next to a changed line? The problem is real: a paragraph added under an existing heading is reported on the heading's line and would pass (F8). Options: (a) keep only changed lines and document the miss; (b) also keep a markdownlint finding on the line directly before or after a changed line, at the cost of sometimes reporting an existing finding next to an edit; (c) check the whole of every touched file, which fails a branch that edits any of the 7 files in F5. Recommendation: (b). The finding it adds is one line, fixed in the file the branch is already editing. | Q3 answered 20261125: (b). |
+| Q4 | Issue AC1's check names "fixture files", and the existing tests write Markdown inline (F11). Do the new tests follow the existing inline form, with the spec restating AC1 in its §5 under §1.2? Recommendation: yes, follow the harness and restate AC1. | Q4 answered 20261125: yes. |
 
 ## 6. Disposition
 
