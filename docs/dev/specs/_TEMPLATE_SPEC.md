@@ -1,12 +1,19 @@
 # <Title> — Spec
 
 **Status:** Draft | Approved | Shipped | Superseded
+
 **Author:** Spanner
+
 **Date:** YYYYMMDD
+
 **Read at:** <commit SHA §2 was verified at>
+
 **Branch:** `<type>/issue-<N>-<slug>` (base: `docs/standards/2-git.md` §2.1)
+
 **Target release:** vX.Y.Z
+
 **Originating item:** Issue #N
+
 **Design study:** `../design/<file>.md` | `n/a` (direct path, where no recon ran)
 
 > Delete this block before use.

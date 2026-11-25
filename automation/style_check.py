@@ -3,11 +3,12 @@ Checks the lines a branch changed against the style rules a tool can check.
 
 Python lines are checked with ruff, configured in pyproject.toml. Python lines
 are also checked for citations of the process that produced them (§3). Markdown
-lines are checked for hard wrapping (docs/standards/1-workflow.md §1.5). Only
-lines the branch added or changed are checked, against the point where it left
-its base branch, so code is brought up to the rules as it is touched rather than
-all at once. Uncommitted and untracked files count as changed. CHANGELOG.md is
-history and is never checked.
+lines are checked with markdownlint-cli2 against .markdownlint-cli2.jsonc
+(docs/standards/1-workflow.md §1.5). Only lines the branch added or changed are
+checked, against the point where it left its base branch, so code is brought up
+to the rules as it is touched rather than all at once; a markdownlint finding on
+the line next to a changed line counts as well. Uncommitted and untracked files
+count as changed. CHANGELOG.md is history and is never checked.
 
 Every changed line, in a file of any type, and every commit message since the
 branch left its base are also checked for the real values listed in
@@ -15,7 +16,8 @@ DEV_REAL_VALUES, read from the environment when it lists any, and
 otherwise from .env in the main working tree, so a linked worktree
 reads the same file. The report names where a value is,
 never the value. With no values listed the check cannot run, and fails.
-Requires git, ruff and python-dotenv.
+Requires git, ruff, python-dotenv, and Node 22 or later with the tools
+npm ci --prefix automation installs.
 
 Exit 0 when every changed line passes, 1 otherwise.
 """
@@ -44,10 +46,10 @@ _HISTORY = re.compile(
 # This module and its tests name the forms they look for.
 _HISTORY_EXEMPT = ("automation/style_check.py", "automation/style_check_test.py")
 
-# A Markdown line that starts a block of its own rather than continuing a paragraph.
-_BLOCK_START = re.compile(
-    r"\s*([-*+]\s|\d+[.)]\s|#|\||>|<!--|---\s*$|\[\^?[^\]]*\]:|\*\*[^*]+:\*\*)"
-)
+# markdownlint-cli2's output: a finding on stderr, and the run's counts on stdout.
+_LINT_FINDING = re.compile(r"^(?P<path>.+?):(?P<line>\d+)(?::\d+)? error (?P<message>.+)$")
+_LINT_FILES = re.compile(r"^Linting: (\d+) files?$", re.MULTILINE)
+_LINT_SUMMARY = re.compile(r"^Summary: (\d+) issues? in \d+ files?$", re.MULTILINE)
 
 Violation = tuple[str, int, int, str]
 
@@ -286,57 +288,53 @@ def history_violations(path: str, text: str) -> list[Violation]:
     ]
 
 
-def markdown_violations(path: str, text: str) -> list[Violation]:
+def markdownlint_violations(paths: list[str]) -> list[Violation]:
     """
-    Find hard-wrapped lines in a Markdown file.
+    Run markdownlint-cli2 over the given Markdown files.
 
-    A line is hard-wrapped when it continues the paragraph or list item on the
-    line before it. Tables, headings, quotes, list items, field lines such as
-    `**Status:** Draft`, fenced code, front matter, and a line after an explicit
-    break (two trailing spaces or a backslash) are not.
+    The tool is the one installed in the main working tree's
+    automation/node_modules, so a linked worktree uses it too. It runs in
+    ROOT, where it reads .markdownlint-cli2.jsonc. Its stdout counts are
+    checked against what it was given and what it reported, so a run that
+    failed before linting cannot read as a pass.
 
     Args:
-        path: The file's repository-relative path, for the report.
-        text: The file's contents.
+        paths: Repository-relative paths of Markdown files.
 
     Returns:
-        One (path, line, line, message) entry per wrapped line.
+        One (path, line, line, "<rule> <description>") entry per finding.
+
+    Raises:
+        SystemExit: the tool is not installed, it exited other than 0 or 1,
+            or its Linting or Summary count disagrees with the run.
     """
-    out = []
-    fence = front = False
-    prev = ""
-    for number, raw in enumerate(text.splitlines(), 1):
-        line = raw.rstrip("\n")
-        if number == 1 and line.strip() == "---":
-            front = True
-            continue
-        if front:
-            front = line.strip() != "---"
-            continue
-        if line.lstrip().startswith(("```", "~~~")):
-            fence, prev = not fence, ""
-            continue
-        if fence:
-            continue
-        if not line.strip():
-            prev = ""
-            continue
-        if (
-            prev
-            and not prev.endswith(("  ", "\\"))
-            and not prev.lstrip().startswith(("|", "#", "<!--"))
-            and not _BLOCK_START.match(line)
-        ):
-            out.append(
-                (
-                    path,
-                    number,
-                    number,
-                    "hard-wrapped: continues the line above; one line per paragraph",
-                )
-            )
-        prev = line
-    return out
+    if not paths:
+        return []
+    tool = _main_worktree() / "automation" / "node_modules" / ".bin" / "markdownlint-cli2"
+    if not tool.exists():
+        raise SystemExit("markdownlint-cli2 was not found (npm ci --prefix automation)")
+    result = subprocess.run(
+        [str(tool), *(f":{path}" for path in paths)],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    )
+    found = [
+        (m["path"], int(m["line"]), int(m["line"]), m["message"])
+        for m in map(_LINT_FINDING.match, result.stderr.splitlines())
+        if m
+    ]
+    linting = _LINT_FILES.search(result.stdout)
+    summary = _LINT_SUMMARY.search(result.stdout)
+    if (
+        result.returncode not in (0, 1)
+        or linting is None
+        or int(linting[1]) != len(paths)
+        or summary is None
+        or int(summary[1]) != len(found)
+    ):
+        raise SystemExit(f"markdownlint-cli2 failed: {result.stderr.strip()}")
+    return found
 
 
 def check(
@@ -351,7 +349,8 @@ def check(
             none are looked for when empty.
 
     Returns:
-        Every violation whose span includes a changed line, sorted by path and line.
+        Every violation whose span includes a changed line, and every
+        markdownlint finding on or next to one, sorted by path and line.
     """
     python = [
         p
@@ -361,21 +360,23 @@ def check(
     found = python_violations(python)
     for path in python:
         found += history_violations(path, (ROOT / path).read_text(encoding="utf-8"))
-    for path in changes:
-        if path.endswith(".md") and (ROOT / path).exists():
-            found += markdown_violations(
-                path, (ROOT / path).read_text(encoding="utf-8")
-            )
+    nearby = markdownlint_violations(
+        [p for p in changes if p.endswith(".md") and (ROOT / p).exists()]
+    )
     if values:
         for path in changes:
             if (ROOT / path).is_file():
                 text = (ROOT / path).read_bytes().decode("utf-8", errors="replace")
                 found += real_value_violations(path, text, values)
+
+    def touched(v: Violation, reach: int) -> bool:
+        lines = changes.get(v[0])
+        return lines is None or any(
+            n in lines for n in range(v[1] - reach, v[2] + reach + 1)
+        )
+
     return sorted(
-        v
-        for v in found
-        if changes.get(v[0]) is None
-        or any(n in changes[v[0]] for n in range(v[1], v[2] + 1))
+        [v for v in found if touched(v, 0)] + [v for v in nearby if touched(v, 1)]
     )
 
 

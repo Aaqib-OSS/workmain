@@ -124,7 +124,7 @@ An authorization point is an action that is irreversible or reaches outside the 
 
 **Writing.**
 
-- **Markdown is written one line per paragraph**, per list item and per table row, and the editor wraps it. `.markdownlint.json` is set to match, and governs all formatting.
+- **Markdown is written one line per paragraph**, per list item and per table row, and the editor wraps it. `.markdownlint-cli2.jsonc` governs all formatting, and `automation/style_check.py` checks it on every line a branch changes.
 - **A document is written for a reader who comes to it cold.** An issue, a criterion and a design study's open question each stand alone and state the facts they depend on. What breaks, and who notices, is spelled out. A rule is stated in a sentence, and another document is cited as its checklist. A reason is stated in terms the reader can check, and an issue number may follow it as the record. An example is set out separately from the rule, and is checked against the rest of the standards before it goes in.
 - **A bare `§` is a section of the `docs/standards/` set**, whose numbers are unique across its files. A section of any other document is cited with that document's name.
 - **An item that has a name of its own is cited by that name:** a test by its pytest node ID, a file by its path, a function or class by its symbol. An ID names an item that has no other name, such as a design rule, a criterion, a finding or an open question. It is used inside the file that defines it; anywhere else it is cited in full.

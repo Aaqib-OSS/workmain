@@ -104,6 +104,14 @@ jobs:
         run: |
           pip install -r requirements-dev.txt "$(grep -oE '^python-dotenv==[^ #]+' requirements.txt)"
 
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+
+      # markdownlint-cli2 and its rule at the versions automation/package-lock.json pins.
+      - name: Install markdownlint-cli2
+        run: npm ci --prefix automation
+
       # The secret reaches this step's environment only, and style_check.py
       # reads DEV_REAL_VALUES from the environment. No file holds the values.
       #
