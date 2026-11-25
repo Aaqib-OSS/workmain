@@ -7,6 +7,28 @@ and project versioning follows `docs/standards/2-git.md` §2.5.
 
 ## [Unreleased]
 
+## [1.61.0] - 2026-11-24
+
+Each caller decided for itself which note and time-entry writes committed together, inside its own database session, so the same write could commit as a unit from one surface and partly from another. Each grouping is now one use case that enters a unit of work its caller builds, and commits or rolls back as a whole on every surface: the CLI commands, Slack, the daemon and the Clockify pull (#278).
+
+### Changed
+
+- `workmain/services/notes_service.py`, `workmain/services/time_entry_service.py`: `create_note`, `apply_cf_hook_on_create`, `create_time_entry`, `create_paired_time_entry` and `link_condensed_note` are operations on an entered unit of work. The use cases `add_note`, `log_meeting_time` and `log_task_time` group them. `link_condensed_note` takes a meeting id, not a model. `create_time_entry` writes its task note through `create_note`.
+- `workmain/services/clockify_service.py`: `apply_pull` takes a `UnitOfWork(record=True)` from its caller.
+- `workmain/ai/note_condenser.py`: `condense_meeting` no longer writes the meeting. The condensed summary, the condensed note and the linked time entry commit together or not at all, so a failed link no longer leaves EOD treating the meeting as condensed.
+- `workmain/orchestration/action_executor.py`: `ActionExecutor()` takes no session. It opens a scope for each action that needs one and sends note and time-entry actions to their use cases. `workmain/daemon/daemon.py` and `workmain/integrations/slack/slack_eod.py` no longer open a scope around it. A failed commit now reports the action's `Error: …` message, and Slack no longer posts a success message after one.
+- `workmain/cli/commands/notes.py`, `meetings.py`, `time.py`, `clockify.py`: each call site closes its scope before it calls a use case.
+- `workmain/database/repositories/notes_repo.py`, `time_entries_repo.py`: `NotesRepository.create` and `TimeEntriesRepository.get_by_meeting` signatures use built-in generics.
+- `CLAUDE.md` § Note Write-Path Convergence is deleted. `docs/ARCHITECTURE.md` §2 and the service docstrings state the write path.
+
+### Added
+
+- `workmain/services/meetings_service.py`: `record_condensation`, the use case that writes a meeting's condensed summary with its condensed note and linked entry, and its line in `docs/ARCHITECTURE.md` §2.
+- `workmain/database/repositories/meetings_repo.py`: `MeetingsRepository.set_condensed_summary`.
+- `tests/mocks/fake_unit_of_work.py`: fakes for the repository methods the operations call, with contract tests in `tests/test_fake_unit_of_work.py`, and `tests/test_meetings_service.py`.
+
+Suite: 1850 passed, 0 failed, 0 skipped (note: 1 xfailed, 3 xpassed) (baseline 1796 passed, 0 failed, 0 skipped).
+
 ## [1.60.0] - 2026-11-18
 
 Claude and Gemini priced every request and every estimate at a rate written into their code whenever a rate key was missing from `config/ai_settings.json`, with no error and no warning. The rates now come only from config. `ProviderManager` refuses to load when an enabled paid provider lacks either rate key, and the error names the key. This is how it already treats a missing `max_tokens` (#155).
