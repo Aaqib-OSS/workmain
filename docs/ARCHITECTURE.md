@@ -115,7 +115,7 @@ The three entry points (CLI, daemon, Slack Socket Mode) are the three surfaces, 
 - `config/meeting_templates.json` — recurring meeting templates. Owner: `workmain/utils/meeting_templates.py`.
 - `templates/` — report templates, field definitions and style guides. Owner: `workmain/templates_engine/`.
 - `staging/` — files the application writes before they are sent or uploaded: reports, email drafts, notes for Google Drive, and Clockify PDFs, one folder each.
-  - `staging/baseline/` is a deliberate special case: baseline AI data for report and note generation, written by `scripts/baseline/` and kept for the AI generation issues. It is development data, not application output.
+  - `staging/baseline/` is a deliberate special case: baseline AI data for report and note generation and kept for the AI generation issues. It is development data, not application output.
 - `deploy/workmain-notify.service` — the daemon's systemd unit.
 - `~/.workmain/` — outside the repository: daemon state (`WORKMAIN_STATE_DIR`), and integration credentials, tokens and caches.
 
