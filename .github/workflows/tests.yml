@@ -187,26 +187,33 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # docs/standards/4-database.md §4.1 and §4.3: committing and rolling back
-      # are the scope owner's, never a repository's.
+      # Enforces docs/standards/4-database.md §4.1 and §4.3.
+      # Matches a .commit() or .rollback() call in any repository module.
+      # grep exit 1 is a pass; above 1 is an error and fails the step.
       - name: No commit or rollback in a repository
         run: |
-          if grep -rnE '\.(commit|rollback)\(\)' workmain/database/repositories/; then exit 1; fi
+          status=0
+          grep -rnE '\.(commit|rollback)\(\)' workmain/database/repositories/ || status=$?
+          if [ "$status" -eq 0 ]; then exit 1; fi
+          if [ "$status" -ne 1 ]; then echo "grep exit $status"; exit "$status"; fi
           echo "none found"
 
-      # docs/standards/4-database.md §4.1: sessions open through session_scope().
-      # `get_session()` with no argument, so ConversationState.get_session(user_id)
-      # does not match.
+      # Enforces docs/standards/4-database.md §4.1.
+      # Matches get_session() with no argument in workmain/, outside
+      # workmain/database/connection.py. ConversationState.get_session(user_id)
+      # takes an argument, so it does not match. git grep reads tracked files only.
+      # git grep exit 1 is a pass; above 1 is an error and fails the step.
       - name: No get_session() outside connection.py
         run: |
-          if grep -rn 'get_session()' workmain/ --include='*.py' | grep -v connection.py; then exit 1; fi
+          status=0
+          git grep -n 'get_session()' -- 'workmain/*.py' ':!workmain/database/connection.py' || status=$?
+          if [ "$status" -eq 0 ]; then exit 1; fi
+          if [ "$status" -ne 1 ]; then echo "git grep exit $status"; exit "$status"; fi
           echo "none found"
 
-      # docs/standards/4-database.md §4.3: data access goes through a
-      # repository's methods, and a repository holds its session as
-      # `_session`, as §4.3's example does. A public `self.session` hands the
-      # session to any code holding the repository. grep exits 1 when nothing
-      # matches; above 1 is an error, which fails the step.
+      # Enforces docs/standards/4-database.md §4.3.
+      # Matches self.session in any repository module.
+      # grep exit 1 is a pass; above 1 is an error and fails the step.
       - name: No public session attribute in a repository
         run: |
           status=0
@@ -215,11 +222,11 @@ jobs:
           if [ "$status" -ne 1 ]; then echo "grep exit $status"; exit "$status"; fi
           echo "none found"
 
-      # docs/standards/4-database.md §4.3: data access goes through a
-      # repository's methods, so nothing outside the repositories reads a
-      # repository's session: no `<name>._session` other than `self._session`,
-      # and no '_session' string, the form getattr takes. git grep exits 1
-      # when nothing matches; above 1 is an error, which fails the step.
+      # Enforces docs/standards/4-database.md §4.3.
+      # Matches <name>._session other than self._session, and a '_session'
+      # string, the form getattr takes, outside the repositories. git grep
+      # reads tracked files only.
+      # git grep exit 1 is a pass; above 1 is an error and fails the step.
       - name: No read of a repository's session outside the repositories
         run: |
           status=0
