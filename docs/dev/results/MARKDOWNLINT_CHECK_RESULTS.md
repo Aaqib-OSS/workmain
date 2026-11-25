@@ -43,7 +43,7 @@ Complete. `automation/style_check.py` now runs markdownlint-cli2 0.24.2 against 
 | AC1.11 | Met | §5 AC1.11 run: 17 files, `Summary: 0 issues in 0 files`; `pytest automation/` passed after Step 1, 138 passed |
 | AC1.12 | Met | Ray, 20261125: in VS Code, a paragraph wrapped across two lines and a fenced block with no language each show a warning, `single-line-paragraphs` and `MD040` |
 | AC1.13 | Met | `test_a_markdownlint_cli2_that_fails_to_load_stops_the_check`: all three cases passed |
-| AC2.1 | Carried | Awaiting the `style` job log on this branch's pull request, which `/closeout` opens |
+| AC2.1 | Carried | Carried to #308. Ray: the `style` job log on this branch's pull request, which `/closeout` opens |
 | AC3.1 | Met | Ray, 20261125: reads `docs/standards/1-workflow.md` §1.5 **Writing.**, first item, for `.markdownlint-cli2.jsonc` and `automation/style_check.py` |
 
 ## 4. Deviations and decisions
