@@ -31,6 +31,7 @@
 | 20261125 | Ray | Spec approved. | **Status:** Approved. |
 | 20261125 | Anvil | R5's list of `'session'` string literals omits `automation/session_param_check.py:40`, which its own command returns at `1f625e5` and at the branch tip. The line compares a syntax-tree parameter name, so R5's conclusion holds and no step changes. Spanner's recon search had excluded that file; the command written into R5 does not. | R5 lists the third literal. **Status:** back to `Draft` in the same commit (`docs/standards/1-workflow.md` §1.1 Approval), for Ray's approval again. |
 | 20261125 | Ray | Spec approved again, with R5's correction. | **Status:** Approved. |
+| 20261125 | Caliper (post-implementation) | No findings. | n/a |
 
 ---
 
