@@ -96,5 +96,5 @@ The decision left is how the tool is pinned and installed. Q1 holds it; the opti
 
 ## 6. Disposition
 
-- Promoted to:
-- Superseded by:
+- Promoted to: `../specs/MARKDOWNLINT_CHECK_SPEC.md`
+- Superseded by: n/a
