@@ -1,10 +1,15 @@
 # markdownlint check on changed lines — Design Study
 
 **Status:** Active
+
 **Kind:** Design study
+
 **Author:** Spanner
+
 **Date:** 20261125
+
 **Read at:** 49dd1662047c591655be5ecad72db15d98f99406
+
 **Originating item:** Issue #308
 
 ---
@@ -26,7 +31,7 @@
 
 | # | Finding | Evidence (file:line, symbol) |
 | --- | --- | --- |
-| F1 | The issue's claim holds: no check reads `.markdownlint.json`. `style_check.py` checks Markdown only for hard wrapping, its own rule, which `.markdownlint.json` turns off as `MD013`. | `automation/style_check.py:289` `markdown_violations`; `.markdownlint.json:3` `"MD013": false`; F2 search |
+| F1 | The issue's claim holds: no check reads `.markdownlint.json`. `style_check.py` checks Markdown only for hard wrapping, its own rule. markdownlint has no rule for it: `MD013`, which `.markdownlint.json` turns off, is the maximum line length, so turning it off is what lets a paragraph sit on one long line. | `automation/style_check.py:289` `markdown_violations`; `.markdownlint.json:3` `"MD013": false`; F2 search |
 | F2 | §1.5 is the rule's only statement: "`.markdownlint.json` is set to match, and governs all formatting." | `docs/standards/1-workflow.md:127` |
 | F3 | The editor runs markdownlint-cli2 0.24.2, markdownlint 0.42.2, from the VS Code extension `davidanson.vscode-markdownlint` 0.63.0. These are the current npm releases, and the versions measured here. `.markdownlint.json` is that engine's config format. | extension `package.json` `"markdownlint-cli2": "0.24.2"`; `npm view markdownlint-cli2 version` → `0.24.2` |
 | F4 | markdownlint-cli2 0.24.2 needs Node 22 or later. This machine has Node v25.2.1. The repository has no `package.json`, and `.gitignore` has no `node_modules` entry. | `npm view markdownlint-cli2@0.24.2 engines` → `{ node: '>=22' }`; `node --version` |
@@ -37,6 +42,12 @@
 | F9 | Unverified: which Node version `ubuntu-latest` provides. The `style` job installs Python only, and no step sets up Node. | `.github/workflows/tests.yml:86-137` |
 | F10 | markdownlint-cli2 prints each finding as `<path>:<line>[:<column>] error <MDnnn>/<name> <description> [<detail>]`, and exits 1 when it finds any, as ruff does. It has no built-in JSON output; JSON needs the separate `markdownlint-cli2-formatter-json` package, set in a `.markdownlint-cli2.*` file. | `markdownlint-cli2 --help`; output, §2 |
 | F11 | The existing tests write their Markdown inline into a temporary git repository; none reads a fixture file. Issue AC1's check names "tests in `automation/` with fixture files". | `automation/style_check_test.py:45` `BASE`, `:69` `repo` |
+| F13 | `.markdownlint.json` does not show what it checks. `"default": true` turns on every rule of the installed markdownlint, 53 in 0.42.2, and the file names only the 4 it changes; a version bump adds rules with no change to the file. The one-line-per-paragraph rule is Python in `style_check.py`, which no config file shows and the editor does not flag. | `.markdownlint.json:2`; `node_modules/markdownlint/lib/md*.mjs` `names`, 0.42.2 |
+| F14 | `markdownlint-rule-single-line-paragraphs` 0.2.0 is a markdownlint custom rule, `single-line-paragraphs`, that reports a prose paragraph spread over more than one source line: on its first line and on every continuation line. It applies to paragraphs at the root and in lists and quotes; it allows an explicit break (trailing `\`, two trailing spaces, `<br>`); it skips headings, code, tables, HTML, front matter and definitions. MIT, no dependencies, peer `markdownlint >=0.41.1`, one maintainer, published 20261007. Over the live Markdown it finds the same two real wraps `markdown_violations` finds: `automation/fixtures/standards_missing_label_pair.md:5-6` and `config/providers/_template/models/README.md:3-4`. | `npm view markdownlint-rule-single-line-paragraphs`; its `README.md`; measurement, §2 |
+| F15 | It also reports every artifact header block, 47 of its 51 live findings: the three `docs/dev/*/_TEMPLATE_*.md` and the 14 `automation/fixtures/closeout_*` files. Consecutive `**Field:** value` lines are one Markdown paragraph, and GitHub renders them as one run-on line; `markdown_violations` exempts them by pattern (`_BLOCK_START`), and the package has no exemption setting. The same headers with a blank line between fields report nothing. | measurement, §2; `automation/style_check.py:48` `_BLOCK_START` |
+| F16 | Every reader of a header field reads one line: `automation/closeout_acs.py:42` `_SPEC_BRANCH_FIELD_RE` (`^\*\*Branch:\*\*\s*` + backtick, `re.MULTILINE`), and the `^\*\*Originating item:\*\*`, `^\*\*Spec:\*\*` and `**Status:**` reads in `.claude/skills/session-start/references/spanner.md` read 4, `caliper.md` and `.claude/skills/closeout/`. A blank line between fields changes none of them. A trailing `\` would end every field value with `\`. | `git grep` of the field names over `automation/*.py`, `.claude/`, `.githooks/` |
+| F17 | A custom rule needs a `.markdownlint-cli2.jsonc` (`customRules`); `.markdownlint.json` cannot load one. Named by package, the rule is found next to the markdownlint-cli2 that runs it, so the CLI finds it from a worktree with no `node_modules` of its own. The editor bundles its own markdownlint-cli2, so it needs `"modulePaths": ["automation/node_modules"]`; a missing path there is not an error. That the editor loads the rule this way is from the extension's documentation, not run. | scratch runs, §2; extension `readme.md` § Configure, `modulePaths` |
+| F18 | A `.markdownlint-cli2.jsonc` with `"default": false` and 48 rules named, the 53 less `MD013`, `MD033`, `MD041` (off today) and `MD043`, `MD044` (each checks nothing without settings the repository does not give), reproduces exactly the 96 findings of F5, line for line. | measurement, §2: `diff` of the two outputs is empty |
 | F12 | `automation/` tests are a separate suite, reached by `pytest automation/`; CI's bare `pytest` collects `tests/` only, by design. AC1's check is therefore a local `pytest automation/style_check_test.py` run, not a CI log. | `pyproject.toml:2` `testpaths = ["tests"]`; `docs/standards/6-testing.md:5` |
 
 ## 4. Governing rules and options
@@ -49,6 +60,10 @@
 - Issue #297's design, archived in `docs/archive/design/DESIGN_CI_WORKFLOW.md`: code is brought up to the rules as it is touched, not all at once (F5 shows why).
 
 **Engine.** markdownlint-cli2 is the only valid option. It is the engine the editor runs (F3) and reads `.markdownlint.json` as written. A Python port such as `pymarkdownlnt` has a config format and rule set of its own, so it would disagree with the editor and break §1.5.
+
+**The one-line-per-paragraph rule.** `markdownlint-rule-single-line-paragraphs` (F14), pinned beside markdownlint-cli2, in place of `markdown_violations`. Ray ruled out writing a custom rule while a package exists. The header form it requires is Q6.
+
+**The config file.** `.markdownlint-cli2.jsonc` replaces `.markdownlint.json`, the only valid option: it is the file that can load the rule (F17), and it names every rule it enforces (Q5).
 
 **Where the check runs.** Inside `style_check.py` is the only valid option. It gets the changed-line filter, the skipped paths and all four callers without a new call site (F7). A separate CI step that lints whole files would fail on 96 existing findings (F5), and would leave out P7, Anvil and Caliper, which run locally.
 
@@ -73,9 +88,11 @@ The decision left is how the tool is pinned and installed. Q1 holds it; the opti
 | Q | Question | Answer |
 | --- | --- | --- |
 | Q1 | How is markdownlint-cli2 pinned and installed (§4 Options A and B)? The problem is real: the check needs Node 22 or later (F4), CI sets up no Node (F9), and the version must match the editor's (F3). Recommendation: Option A. | Q1 answered 20261125: Option A. |
-| Q2 | Is the rule set trimmed before the check is turned on, as the issue asks? The live findings (F5) and the archive's (F6) are all formatting defects the editor already flags, including `MD050` on unbackticked dunders. None clashes with a house rule, and the changed-line filter keeps existing findings from blocking. Recommendation: no trim; `.markdownlint.json` stays as it is. | Q2 answered 20261125: no trim. |
+| Q2 | Is the rule set trimmed before the check is turned on, as the issue asks? The live findings (F5) and the archive's (F6) are all formatting defects the editor already flags, including `MD050` on unbackticked dunders. None clashes with a house rule, and the changed-line filter keeps existing findings from blocking. Recommendation: no trim; `.markdownlint.json` stays as it is. | Q2 answered 20261125: no trim. Q5 then made the rule set explicit without dropping a rule. |
 | Q3 | Does the check also report a finding on a line next to a changed line? The problem is real: a paragraph added under an existing heading is reported on the heading's line and would pass (F8). Options: (a) keep only changed lines and document the miss; (b) also keep a markdownlint finding on the line directly before or after a changed line, at the cost of sometimes reporting an existing finding next to an edit; (c) check the whole of every touched file, which fails a branch that edits any of the 7 files in F5. Recommendation: (b). The finding it adds is one line, fixed in the file the branch is already editing. | Q3 answered 20261125: (b). |
 | Q4 | Issue AC1's check names "fixture files", and the existing tests write Markdown inline (F11). Do the new tests follow the existing inline form, with the spec restating AC1 in its §5 under §1.2? Recommendation: yes, follow the harness and restate AC1. | Q4 answered 20261125: yes. |
+| Q5 | Does the config file show every rule the check enforces? The problem is real (F13): `.markdownlint.json` names 4 of the 53 rules it applies, and the hard-wrap rule is in none. Recommendation: `"default": false` with every enforced rule named, and the hard-wrap rule loaded as a rule of the same file (F14, F17). | Q5 answered 20261125: yes, an explicit rule list, and the package rather than a rule of our own. |
+| Q6 | How are header fields written, now that the package reports consecutive field lines (F15)? Options: a blank line between fields, or a trailing `\` on each. Recommendation: blank lines; no reader of a field changes (F16), where `\` would end every value. | Q6 answered 20261125: blank lines. |
 
 ## 6. Disposition
 
