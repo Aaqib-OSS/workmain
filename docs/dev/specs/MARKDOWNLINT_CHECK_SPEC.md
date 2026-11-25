@@ -1,6 +1,6 @@
 # markdownlint Check on Changed Lines — Spec
 
-**Status:** Approved
+**Status:** Shipped
 
 **Author:** Spanner
 

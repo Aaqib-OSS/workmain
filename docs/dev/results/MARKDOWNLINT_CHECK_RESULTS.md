@@ -1,6 +1,6 @@
 # markdownlint Check on Changed Lines — Implementation Results
 
-**Status:** Active
+**Status:** Shipped
 
 **Author:** Spanner
 
@@ -14,7 +14,7 @@
 
 ## 1. Summary
 
-Complete. `automation/style_check.py` now runs markdownlint-cli2 0.24.2 against `.markdownlint-cli2.jsonc` on every Markdown line a branch changes, and on the line next to one. The config names every rule it enforces, with nothing on by default, and loads `markdownlint-rule-single-line-paragraphs` 0.2.0 in place of the module's own hard-wrap check, which is removed. The tools are pinned in `automation/package.json` and its lockfile. The CI `style` job installs Node and the tools. The templates and closeout fixtures use blank-line headers, and §1.5 names the config and the check. One criteria waits on the pull request: AC2.1.
+Complete. `automation/style_check.py` now runs markdownlint-cli2 0.24.2 against `.markdownlint-cli2.jsonc` on every Markdown line a branch changes, and on the line next to one. The config names every rule it enforces, with nothing on by default, and loads `markdownlint-rule-single-line-paragraphs` 0.2.0 in place of the module's own hard-wrap check, which is removed. The tools are pinned in `automation/package.json` and its lockfile. The CI `style` job installs Node and the tools. The templates and closeout fixtures use blank-line headers, and §1.5 names the config and the check. Every criterion is met.
 
 ## 2. What shipped, by step
 
@@ -43,7 +43,7 @@ Complete. `automation/style_check.py` now runs markdownlint-cli2 0.24.2 against 
 | AC1.11 | Met | §5 AC1.11 run: 17 files, `Summary: 0 issues in 0 files`; `pytest automation/` passed after Step 1, 138 passed |
 | AC1.12 | Met | Ray, 20261125: in VS Code, a paragraph wrapped across two lines and a fenced block with no language each show a warning, `single-line-paragraphs` and `MD040` |
 | AC1.13 | Met | `test_a_markdownlint_cli2_that_fails_to_load_stops_the_check`: all three cases passed |
-| AC2.1 | Carried | Carried to #308. Ray: the `style` job log on this branch's pull request, which `/closeout` opens |
+| AC2.1 | Met | PR #310, `Style check on changed lines` job 139570176923 (run 45718379533): `Install markdownlint-cli2` ran `npm ci --prefix automation` (`added 89 packages`), then `HEAD against origin/main: 28 changed file(s), 0 violation(s)`, `PASS`, `automation/style_check.py exit 0` |
 | AC3.1 | Met | Ray, 20261125: reads `docs/standards/1-workflow.md` §1.5 **Writing.**, first item, for `.markdownlint-cli2.jsonc` and `automation/style_check.py` |
 
 ## 4. Deviations and decisions
@@ -67,14 +67,14 @@ Complete. `automation/style_check.py` now runs markdownlint-cli2 0.24.2 against 
 
 ## 5. Verification
 
-- **Test suite:** `pytest automation/`: 142 passed, 0 failed, 0 skipped (baseline 138 passed, 0 failed, 0 skipped). Without the tools installed: 126 passed, 0 failed, 16 skipped. `tests/` is untouched by this work and is run at close-out.
+- **Test suite:** `pytest automation/`: 142 passed, 0 failed, 0 skipped (baseline 138 passed, 0 failed, 0 skipped). Without the tools installed: 126 passed, 0 failed, 16 skipped. `pytest` at close-out, 20261125: 1862 passed, 0 failed, 0 skipped; 1 xfailed and 3 xpassed, as a note.
 - **Defect shown before the fix:** a fenced block with no language in a new `demo.md`, on a branch cut in a linked worktree:
   - at `origin/main` (`49dd166`), `python3 automation/style_check.py` printed `PASS`;
   - at this branch's `1cadaaf`, `python3 automation/style_check.py --base main` printed `demo.md:3 — MD040/fenced-code-language Fenced code blocks should have a language specified`, followed by its context, and `FAIL`.
 - **AC1.8 run:** with this file written, `python3 automation/style_check.py` printed `chore/issue-308-markdownlint-check against main: 28 changed file(s), 0 violation(s)` and `PASS`. `git diff --name-only $(git merge-base HEAD main)` with `git ls-files --others --exclude-standard` listed the spec, the design study, the three templates and this file.
 - **AC1.9 run:** `automation/node_modules/.bin/markdownlint-cli2` over the 44 tracked `.md` files outside `SKIPPED`. It reported `MD001` 2, `MD012` 1, `MD022` 1, `MD031` 12, `MD032` 1, `MD034` 1, `MD040` 6, `MD060` 72 and `single-line-paragraphs` 4, which is design study F5's 96 plus F14's two wraps. Every reported rule is a key of `.markdownlint-cli2.jsonc`.
 - **AC1.11 run:** the same tool over the 17 files Step 1 changed printed `Linting: 17 files` and `Summary: 0 issues in 0 files`.
-- **Live verification:** at close-out.
+- **Live verification:** PR #310's checks at `33259f2`, 20261125: every check passed, among them `Style check on changed lines`, which ran markdownlint-cli2 on the runner (AC2.1). A `chore/*` merge has no service restart (`docs/standards/2-git.md` §2.6).
 
 ## 6. Follow-ups
 

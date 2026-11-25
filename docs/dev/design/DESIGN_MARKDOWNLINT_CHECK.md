@@ -1,6 +1,6 @@
 # markdownlint check on changed lines — Design Study
 
-**Status:** Active
+**Status:** Shipped
 
 **Kind:** Design study
 
