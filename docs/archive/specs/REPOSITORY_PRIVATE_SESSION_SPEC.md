@@ -1,6 +1,6 @@
 # Repositories hold their session privately — Spec
 
-**Status:** Approved
+**Status:** Shipped
 **Author:** Spanner
 **Date:** 20261125
 **Read at:** `1f625e5`

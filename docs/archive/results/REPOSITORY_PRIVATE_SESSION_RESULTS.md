@@ -1,6 +1,6 @@
 # Repositories hold their session privately — Implementation Results
 
-**Status:** Active
+**Status:** Shipped
 **Author:** Anvil (Role 3)
 **Date:** 20261125
 **Spec:** `../specs/REPOSITORY_PRIVATE_SESSION_SPEC.md`
@@ -23,7 +23,7 @@ Complete. Each of the 12 repositories now holds its session as `self._session`, 
 
 ## 3. Acceptance criteria
 
-All `Met` evidence is from the branch tip `04f972a`.
+All `Met` evidence is from the branch tip `04f972a`, except AC1.5 and AC2.3, recorded at `/closeout` feature step 4 from the pull request's run.
 
 | AC | Status | Evidence |
 | --- | --- | --- |
@@ -31,10 +31,10 @@ All `Met` evidence is from the branch tip `04f972a`.
 | AC1.2 | Met | `pytest tests/test_unit_of_work.py`: 39 passed. `tests/test_unit_of_work.py::TestUnitOfWork::test_repository_has_no_session_attribute` collects 12 items, one for each key of `UnitOfWork.REPOSITORIES` (`ai_costs` through `time_entries`). Against the pre-rename repositories it fails 12 of 12 (Step 1 commit body). |
 | AC1.3 | Met | `grep -nE 'self\.session\b' docs/standards/4-database.md` prints nothing and exits 1. `grep -cE 'self\._session\b' docs/standards/4-database.md` prints `4`. |
 | AC1.4 | Met | The step's `run:` block, taken from the parsed YAML and run under `bash -e`. At the repository root it prints `none found` and exits 0. In a scratch worktree with `x = self.session` appended to `workmain/database/repositories/notes_repo.py`, it prints `workmain/database/repositories/notes_repo.py:628:x = self.session` and exits 1. From an empty directory it prints `grep exit 2` and exits 2. |
-| AC1.5 | Carried | Carried to #283 (spec Decision Log, 20261125). The run to read: at `/closeout` feature step 3, the `session-rules` job of the run on the pull request that merges this branch to `dev`, which should show `none found` under `No public session attribute in a repository`. Local evidence: AC1.4. |
+| AC1.5 | Met | PR #305, run 45644445242 at `afd75f0`, `/closeout` feature step 3: the `session-rules` job's step `No public session attribute in a repository` ran under `/usr/bin/bash -e` and printed `none found`; the job passed. Local evidence: AC1.4. |
 | AC2.1 | Met | ``git grep -nP "(?<!\bself)\._session\b\|['\"]_session['\"]" -- workmain tests automation scripts ':!workmain/database/repositories' ':!scripts/baseline'`` prints nothing and exits 1. |
 | AC2.2 | Met | The step's `run:` block, taken from the parsed YAML and run under `bash -e`. At the repository root it prints `none found` and exits 0. In a scratch worktree with `x = repo._session` appended to `workmain/cli/interface.py`, a tracked module, it prints `workmain/cli/interface.py:142:x = repo._session` and exits 1. From an empty directory outside any git repository it prints `git grep exit 128` and exits 128. |
-| AC2.3 | Carried | Carried to #283 (spec Decision Log, 20261125). The run to read: at `/closeout` feature step 3, the `session-rules` job of the run on the pull request that merges this branch to `dev`, which should show `none found` under `No read of a repository's session outside the repositories`. Local evidence: AC2.2. |
+| AC2.3 | Met | PR #305, run 45644445242 at `afd75f0`, `/closeout` feature step 3: the `session-rules` job's step `No read of a repository's session outside the repositories` ran under `/usr/bin/bash -e` and printed `none found`; the job passed. Local evidence: AC2.2. |
 | AC3.1 | Met | The three nodes (`TestUnitOfWork::test_repositories_built_on_its_session_while_entered`, `TestUnitOfWork::test_repositories_absent_after_commit_raises`, `TestRecordUnitOfWork`): 4 passed. AC2.1's search run over `tests` exits 1. `grep -nE '\.session\b' tests/test_unit_of_work.py` exits 1. `grep -nE '\bself\._session\b' tests/test_unit_of_work.py` exits 1. |
 | AC4.1 | Met | A bare `pytest`: 1862 passed, 0 failed, 0 skipped (1 xfailed, 3 xpassed). |
 
@@ -57,11 +57,12 @@ No departures. One discrepancy was found at session open, before Step 1: R5 left
 ## 5. Verification
 
 - **Test suite:** 1862 passed, 0 failed, 0 skipped (1 xfailed, 3 xpassed), 1866 collected, at `04f972a`. Baseline: 1850 passed, 0 failed, 0 skipped (1 xfailed, 3 xpassed), re-measured at the branch tip before Step 1 (`121b3fd`). That matches the spec's §6 baseline, and the difference is DR4's 12 items.
+- **Close-out suite:** preflight P8 at `afd75f0`, a bare `pytest`: 1862 passed, 0 failed, 0 skipped (1 xfailed, 3 xpassed). On PR #305's runner (run 45644445242, `Application suite`): 1857 passed, 0 failed, 5 skipped (4 xfailed). The runner's 5 skips are `tests/test_ai_providers_live.py`'s credential `skipif`s, and its xfails are the tests marked for #292, #207 and #214; neither is this branch's.
 - **Defect shown before the fix:** n/a. This is a rename, not a defect fix. DR4's test fails 12 of 12 against the pre-rename repositories (AC1.2).
-- **Live verification:** none run. The change renames an attribute that every entry path reaches through the same repository methods, so the full suite is the evidence (spec §5). The daemon and Slack paths pick it up at close-out's restart.
+- **Live verification:** none run. The change renames an attribute that every entry path reaches through the same repository methods, so the full suite is the evidence (spec §5). The daemon and Slack paths pick it up at close-out's restart, `/closeout` feature step 10, whose `ActiveEnterTimestamp` the issue's closing comment carries.
 
 ## 6. Follow-ups
 
 | Item | Description | Why deferred |
 | --- | --- | --- |
-| #283 | AC1.5 and AC2.3, carried to the pull request's CI run. | That run first exists at `/closeout` feature step 3, and feature step 4 records it. |
+| #283 | AC1.5 and AC2.3, carried to the pull request's CI run. | Resolved at `/closeout` feature step 4: both `Met` from PR #305's run. |
