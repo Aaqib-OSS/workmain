@@ -10,7 +10,7 @@
 
 ## 1. Summary
 
-Complete. The five functions in the note and time-entry write family are now operations on an entered unit of work: `create_note`, `apply_cf_hook_on_create`, `create_time_entry`, `create_paired_time_entry` and `link_condensed_note`. Every caller outside `workmain/services/` reaches them through one of five use cases: `add_note`, `log_meeting_time`, `log_task_time`, `record_condensation` (in the new `workmain/services/meetings_service.py`) and `apply_pull`. Each caller builds a unit of work per call, with no scope open. The condenser no longer writes: the summary, the condensed note and the linked entry commit together. `ActionExecutor` takes no session, opens a scope for each session-taking action, and sends its two write actions to their use cases. `CLAUDE.md` § Note Write-Path Convergence is deleted, and its two pointers are corrected. Step 3 stopped once on a departure, which Ray resolved (§4).
+Complete. The five functions in the note and time-entry write family are now operations on an entered unit of work: `create_note`, `apply_cf_hook_on_create`, `create_time_entry`, `create_paired_time_entry` and `link_condensed_note`. Every caller outside `workmain/services/` reaches them through one of five use cases: `add_note`, `log_meeting_time`, `log_task_time`, `record_condensation` (in the new `workmain/services/meetings_service.py`) and `apply_pull`. Each caller builds a unit of work per call, with no scope open. The condenser no longer writes: the summary, the condensed note and the linked entry commit together. `ActionExecutor` takes no session, opens a scope for each session-taking action, and sends its two write actions to their use cases. `CLAUDE.md` § Note Write-Path Convergence is deleted, and its two pointers are corrected. `create_time_entry` writes its task note through `create_note`, so within `workmain/services/` only `notes_service.py` writes the notes table (Steps 6 and 7, folded in after the post-implementation review). Step 3 stopped once on a departure, which Ray resolved (§4).
 
 ## 2. What shipped, by step
 
@@ -21,6 +21,8 @@ Complete. The five functions in the note and time-entry write family are now ope
 | 3 | The operations, the use cases and `meetings_service.py` with its map line. The condenser stops writing. Every call site moves to its use case. Tests replaced, reseeded and added as §6 states. Commit `207e8a0`. | `workmain/services/notes_service.py`, `workmain/services/time_entry_service.py`, `workmain/services/meetings_service.py`, `docs/ARCHITECTURE.md`, `workmain/services/clockify_service.py`, `workmain/ai/note_condenser.py`, `workmain/cli/commands/notes.py`, `workmain/cli/commands/meetings.py`, `workmain/cli/commands/time.py`, `workmain/cli/commands/clockify.py`, `workmain/orchestration/action_executor.py`; tests: `tests/test_notes_service.py`, `tests/test_time_entry_service.py`, `tests/test_meetings_service.py` (new), `tests/test_clockify_service.py`, `tests/test_clockify.py`, `tests/test_meetings_merge.py`, `tests/test_meetings_reschedule.py`, `tests/test_notes_add.py`, `tests/test_notes_log.py`, `tests/test_meetings_track.py`, `tests/test_meetings_condense.py`, `tests/test_time_add.py`, `tests/test_note_condenser.py`, `tests/test_orchestration.py` | +16 (net: replaced, deleted and added) |
 | 4 | `CLAUDE.md` § Note Write-Path Convergence deleted. Its pointers in `docs/ARCHITECTURE.md` §2 and `docs/standards/README.md` corrected. Commit `b3819e0`. | `CLAUDE.md`, `docs/ARCHITECTURE.md`, `docs/standards/README.md` | 0 |
 | 5 | This artifact. | `docs/dev/results/NOTE_TIME_ENTRY_USE_CASES_RESULTS.md` | 0 |
+| 6 | `create_time_entry` writes its task note through `notes_service.create_note`, and its entry takes the note's client (DR10). Commit `dcdae78`. | `workmain/services/time_entry_service.py` | 0 |
+| 7 | This artifact brought up to the branch tip: the Step 6 decision, the AC9.1 row, and AC7.1 and AC8.1 re-run after Step 6. | `docs/dev/results/NOTE_TIME_ENTRY_USE_CASES_RESULTS.md` | 0 |
 
 ## 3. Acceptance criteria
 
@@ -37,8 +39,9 @@ Complete. The five functions in the note and time-entry write family are now ope
 | AC5.1 | Met | `tests/test_clockify_service.py::TestPull::test_s28_an_import_stays_recorded_when_a_later_unit_of_work_fails` passes. It applies the import on a `UnitOfWork(record=True)`, raises inside a later `UnitOfWork()`, and finds the note and the entry through `db_session`. A `record_scope()` spy is called once. |
 | AC6.1 | Met | `git grep -n -i -E 'write-path (convergence\|map)' -- ':!docs/archive' ':!CHANGELOG.md' ':!docs/dev/specs/NOTE_TIME_ENTRY_USE_CASES_SPEC.md' ':!docs/dev/design/DESIGN_NOTE_TIME_ENTRY_USE_CASES.md' ':!docs/dev/results/NOTE_TIME_ENTRY_USE_CASES_RESULTS.md'` exits 1 with no hits (run at `bfdc27b`, the branch tip, with the results artifact excluded as the spec's AC6.1 now states). |
 | AC6.2 | Met | Ray, 20261124: a reading of `docs/ARCHITECTURE.md` §2 Application, and the module and function docstrings of `workmain/services/notes_service.py`, `time_entry_service.py` and `meetings_service.py`, for which function writes a note with its time entry. |
-| AC7.1 | Met | `python3 automation/architecture_check.py` prints `New findings: 0` and `PASS` (run at `b3819e0`). |
-| AC8.1 | Met | Bare `pytest` at `b3819e0`: 1850 passed, 0 failed, 0 skipped (note: 1 xfailed, 3 xpassed). |
+| AC7.1 | Met | `python3 automation/architecture_check.py` prints `New findings: 0` and `PASS` (run at `dcdae78`, after Step 6). |
+| AC8.1 | Met | Bare `pytest` at `dcdae78`, after Step 6: 1850 passed, 0 failed, 0 skipped (note: 1 xfailed, 3 xpassed). |
+| AC9.1 | Met | `git grep -nP 'uow\.notes\.(?!get_)\w+\|NotesRepository' -- workmain/services ':!workmain/services/notes_service.py' ':!workmain/services/unit_of_work.py'` exits 1 with no hits (run at `dcdae78`). Before Step 6 it returned `time_entry_service.py:118` (R17). The existing `tests/test_time_entry_service.py` tests ran unchanged: 27 passed. |
 
 ## 4. Deviations and decisions
 
@@ -70,6 +73,7 @@ The pre-implementation discrepancies D1 to D3 are Decision Log rows in the spec,
 | 16 | 3 | The condense tests take the stub reply through `_provider_manager_instance`, including the two that patched `ProviderManager.generate`. | Keeping the `generate` patch. | It is AC3.1's one replacement, and §6 says to use it. |
 | 17 | 3 | The replaced command tests read no printed text except the `Error:` line on stderr. The old fallback test's check of the stderr warning is replaced by the rows the fallback reply writes. | Keeping the stderr warning check. | §6 "Form of the end-to-end tests". The notice stays covered at the condenser by `tests/test_note_condenser.py::…::test_fallback_condensation_returns_notice`. |
 | 18 | 3 | AC3.1's daemon `create_time_entry` and Slack EOD `create_note` and `create_time_entry` paths are tested in `tests/test_orchestration.py::TestActionsReachTheirUseCasesWithNoScopeOpen`. | A new test file. | `tests/test_orchestration.py` is a test file §6 names, and it already holds the daemon's `create_note` path (`test_t4`). |
+| 19 | 6 | The module docstring's note-first sentence now says every note is written through `notes_service.create_note`: by `create_time_entry` for a task's note, and by every other caller before `create_paired_time_entry`. | Leaving the sentence, which said `create_time_entry` writes the task note itself. | After DR10 that sentence describes the old write. |
 
 ## 5. Verification
 
