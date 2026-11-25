@@ -457,16 +457,13 @@ class SlackEodManager:
 
     def _execute_and_reprompt(self, session: SlackEodSession, action: dict) -> None:
         """Execute a confirmed inline correction then re-present the current step."""
-        from workmain.database.connection import get_db
         from workmain.orchestration.action_executor import (
             ActionExecutor,
             ActionExecutorError,
         )
-        db = get_db()
         result = None
         try:
-            with db.session_scope() as db_session:
-                result = ActionExecutor(db_session).execute(action)
+            result = ActionExecutor().execute(action)
         except ActionExecutorError as e:
             self._send(session.channel_id, f"Error: {e}")
         except Exception as e:

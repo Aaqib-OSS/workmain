@@ -613,6 +613,32 @@ class MeetingsRepository:
 
         return meeting
 
+    def set_condensed_summary(
+        self, meeting_id: int, summary: str, condensed_at: datetime
+    ) -> Meeting | None:
+        """
+        Set a meeting's condensed summary and when it was condensed.
+
+        Args:
+            meeting_id: Meeting ID
+            summary: The condensed summary
+            condensed_at: When the condensation was performed
+
+        Returns:
+            The updated Meeting, or None if no meeting has the ID
+        """
+        meeting = self.get_by_id(meeting_id)
+        if meeting is None:
+            return None
+
+        meeting.condensed_summary = summary
+        meeting.condensed_at = condensed_at
+
+        self.session.flush()
+        self.session.refresh(meeting)
+
+        return meeting
+
     def get_future_occurrences(
         self,
         outlook_recurring_id: str,

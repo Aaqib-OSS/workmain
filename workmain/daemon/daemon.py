@@ -487,10 +487,8 @@ class WorkmAInDaemon:
             ActionExecutor,
             ActionExecutorError,
         )
-        db = get_db()
         try:
-            with db.session_scope() as session:
-                result = ActionExecutor(session).execute(action)
+            result = ActionExecutor().execute(action)
         except ActionExecutorError as e:
             self.post_message(f"Error: {e}")
             return

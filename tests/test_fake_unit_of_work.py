@@ -10,15 +10,18 @@ import copy
 import inspect
 import re
 from datetime import date, datetime, time, timedelta, timezone
+from decimal import Decimal
 
 import pytest
 from sqlalchemy.orm import Session
 
 from tests.mocks.fake_unit_of_work import (
     FakeClientRepository,
+    FakeMeetingsRepository,
     FakeNotesRepository,
     FakeSystemStateRepository,
     FakeTaskStatusRepository,
+    FakeTimeEntriesRepository,
     FakeUnitOfWork,
 )
 from workmain.database.models import (
@@ -44,6 +47,56 @@ from workmain.services.unit_of_work import (
 
 _REENTRY = re.escape(_REENTRY_MESSAGE)
 _OPEN_SCOPE = re.escape(_OPEN_SCOPE_MESSAGE)
+
+
+def _seed_projects(kind: str, db_session: Session, store: dict) -> tuple[int, int, int]:
+    """Seed two clients and a project of the first; return both client ids and the project id."""
+    if kind == 'real':
+        clients = ClientRepository(db_session)
+        owner_id = clients.create('ZqvProjectOwner').id
+        other_id = clients.create('ZqvProjectOther').id
+        project = Project(name='ZqvProject', client_id=owner_id)
+        db_session.add(project)
+        db_session.flush()
+        return owner_id, other_id, project.id
+    store['projects'] = {5: {'id': 5, 'client_id': 1}}
+    return 1, 2, 5
+
+
+def _seed_meeting(
+    kind: str, db_session: Session, store: dict, title: str, start: datetime
+) -> int:
+    """Seed a one-hour meeting and return its id."""
+    end = start + timedelta(hours=1)
+    if kind == 'real':
+        return MeetingsRepository(db_session).create(
+            title=title, start_time=start, end_time=end,
+        ).id
+    rows = store.setdefault('meetings', {})
+    meeting_id = max(rows, default=0) + 1
+    rows[meeting_id] = {
+        'id': meeting_id, 'title': title, 'client_id': None, 'start_time': start,
+        'end_time': end, 'condensed_summary': None, 'condensed_at': None,
+    }
+    return meeting_id
+
+
+def _seed_note(
+    kind: str, db_session: Session, store: dict, content: str, meeting_id: int | None = None
+) -> int:
+    """Seed an internal-only note and return its id."""
+    stamp = datetime(2099, 1, 2, 9, 0)
+    if kind == 'real':
+        return NotesRepository(db_session).create(
+            content=content, tags=['internal-only'], meeting_id=meeting_id, created_at=stamp,
+        ).id
+    rows = store.setdefault('notes', {})
+    note_id = max(rows, default=0) + 1
+    rows[note_id] = {
+        'id': note_id, 'content': content, 'tags': ['internal-only'], 'source': 'ad-hoc',
+        'created_at': stamp, 'meeting_id': meeting_id, 'project_id': None, 'client_id': None,
+    }
+    return note_id
 
 
 class TestFakeUnitOfWork:
@@ -617,6 +670,77 @@ class TestNotesContract:
     def test_get_by_id_of_unknown_id_is_none(self, kind: str, db_session: Session) -> None:
         assert self._repository(kind, db_session, {}).get_by_id(99999999) is None
 
+    def test_create_writes_the_note_with_its_tags_deduplicated_and_sorted(
+        self, kind: str, db_session: Session
+    ) -> None:
+        store: dict = {}
+        stamp = datetime(2099, 1, 2, 23, 30)
+        meeting_id = _seed_meeting(kind, db_session, store, 'ZqvMeeting', stamp)
+        repo = self._repository(kind, db_session, store)
+
+        note = repo.create(
+            content='ZqvNote', tags=['internal-only', 'carry-forward', 'internal-only'],
+            meeting_id=meeting_id, source='meeting', created_at=stamp,
+        )
+
+        assert (note.content, note.tags, note.source) == (
+            'ZqvNote', ['carry-forward', 'internal-only'], 'meeting',
+        )
+        assert (note.created_at, note.created_date) == (stamp, date(2099, 1, 2))
+        assert (note.meeting_id, note.project_id, note.client_id) == (meeting_id, None, None)
+        assert note.meeting.title == 'ZqvMeeting'
+        assert repo.get_by_id(note.id).tags == ['carry-forward', 'internal-only']
+
+    def test_create_without_a_time_or_tags_stamps_now_with_no_tags(
+        self, kind: str, db_session: Session
+    ) -> None:
+        note = self._repository(kind, db_session, {}).create(content='ZqvNote', tags=[])
+
+        assert (note.tags, note.source, note.meeting) == ([], 'ad-hoc', None)
+        assert note.created_at.tzinfo is None
+        assert abs(datetime.now() - note.created_at) < timedelta(minutes=1)
+
+    def test_create_with_its_clients_project_links_it(
+        self, kind: str, db_session: Session
+    ) -> None:
+        store: dict = {}
+        owner_id, _, project_id = _seed_projects(kind, db_session, store)
+
+        note = self._repository(kind, db_session, store).create(
+            content='ZqvNote', tags=['internal-only'], project_id=project_id, client_id=owner_id,
+        )
+
+        assert (note.project_id, note.client_id) == (project_id, owner_id)
+
+    def test_create_with_another_clients_project_raises(
+        self, kind: str, db_session: Session
+    ) -> None:
+        store: dict = {}
+        owner_id, other_id, project_id = _seed_projects(kind, db_session, store)
+
+        with pytest.raises(ValueError) as e:
+            self._repository(kind, db_session, store).create(
+                content='ZqvNote', tags=['internal-only'], project_id=project_id,
+                client_id=other_id,
+            )
+
+        assert str(e.value) == (
+            f"Project {project_id} belongs to client {owner_id}, not client {other_id}. "
+            "Cannot link note to mismatched project."
+        )
+
+    def test_create_with_an_unknown_project_raises(self, kind: str, db_session: Session) -> None:
+        store: dict = {}
+        owner_id, _, _ = _seed_projects(kind, db_session, store)
+
+        with pytest.raises(ValueError) as e:
+            self._repository(kind, db_session, store).create(
+                content='ZqvNote', tags=['internal-only'], project_id=99999999,
+                client_id=owner_id,
+            )
+
+        assert str(e.value) == "Project 99999999 does not exist"
+
 
 @pytest.mark.parametrize('kind', ['real', 'fake'])
 class TestTaskStatusContract:
@@ -931,3 +1055,223 @@ class TestTaskStatusContract:
         with pytest.raises(ValueError) as e:
             getattr(repo, method)(99999999)
         assert str(e.value) == "No task_status record exists for note 99999999."
+
+    def test_ensure_active_creates_an_active_task_for_a_note_without_one(
+        self, kind: str, db_session: Session
+    ) -> None:
+        store: dict = {}
+        note_id = _seed_note(kind, db_session, store, 'ZqvTask')
+        repo = self._repository(kind, db_session, store)
+
+        task = repo.ensure_active(note_id)
+
+        assert (task.note_id, task.status, task.completed_at, task.forwarding_note_id) == (
+            note_id, 'active', None, None,
+        )
+        assert repo.get_by_note_id(note_id).id == task.id
+
+    def test_ensure_active_of_an_active_task_keeps_the_one_task(
+        self, kind: str, db_session: Session
+    ) -> None:
+        store: dict = {}
+        note_id = _seed_note(kind, db_session, store, 'ZqvTask')
+        repo = self._repository(kind, db_session, store)
+
+        first = repo.ensure_active(note_id)
+        second = repo.ensure_active(note_id)
+
+        assert (second.id, second.status) == (first.id, 'active')
+        assert repo.count_filtered(status='all', search='zqvtask') == 1
+
+    def test_ensure_active_reactivates_a_completed_task(
+        self, kind: str, db_session: Session
+    ) -> None:
+        store: dict = {}
+        note_id = _seed_note(kind, db_session, store, 'ZqvTask')
+        repo = self._repository(kind, db_session, store)
+        completed = repo.ensure_active(note_id)
+        repo.set_completed(note_id)
+
+        task = repo.ensure_active(note_id)
+
+        assert (task.id, task.status, task.completed_at) == (completed.id, 'active', None)
+        assert repo.get_by_note_id(note_id).status == 'active'
+
+
+@pytest.mark.parametrize('kind', ['real', 'fake'])
+class TestTimeEntriesContract:
+    """Each FakeTimeEntriesRepository method answers as TimeEntriesRepository does."""
+
+    @staticmethod
+    def _repository(kind: str, db_session: Session, store: dict) -> TimeEntriesRepository:
+        if kind == 'real':
+            return TimeEntriesRepository(db_session)
+        return FakeTimeEntriesRepository(store)
+
+    def test_create_writes_the_entry_with_its_note(self, kind: str, db_session: Session) -> None:
+        store: dict = {}
+        start = datetime(2099, 1, 2, 9, 30)
+        meeting_id = _seed_meeting(kind, db_session, store, 'ZqvMeeting', start)
+        note_id = _seed_note(kind, db_session, store, 'ZqvEntryNote', meeting_id)
+        synced = datetime(2099, 1, 2, 12, 0)
+
+        entry = self._repository(kind, db_session, store).create(
+            note_id=note_id, duration_hours=1.5, entry_date=date(2099, 1, 2),
+            entry_time=time(9, 30), category='meeting', meeting_id=meeting_id,
+            clockify_id='zqv-clockify-1', synced_at=synced,
+        )
+
+        assert (entry.note_id, entry.duration_hours, entry.entry_date, entry.display_time) == (
+            note_id, Decimal('1.5'), date(2099, 1, 2), '09:30',
+        )
+        assert isinstance(entry.duration_hours, Decimal)
+        assert (entry.category, entry.meeting_id, entry.project_id, entry.client_id) == (
+            'meeting', meeting_id, None, None,
+        )
+        assert (entry.clockify_id, entry.synced_at) == ('zqv-clockify-1', synced)
+        assert abs(datetime.now() - entry.created_at) < timedelta(minutes=1)
+        assert entry.note.content == 'ZqvEntryNote'
+
+    def test_create_with_another_clients_project_raises(
+        self, kind: str, db_session: Session
+    ) -> None:
+        store: dict = {}
+        owner_id, other_id, project_id = _seed_projects(kind, db_session, store)
+        note_id = _seed_note(kind, db_session, store, 'ZqvEntryNote')
+
+        with pytest.raises(ValueError) as e:
+            self._repository(kind, db_session, store).create(
+                note_id=note_id, duration_hours=1.0, entry_date=date(2099, 1, 2),
+                entry_time=time(9, 0), project_id=project_id, client_id=other_id,
+            )
+
+        assert str(e.value) == (
+            f"Project {project_id} belongs to client {owner_id}, not client {other_id}. "
+            "Cannot link time entry to mismatched project."
+        )
+
+    def test_get_by_meeting_orders_by_date_then_time_with_notes(
+        self, kind: str, db_session: Session
+    ) -> None:
+        store: dict = {}
+        start = datetime(2099, 1, 1, 8, 0)
+        meeting_id = _seed_meeting(kind, db_session, store, 'ZqvMeeting', start)
+        other_id = _seed_meeting(kind, db_session, store, 'ZqvOtherMeeting', start)
+        repo = self._repository(kind, db_session, store)
+        seeds = [
+            ('ZqvSecondDay', date(2099, 1, 2), time(9, 0), meeting_id),
+            ('ZqvLate', date(2099, 1, 1), time(14, 0), meeting_id),
+            ('ZqvOther', date(2099, 1, 1), time(7, 0), other_id),
+            ('ZqvEarly', date(2099, 1, 1), time(8, 0), meeting_id),
+        ]
+        for content, entry_date, entry_time, owner in seeds:
+            note_id = _seed_note(kind, db_session, store, content, owner)
+            repo.create(
+                note_id=note_id, duration_hours=1.0, entry_date=entry_date,
+                entry_time=entry_time, meeting_id=owner,
+            )
+
+        entries = repo.get_by_meeting(meeting_id)
+
+        assert [entry.note.content for entry in entries] == [
+            'ZqvEarly', 'ZqvLate', 'ZqvSecondDay',
+        ]
+
+    def test_get_by_meeting_of_a_meeting_without_entries_is_empty(
+        self, kind: str, db_session: Session
+    ) -> None:
+        store: dict = {}
+        meeting_id = _seed_meeting(kind, db_session, store, 'ZqvMeeting', datetime(2099, 1, 1))
+
+        assert self._repository(kind, db_session, store).get_by_meeting(meeting_id) == []
+
+    def test_update_repoints_the_note_and_keeps_the_rest(
+        self, kind: str, db_session: Session
+    ) -> None:
+        store: dict = {}
+        first_id = _seed_note(kind, db_session, store, 'ZqvFirst')
+        second_id = _seed_note(kind, db_session, store, 'ZqvSecond')
+        repo = self._repository(kind, db_session, store)
+        created = repo.create(
+            note_id=first_id, duration_hours=2.0, entry_date=date(2099, 1, 2),
+            entry_time=time(10, 0), category='review',
+        )
+
+        entry = repo.update(created.id, note_id=second_id)
+
+        assert (entry.id, entry.note_id, entry.note.content) == (created.id, second_id, 'ZqvSecond')
+        assert (entry.duration_hours, entry.entry_time, entry.category) == (
+            Decimal('2'), time(10, 0), 'review',
+        )
+
+    def test_update_of_unknown_id_is_none(self, kind: str, db_session: Session) -> None:
+        assert self._repository(kind, db_session, {}).update(99999999, category='x') is None
+
+    def test_update_to_another_clients_project_raises(
+        self, kind: str, db_session: Session
+    ) -> None:
+        store: dict = {}
+        owner_id, other_id, project_id = _seed_projects(kind, db_session, store)
+        note_id = _seed_note(kind, db_session, store, 'ZqvEntryNote')
+        repo = self._repository(kind, db_session, store)
+        created = repo.create(
+            note_id=note_id, duration_hours=1.0, entry_date=date(2099, 1, 2),
+            entry_time=time(9, 0), client_id=other_id,
+        )
+
+        with pytest.raises(ValueError) as e:
+            repo.update(created.id, project_id=project_id)
+
+        assert str(e.value) == (
+            f"Project {project_id} belongs to client {owner_id}, not client {other_id}. "
+            "Cannot link time entry to mismatched project."
+        )
+
+
+@pytest.mark.parametrize('kind', ['real', 'fake'])
+class TestMeetingsContract:
+    """Each FakeMeetingsRepository method answers as MeetingsRepository does."""
+
+    @staticmethod
+    def _repository(kind: str, db_session: Session, store: dict) -> MeetingsRepository:
+        if kind == 'real':
+            return MeetingsRepository(db_session)
+        return FakeMeetingsRepository(store)
+
+    def test_get_by_id_returns_the_meeting_with_its_times(
+        self, kind: str, db_session: Session
+    ) -> None:
+        store: dict = {}
+        start = datetime(2099, 1, 2, 9, 0)
+        meeting_id = _seed_meeting(kind, db_session, store, 'ZqvMeeting', start)
+
+        meeting = self._repository(kind, db_session, store).get_by_id(meeting_id)
+
+        assert (meeting.id, meeting.title, meeting.client_id) == (meeting_id, 'ZqvMeeting', None)
+        assert (meeting.start_time, meeting.end_time) == (start, datetime(2099, 1, 2, 10, 0))
+        assert (meeting.condensed_summary, meeting.condensed_at) == (None, None)
+
+    def test_get_by_id_of_unknown_id_is_none(self, kind: str, db_session: Session) -> None:
+        assert self._repository(kind, db_session, {}).get_by_id(99999999) is None
+
+    def test_set_condensed_summary_sets_both_columns_and_returns_the_meeting(
+        self, kind: str, db_session: Session
+    ) -> None:
+        store: dict = {}
+        meeting_id = _seed_meeting(kind, db_session, store, 'ZqvMeeting', datetime(2099, 1, 2))
+        repo = self._repository(kind, db_session, store)
+        condensed_at = datetime(2099, 1, 2, 17, 0)
+
+        meeting = repo.set_condensed_summary(meeting_id, 'ZqvSummary', condensed_at)
+
+        assert (meeting.id, meeting.condensed_summary, meeting.condensed_at) == (
+            meeting_id, 'ZqvSummary', condensed_at,
+        )
+        again = repo.get_by_id(meeting_id)
+        assert (again.condensed_summary, again.condensed_at) == ('ZqvSummary', condensed_at)
+
+    def test_set_condensed_summary_of_unknown_id_is_none(
+        self, kind: str, db_session: Session
+    ) -> None:
+        repo = self._repository(kind, db_session, {})
+        assert repo.set_condensed_summary(99999999, 'ZqvSummary', datetime(2099, 1, 2)) is None

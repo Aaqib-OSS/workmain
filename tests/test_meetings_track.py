@@ -1,21 +1,18 @@
 """
-CLI-level coverage for 'workmain meetings track' — Item 69 Gate 4's
-convergence of surface #8 onto notes_service.create_note() +
-time_entry_service.create_paired_time_entry(), replacing its former
-hard-coded tags=['both'] with a real, caller-specified tag entered at a new
-interactive prompt (Design Rule 11), and fixing its client_id-NULL omission
-on both the Note and the TimeEntry (K3).
+CLI-level coverage for 'workmain meetings track'.
 
-Item 69's spec named this coverage tests/test_meetings.py, which does not
-exist in this repo; this file follows the established per-subcommand test
-file convention already used elsewhere for meetings.py (test_meetings_edit.py)
-and notes.py (test_notes_add.py, this item's own Gate 4 precedent).
+Each test runs the command through CliRunner against the test's database,
+with nothing patched between the command and
+time_entry_service.log_meeting_time, and asserts the exit code and the rows
+the path writes. UnitOfWork refuses to enter inside an open session_scope(),
+so a passing test also shows the use case ran with the command's scope
+closed.
 """
 
-import unittest
 from datetime import datetime
 
 from click.testing import CliRunner
+from sqlalchemy.orm import Session
 
 from workmain.cli.commands.meetings import meetings
 from workmain.database.models import Client, Meeting, Note, TimeEntry
@@ -24,7 +21,7 @@ from workmain.database.repositories.system_state_repository import SystemStateRe
 _SENTINEL_DESCRIPTION = "Sentinel meetings track description 2099-07-28"
 
 
-def _seed_meeting(session, title: str) -> Meeting:
+def _seed_meeting(session: Session, title: str) -> Meeting:
     m = Meeting(
         title=title,
         start_time=datetime(2099, 6, 3, 9, 0),
@@ -37,68 +34,34 @@ def _seed_meeting(session, title: str) -> Meeting:
     return m
 
 
-class TestMeetingsTrackTagPromptAndClientId(unittest.TestCase):
-    """Surface #8 now prompts for a real tag instead of hard-coding
-    tags=['both'], and stamps active_client_id on both the Note and the
-    TimeEntry — Item 69 Gate 4, Design Rules 4/9/11."""
+class TestMeetingsTrack:
+    """meetings track writes the meeting's note and entry with the prompted tag and the active client."""
 
-    def setUp(self):
-        from dotenv import load_dotenv
-        load_dotenv()
-        from workmain.database.connection import get_db
-        db = get_db()
-        self.session = db.get_session()
-        self._seeded_meeting_ids = []
-        self.runner = CliRunner()
-        self._original_active_client_id = SystemStateRepository(self.session).get("active_client_id")
-
-    def tearDown(self):
-        note = self.session.query(Note).filter(Note.content == _SENTINEL_DESCRIPTION).first()
-        if note:
-            self.session.query(TimeEntry).filter(TimeEntry.note_id == note.id).delete()
-            self.session.query(Note).filter(Note.id == note.id).delete()
-        for mid in self._seeded_meeting_ids:
-            self.session.query(Meeting).filter(Meeting.id == mid).delete()
-        if self._original_active_client_id is None:
-            SystemStateRepository(self.session).delete("active_client_id")
-        else:
-            SystemStateRepository(self.session).set("active_client_id", self._original_active_client_id)
-        client = (
-            self.session.query(Client)
-            .filter(Client.name == "Sentinel Meetings Track Client 2099")
-            .first()
-        )
-        if client:
-            self.session.query(Client).filter(Client.id == client.id).delete()
-        self.session.commit()
-        self.session.close()
-
-    def test_meetings_flow_time_entry_client_id_no_longer_null(self):
+    def test_the_note_and_entry_carry_the_tag_and_the_active_client(
+        self, db_session: Session
+    ) -> None:
         client = Client(name="Sentinel Meetings Track Client 2099", is_active=True)
-        self.session.add(client)
-        self.session.commit()
-        self.session.refresh(client)
-        SystemStateRepository(self.session).set_int("active_client_id", client.id)
+        db_session.add(client)
+        db_session.flush()
+        SystemStateRepository(db_session).set_int("active_client_id", client.id)
+        meeting = _seed_meeting(db_session, "Sentinel Meetings Track Meeting 2099")
 
-        meeting = _seed_meeting(self.session, "Sentinel Meetings Track Meeting 2099")
-        self._seeded_meeting_ids.append(meeting.id)
-
-        result = self.runner.invoke(
+        result = CliRunner().invoke(
             meetings,
             ["track", str(meeting.id)],
-            # description; #cr tag entered at the new prompt
+            # description; #cr tag entered at the prompt
             input=f"{_SENTINEL_DESCRIPTION}\n#cr\n",
         )
 
-        self.assertEqual(result.exit_code, 0, result.output)
-
-        note = self.session.query(Note).filter(Note.content == _SENTINEL_DESCRIPTION).first()
-        self.assertIsNotNone(note)
-        self.assertEqual(note.tags, ["client-report"])
-        self.assertNotEqual(note.tags, ["both"])
-        self.assertEqual(note.client_id, client.id)
-
-        entry = self.session.query(TimeEntry).filter(TimeEntry.note_id == note.id).first()
-        self.assertIsNotNone(entry)
-        self.assertEqual(entry.client_id, client.id)
-        self.assertEqual(entry.meeting_id, meeting.id)
+        assert result.exit_code == 0, result.output
+        note = db_session.query(Note).filter(Note.content == _SENTINEL_DESCRIPTION).one()
+        assert (note.tags, note.source, note.meeting_id, note.client_id) == (
+            ["client-report"], "meeting", meeting.id, client.id,
+        )
+        entry = db_session.query(TimeEntry).filter(TimeEntry.note_id == note.id).one()
+        assert (entry.client_id, entry.meeting_id, entry.category) == (
+            client.id, meeting.id, "meeting",
+        )
+        assert (entry.entry_date, float(entry.duration_hours)) == (
+            meeting.start_time.date(), 0.5,
+        )

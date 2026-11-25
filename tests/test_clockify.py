@@ -1,14 +1,15 @@
 """
 Command coverage for workmain/cli/commands/clockify.py (Issue #202).
 
-Each test runs a command through CliRunner with the service functions it
-reaches patched and a mock renderer, and asserts the service's arguments, the
-view and result the renderer received, and the exit code. No test calls
-Clockify.
+Each test runs a command through CliRunner with a mock renderer, and asserts
+the service's arguments, the view and result the renderer received, and the
+exit code. TestClockifyCommands patches the service functions a command
+reaches. TestPullReachesApplyPullWithNoScopeOpen runs the pull paths end to
+end, with only ClockifyClient replaced. No test calls Clockify.
 """
 
 from contextlib import ExitStack
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -27,6 +28,11 @@ from workmain.cli.commands.clockify import (
     clockify_sync,
 )
 from workmain.cli.output import Renderer, WorkmAInGroup
+from workmain.database.connection import scope_open
+from workmain.database.models import Note, TimeEntry
+from workmain.database.repositories.notes_repo import NotesRepository
+from workmain.database.repositories.time_entries_repo import TimeEntriesRepository
+from workmain.integrations.clockify.client import ClockifyClient
 from workmain.services import clockify_service
 from workmain.services.exceptions import (
     ClockifyNotConfiguredError,
@@ -34,6 +40,7 @@ from workmain.services.exceptions import (
     ServiceValidationError,
 )
 from workmain.services.results import Page
+from workmain.services.unit_of_work import UnitOfWork
 
 D = date(2099, 1, 5)
 
@@ -61,6 +68,16 @@ def _ok_result():
 
 def _entry(description="Remote work"):
     return SimpleNamespace(clockify_id="remote-id", description=description)
+
+
+class _RecordUnitOfWork:
+    """Equal to any UnitOfWork built with record=True, the pull's import record."""
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, UnitOfWork) and other._record is True
+
+
+RECORD_UOW = _RecordUnitOfWork()
 
 
 def _item(kind, entry=None):
@@ -182,7 +199,8 @@ class TestClockifyCommands:
         assert result.exit_code == 0, result.stderr
         fetch_pull.assert_called_once_with(D, None)
         assert classify.call_count == 2
-        assert [c.args[1] for c in apply_pull.call_args_list] == [None, None]
+        assert [c.args[0] for c in apply_pull.call_args_list] == [RECORD_UOW, RECORD_UOW]
+        assert [c.args[2] for c in apply_pull.call_args_list] == [None, None]
         prompt.assert_not_called()
         renderer.report.assert_called_once_with(PULL, pull_result.return_value, quiet=True)
 
@@ -206,7 +224,9 @@ class TestClockifyCommands:
 
         assert result.exit_code == 0, result.stderr
         renderer.collection.assert_called_once_with(CONFLICT, item.pair)
-        apply_pull.assert_called_once_with(item, clockify_service.PullAnswer("link", None))
+        apply_pull.assert_called_once_with(
+            RECORD_UOW, item, clockify_service.PullAnswer("link", None),
+        )
 
     def test_c10_a_new_entry_asks_for_tags(self):
         item = _item("new")
@@ -214,7 +234,9 @@ class TestClockifyCommands:
         result, renderer, apply_pull = self._pull_one(item, "#cf\n")
 
         assert result.exit_code == 0, result.stderr
-        apply_pull.assert_called_once_with(item, clockify_service.PullAnswer("import", "#cf"))
+        apply_pull.assert_called_once_with(
+            RECORD_UOW, item, clockify_service.PullAnswer("import", "#cf"),
+        )
 
     def test_c11_a_bad_conflict_answer_is_asked_again(self):
         item = _item("conflict")
@@ -222,7 +244,9 @@ class TestClockifyCommands:
         result, renderer, apply_pull = self._pull_one(item, "4\n2\n\n")
 
         assert result.exit_code == 0, result.stderr
-        apply_pull.assert_called_once_with(item, clockify_service.PullAnswer("import", ""))
+        apply_pull.assert_called_once_with(
+            RECORD_UOW, item, clockify_service.PullAnswer("import", ""),
+        )
 
     def test_c12_sync_both(self):
         renderer = Mock(spec=Renderer)
@@ -295,3 +319,110 @@ class TestClockifyCommands:
         ]
         first, second = (c.args[0] for c in classify.call_args_list)
         assert first is not second
+        first_uow, second_uow = (c.args[0] for c in apply_pull.call_args_list)
+        assert first_uow is not second_uow
+
+
+def _raw(clockify_id: str, description: str, start: datetime, hours: float) -> dict:
+    """A Clockify API time entry starting at a local time."""
+    begin = start.astimezone()
+    end = begin + timedelta(hours=hours)
+    return {
+        "id": clockify_id,
+        "description": description,
+        "timeInterval": {"start": begin.isoformat(), "end": end.isoformat()},
+    }
+
+
+class TestPullReachesApplyPullWithNoScopeOpen:
+    """
+    Each pull path reaches apply_pull with no session_scope() open, and imports through it.
+
+    ClockifyClient is the one replacement: building it returns one
+    Mock(spec=ClockifyClient), so fetch_pull, classify, push and apply_pull
+    run unpatched. apply_pull is wrapped to record scope_open() on entry,
+    since a UnitOfWork(record=True) is not refused inside an open scope.
+    """
+
+    @staticmethod
+    def _run(args: list, client: Mock, input: str | None = None) -> tuple:
+        renderer = Mock(spec=Renderer)
+        scope_open_on_entry = []
+        real_apply_pull = clockify_service.apply_pull
+
+        def recording_apply_pull(
+            uow: UnitOfWork,
+            item: clockify_service.PullItem,
+            answer: clockify_service.PullAnswer | None,
+        ) -> clockify_service.PullOutcome:
+            scope_open_on_entry.append(scope_open())
+            return real_apply_pull(uow, item, answer)
+
+        with patch.object(clockify_service, "ClockifyClient", return_value=client), \
+             patch.object(clockify_service, "apply_pull", recording_apply_pull):
+            result = CliRunner(mix_stderr=False).invoke(
+                clockify, args, obj=renderer, input=input
+            )
+        return result, renderer, scope_open_on_entry
+
+    @staticmethod
+    def _imported(db_session: Session, clockify_id: str) -> TimeEntry:
+        return db_session.query(TimeEntry).filter(TimeEntry.clockify_id == clockify_id).one()
+
+    def test_sync_pull_imports_a_new_entry_with_no_scope_open(
+        self, db_session: Session
+    ) -> None:
+        client = Mock(spec=ClockifyClient)
+        client.get_time_entries.return_value = [
+            _raw("zqv-pull-1", "Sentinel pulled work", datetime(2099, 1, 5, 6, 17), 1.5),
+        ]
+
+        result, renderer, scope_open_on_entry = self._run(
+            ["sync", "pull", "-q", "-b", "2099-01-05"], client,
+        )
+
+        assert result.exit_code == 0, result.stderr
+        assert scope_open_on_entry == [False]
+        client.get_time_entries.assert_called_once_with(D, D)
+        entry = self._imported(db_session, "zqv-pull-1")
+        note = db_session.get(Note, entry.note_id)
+        assert (note.content, note.source, note.tags) == (
+            "Sentinel pulled work", "clockify", ["internal-only"],
+        )
+        (view, pulled), kwargs = renderer.report.call_args
+        assert (view, kwargs) == (PULL, {"quiet": True})
+        assert (pulled.totals.imported, pulled.imported.rows[0].entry_id) == (1, entry.id)
+
+    def test_sync_both_pushes_then_imports_with_no_scope_open(
+        self, db_session: Session
+    ) -> None:
+        local_note = NotesRepository(db_session).create(
+            content="Sentinel local work", tags=["internal-only"],
+        )
+        local = TimeEntriesRepository(db_session).create(
+            note_id=local_note.id, duration_hours=1.0, entry_date=D, entry_time=time(5, 3),
+        )
+        local_id = local.id
+        db_session.commit()
+        client = Mock(spec=ClockifyClient)
+        client.create_time_entry.return_value = {"id": "zqv-pushed-1"}
+        client.get_time_entries.return_value = [
+            _raw("zqv-pull-2", "Sentinel remote work", datetime(2099, 1, 5, 6, 41), 0.5),
+        ]
+
+        result, renderer, scope_open_on_entry = self._run(
+            ["sync", "both", "-d", "2099-01-05"], client, input="#cf\n",
+        )
+
+        assert result.exit_code == 0, result.stderr
+        assert scope_open_on_entry == [False]
+        client.create_time_entry.assert_called_once()
+        db_session.expire_all()
+        assert db_session.get(TimeEntry, local_id).clockify_id == "zqv-pushed-1"
+        entry = self._imported(db_session, "zqv-pull-2")
+        assert db_session.get(Note, entry.note_id).tags == ["carry-forward"]
+        (push_view, pushed), _ = renderer.report.call_args_list[0]
+        (pull_view, pulled), _ = renderer.report.call_args_list[1]
+        assert (push_view, pushed.totals.successful) == (PUSH, 1)
+        assert (pull_view, pulled.totals.imported) == (PULL, 1)
+

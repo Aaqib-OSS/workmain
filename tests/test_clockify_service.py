@@ -1,9 +1,12 @@
 """
-Coverage for workmain/services/clockify_service.py: status, report, push and
-pull as results (Issue #202).
+Coverage for workmain/services/clockify_service.py: status, report, push and pull.
+
+Each is tested as the result it returns (Issue #202).
 
 Every database test takes db_session and seeds on 2099 sentinel dates. The
 Clockify client is a MagicMock passed as `client=`; nothing calls Clockify.
+apply_pull's import path is tested on a FakeUnitOfWork(record=True), and its
+outside-action record by a test on a real UnitOfWork(record=True).
 """
 
 from datetime import date, datetime, time, timedelta, timezone
@@ -16,12 +19,13 @@ import requests
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
+from tests.mocks.fake_unit_of_work import FakeTimeEntriesRepository, FakeUnitOfWork
 from workmain.database.connection import DatabaseConnection
-from workmain.database.models import Client, Project, TimeEntry
+from workmain.database.models import Client, Note, Project, TimeEntry
+from workmain.database.repositories.notes_repo import NotesRepository
 from workmain.database.repositories.system_state_repository import SystemStateRepository
-from workmain.database.repositories.task_status_repo import TaskStatusRepository
 from workmain.database.repositories.time_entries_repo import TimeEntriesRepository
-from workmain.services import clockify_service, notes_service, time_entry_service
+from workmain.services import clockify_service
 from workmain.services.clockify_service import (
     ClockifyEntry,
     PullAnswer,
@@ -49,6 +53,7 @@ from workmain.services.exceptions import (
     ServiceValidationError,
 )
 from workmain.services.results import Page
+from workmain.services.unit_of_work import UnitOfWork
 
 DAY = date(2099, 6, 1)
 
@@ -66,8 +71,9 @@ def _seed_entry(
     `project` is the Clockify project id of a project created for the entry, on the
     note's client (the repository refuses a project of another client).
     """
-    note = notes_service.create_note(
-        session, content=description, tags=['internal-only'], source='ad-hoc',
+    client_id = SystemStateRepository(session).get_int("active_client_id")
+    note = NotesRepository(session).create(
+        content=description, tags=['internal-only'], source='ad-hoc', client_id=client_id,
     )
     project_id = None
     if project is not None:
@@ -75,9 +81,10 @@ def _seed_entry(
         session.add(row)
         session.flush()
         project_id = row.id
-    entry = time_entry_service.create_paired_time_entry(
-        session, note, duration_hours=hours, entry_date=day, entry_time=at,
-        project_id=project_id, clockify_id=clockify_id,
+    entry = TimeEntriesRepository(session).create(
+        note_id=note.id, duration_hours=hours, entry_date=day, entry_time=at,
+        project_id=project_id, client_id=client_id, clockify_id=clockify_id,
+        synced_at=datetime.now() if clockify_id else None,
     )
     session.commit()
     return entry.id
@@ -110,6 +117,17 @@ def _record_scope_spy():
         DatabaseConnection, 'record_scope', autospec=True,
         side_effect=DatabaseConnection.record_scope,
     )
+
+
+def _imported(uow: FakeUnitOfWork, outcome: PullOutcome) -> tuple[dict, dict]:
+    """Return the time_entries row and the notes row an import wrote to the fake."""
+    entry = uow.store['time_entries'][outcome.entry_id]
+    return entry, uow.store['notes'][entry['note_id']]
+
+
+def _never_entered(uow: FakeUnitOfWork) -> bool:
+    """True when apply_pull returned without entering the fake."""
+    return not (uow.committed or uow.rolled_back) and uow.store == {}
 
 
 # ---------------------------------------------------------------------------
@@ -480,7 +498,7 @@ class TestPull:
 
         first = classify(db_session, _remote("s25-first"))
         assert first.kind == "conflict"
-        apply_pull(first, PullAnswer("link", None))
+        apply_pull(FakeUnitOfWork(record=True), first, PullAnswer("link", None))
         db_session.expire_all()
         second = classify(db_session, _remote("s25-second"))
 
@@ -490,89 +508,120 @@ class TestPull:
         local = _seed_entry(db_session, "s26 local")
         item = classify(db_session, _remote("clockify-link-id"))
 
+        uow = FakeUnitOfWork(record=True)
+
         with _record_scope_spy() as spy:
-            outcome = apply_pull(item, PullAnswer("link", None))
+            outcome = apply_pull(uow, item, PullAnswer("link", None))
 
         assert outcome.result == "linked" and outcome.entry_id == local
+        assert _never_entered(uow)
         spy.assert_called()
         db_session.expire_all()
         assert db_session.get(TimeEntry, local).clockify_id == 'clockify-link-id'
 
-    def test_s27_import_stamps_the_active_client(self, db_session):
-        client_id = _set_active_client(db_session, "Acme")
+    def test_s27_import_stamps_the_active_client(self) -> None:
+        uow = FakeUnitOfWork(record=True, store={'system_state': {'active_client_id': '3'}})
 
-        outcome = apply_pull(_item(_remote("s27-client")), PullAnswer("import", ""))
+        outcome = apply_pull(uow, _item(_remote("s27-client")), PullAnswer("import", ""))
 
-        entry = db_session.get(TimeEntry, outcome.entry_id)
-        assert outcome.result == "imported"
-        assert entry.client_id == client_id
-        assert entry.note.client_id == client_id
+        entry, note = _imported(uow, outcome)
+        assert (outcome.result, uow.committed) == ("imported", True)
+        assert (entry['client_id'], note['client_id']) == (3, 3)
+        assert (entry['clockify_id'], note['source']) == ("s27-client", "clockify")
+        assert entry['synced_at'] is not None
 
-    def test_s27_import_created_at_is_not_backdated(self, db_session):
+    def test_s27_import_created_at_is_not_backdated(self) -> None:
         three_days_ago = datetime.now().date() - timedelta(days=3)
+        uow = FakeUnitOfWork(record=True)
 
         before = datetime.now()
         outcome = apply_pull(
-            _item(_remote("s27-old", day=three_days_ago)), PullAnswer("import", ""),
+            uow, _item(_remote("s27-old", day=three_days_ago)), PullAnswer("import", ""),
         )
         after = datetime.now()
 
-        entry = db_session.get(TimeEntry, outcome.entry_id)
-        assert before <= entry.note.created_at <= after
-        assert entry.note.created_at.date() != entry.entry_date
+        entry, note = _imported(uow, outcome)
+        assert before <= note['created_at'] <= after
+        assert entry['entry_date'] == three_days_ago
 
-    def test_s27_import_with_a_tag(self, db_session):
-        outcome = apply_pull(_item(_remote("s27-cf")), PullAnswer("import", "#cf"))
+    @pytest.mark.parametrize('answer, tags', [
+        (PullAnswer("import", "#cf"), ['carry-forward']),
+        (PullAnswer("import", ""), ['internal-only']),
+        (None, ['internal-only']),
+    ])
+    def test_s27_import_tags_from_the_answer(self, answer: PullAnswer | None, tags: list) -> None:
+        uow = FakeUnitOfWork(record=True)
 
-        assert db_session.get(TimeEntry, outcome.entry_id).note.tags == ['carry-forward']
-
-    def test_s27_import_with_blank_tags_defaults_to_internal_only(self, db_session):
-        outcome = apply_pull(_item(_remote("s27-blank")), PullAnswer("import", ""))
-
-        assert db_session.get(TimeEntry, outcome.entry_id).note.tags == ['internal-only']
-
-    def test_s27_import_without_an_answer_defaults_to_internal_only(self, db_session):
-        outcome = apply_pull(_item(_remote("s27-none")), None)
+        outcome = apply_pull(uow, _item(_remote("s27-tags")), answer)
 
         assert outcome.result == "imported"
-        assert db_session.get(TimeEntry, outcome.entry_id).note.tags == ['internal-only']
+        assert _imported(uow, outcome)[1]['tags'] == tags
 
-    def test_s27_import_with_the_cf_tag_creates_an_active_task(self, db_session):
-        outcome = apply_pull(_item(_remote("s27-task")), PullAnswer("import", "#cf"))
+    def test_s27_import_with_the_cf_tag_creates_an_active_task(self) -> None:
+        uow = FakeUnitOfWork(record=True)
 
-        entry = db_session.get(TimeEntry, outcome.entry_id)
-        task_status = TaskStatusRepository(db_session).get_by_note_id(entry.note.id)
-        assert task_status is not None
-        assert task_status.status == 'active'
+        outcome = apply_pull(uow, _item(_remote("s27-task")), PullAnswer("import", "#cf"))
 
-    def test_s28_an_import_is_written_in_a_record_scope(self, db_session: Session) -> None:
+        _, note = _imported(uow, outcome)
+        tasks = list(uow.store['task_status'].values())
+        assert [(t['note_id'], t['status']) for t in tasks] == [(note['id'], 'active')]
+
+    def test_s28_an_import_stays_recorded_when_a_later_unit_of_work_fails(
+        self, db_session: Session
+    ) -> None:
         with _record_scope_spy() as spy:
             outcome = apply_pull(
-                _item(_remote("clockify-import-id", "s28 import")), PullAnswer("import", ""),
+                UnitOfWork(record=True), _item(_remote("clockify-import-id", "s28 import")),
+                PullAnswer("import", ""),
             )
+        with pytest.raises(RuntimeError, match="later step failed"):
+            with UnitOfWork():
+                raise RuntimeError("later step failed")
 
-        spy.assert_called()
+        spy.assert_called_once()
         entry = db_session.query(TimeEntry).filter(
             TimeEntry.clockify_id == 'clockify-import-id'
         ).one()
         assert entry.id == outcome.entry_id
-        assert entry.note.content == "s28 import"
+        assert db_session.query(Note).filter(Note.id == entry.note_id).one().content == "s28 import"
 
-    def test_s29_a_failed_import_is_failed_and_the_result_carries_an_error(self, db_session):
-        with patch.object(notes_service, 'create_note', side_effect=RuntimeError("write boom")):
-            outcome = apply_pull(_item(_remote("s29")), PullAnswer("import", ""))
+    def test_s29_a_failed_import_is_failed_writes_nothing_and_the_result_carries_an_error(
+        self,
+    ) -> None:
+        uow = FakeUnitOfWork(record=True)
+
+        with patch.object(
+            FakeTimeEntriesRepository, 'create', side_effect=RuntimeError("write boom"),
+        ):
+            outcome = apply_pull(uow, _item(_remote("s29")), PullAnswer("import", ""))
 
         assert outcome.result == "failed" and outcome.detail == "write boom"
+        assert uow.rolled_back is True
+        assert uow.store.get('notes', {}) == {}
         result = pull_result(DAY, None, (outcome,))
         assert isinstance(result.error, ServiceValidationError)
         assert str(result.error) == "1 of 1 Clockify entries were not imported"
+
+    @pytest.mark.parametrize('kind, answer, detail', [
+        ("linked", None, "already in WorkmAIn"),
+        ("new", PullAnswer("skip", None), "skipped"),
+    ])
+    def test_s29_a_skip_returns_without_entering_the_unit_of_work(
+        self, kind: str, answer: PullAnswer | None, detail: str
+    ) -> None:
+        uow = FakeUnitOfWork(record=True)
+
+        outcome = apply_pull(uow, _item(_remote("s29-skip"), kind=kind, local_id=7), answer)
+
+        assert (outcome.result, outcome.detail) == ("skipped", detail)
+        assert _never_entered(uow)
 
     def test_s30_a_link_that_cannot_be_recorded_is_skipped_with_a_warning(self, db_session):
         local = _seed_entry(db_session, "s30 local")
         item = classify(db_session, _remote("s30-id"))
 
         with patch.object(clockify_service, '_record_clockify_link', side_effect=RuntimeError("no")):
-            outcome = apply_pull(item, PullAnswer("link", None))
+            outcome = apply_pull(FakeUnitOfWork(record=True), item, PullAnswer("link", None))
 
         assert outcome.result == "skipped" and outcome.detail == "link not recorded"
         assert len(outcome.warnings) == 1
@@ -604,8 +653,10 @@ class TestPull:
         assert result.warnings == ("w1",)
         assert result.error is None
 
-    def test_s32_an_invalid_tag_is_ignored_with_a_warning(self, db_session):
-        outcome = apply_pull(_item(_remote("s32")), PullAnswer("import", "#nosuchtag"))
+    def test_s32_an_invalid_tag_is_ignored_with_a_warning(self) -> None:
+        uow = FakeUnitOfWork(record=True)
+
+        outcome = apply_pull(uow, _item(_remote("s32")), PullAnswer("import", "#nosuchtag"))
 
         assert outcome.result == "imported"
         assert len(outcome.warnings) == 1

@@ -1,8 +1,10 @@
 """
-Tests for workmain/services/time_entry_service.py.
+Tests for workmain/services/time_entry_service.py, on fake_uow.
 
-All DB tests use the db_session fixture (transaction rolled back after each test).
-Sentinel date 2099-01-01 is used for backdating assertions.
+The operations (create_time_entry, create_paired_time_entry,
+link_condensed_note) run inside an entered fake; the use cases
+(log_meeting_time, log_task_time) enter the fake themselves. Rows are seeded
+into the fake's store in the shapes tests/mocks/fake_unit_of_work.py states.
 """
 
 from datetime import date, datetime, time, timedelta
@@ -10,405 +12,403 @@ from decimal import Decimal
 
 import pytest
 
-from workmain.database.models import Client, Meeting
-from workmain.database.repositories.notes_repo import NotesRepository
-from workmain.database.repositories.system_state_repository import SystemStateRepository
-from workmain.database.repositories.task_status_repo import TaskStatusRepository
-from workmain.database.repositories.time_entries_repo import TimeEntriesRepository
-from workmain.services import notes_service, time_entry_service
-from workmain.services.exceptions import InvalidTagsError, MissingStartTimeError
+from tests.mocks.fake_unit_of_work import FakeUnitOfWork
+from workmain.services import time_entry_service
+from workmain.services.exceptions import (
+    InvalidTagsError,
+    MissingStartTimeError,
+    ServiceValidationError,
+)
 
 _SENTINEL = date(2099, 1, 1)
 _DEFAULT_TIME = time(10, 0)
 
 
-def _set_active_client(session, name: str) -> int:
-    """Create a client and stamp it as active. Returns client_id."""
-    client = Client(name=name, is_active=True)
-    session.add(client)
-    session.flush()
-    SystemStateRepository(session).set_int("active_client_id", client.id)
-    return client.id
+def _seed_meeting(store: dict, start: datetime, minutes: int = 30, title: str = 'Sentinel') -> int:
+    rows = store.setdefault('meetings', {})
+    meeting_id = max(rows, default=0) + 1
+    rows[meeting_id] = {
+        'id': meeting_id, 'title': title, 'client_id': None, 'start_time': start,
+        'end_time': start + timedelta(minutes=minutes), 'condensed_summary': None,
+        'condensed_at': None,
+    }
+    return meeting_id
 
 
-class TestTimeEntryServiceCreateTimeEntry:
+def _seed_note(
+    store: dict, content: str, meeting_id: int | None = None, client_id: int | None = None,
+    source: str = 'meeting',
+) -> int:
+    rows = store.setdefault('notes', {})
+    note_id = max(rows, default=0) + 1
+    rows[note_id] = {
+        'id': note_id, 'content': content, 'tags': ['internal-only'], 'source': source,
+        'created_at': datetime(2099, 1, 1, 9, 0), 'meeting_id': meeting_id,
+        'project_id': None, 'client_id': client_id,
+    }
+    return note_id
 
-    def test_success_path(self, db_session):
-        entry = time_entry_service.create_time_entry(
-            db_session,
-            description="Service layer test",
-            duration_hours=1.0,
-            entry_time=_DEFAULT_TIME,
-        )
-        assert entry.id is not None
-        assert entry.duration_hours == pytest.approx(1.0)
-        assert entry.entry_time == _DEFAULT_TIME
 
-    def test_linked_note_created(self, db_session):
-        entry = time_entry_service.create_time_entry(
-            db_session,
-            description="Note content check",
-            duration_hours=0.5,
-            entry_time=_DEFAULT_TIME,
-        )
-        assert entry.note is not None
-        assert entry.note.content == "Note content check"
+def _seed_entry(
+    store: dict, note_id: int, meeting_id: int, entry_date: date, entry_time: time
+) -> int:
+    rows = store.setdefault('time_entries', {})
+    entry_id = max(rows, default=0) + 1
+    rows[entry_id] = {
+        'id': entry_id, 'note_id': note_id, 'duration_hours': Decimal('0.5'),
+        'entry_date': entry_date, 'entry_time': entry_time, 'category': 'meeting',
+        'project_id': None, 'meeting_id': meeting_id, 'client_id': None,
+        'clockify_id': None, 'synced_at': None, 'created_at': datetime(2099, 1, 1, 9, 0),
+    }
+    return entry_id
 
-    def test_missing_entry_time_raises(self, db_session):
-        with pytest.raises(MissingStartTimeError):
-            time_entry_service.create_time_entry(
-                db_session,
-                description="No time",
-                duration_hours=1.0,
-                entry_time=None,
-            )
 
-    def test_missing_entry_time_writes_no_row(self, db_session):
-        from workmain.database.repositories.time_entries_repo import (
-            TimeEntriesRepository,
-        )
-        before = len(TimeEntriesRepository(db_session).get_by_date(_SENTINEL))
-        try:
-            time_entry_service.create_time_entry(
-                db_session,
-                description="Should not write",
-                duration_hours=1.0,
-                entry_time=None,
-                entry_date=_SENTINEL,
-            )
-        except MissingStartTimeError:
-            pass
-        after = len(TimeEntriesRepository(db_session).get_by_date(_SENTINEL))
-        assert after == before
+class TestCreateTimeEntry:
+    """create_time_entry writes a task's note and its entry on an entered unit of work."""
 
-    def test_entry_date_defaults_to_today(self, db_session):
-        entry = time_entry_service.create_time_entry(
-            db_session,
-            description="Today entry",
-            duration_hours=1.0,
-            entry_time=_DEFAULT_TIME,
-        )
-        assert entry.entry_date == date.today()
-
-    def test_entry_date_explicit(self, db_session):
-        entry = time_entry_service.create_time_entry(
-            db_session,
-            description="Backdated entry",
-            duration_hours=1.0,
-            entry_time=_DEFAULT_TIME,
-            entry_date=_SENTINEL,
-        )
-        assert entry.entry_date == _SENTINEL
-
-    def test_backdated_note_created_date_matches_entry_date(self, db_session):
-        entry = time_entry_service.create_time_entry(
-            db_session,
-            description="Backdated note check",
-            duration_hours=1.0,
-            entry_time=_DEFAULT_TIME,
-            entry_date=_SENTINEL,
-        )
-        assert entry.note.created_date == _SENTINEL
-
-    def test_default_tag_when_tags_none(self, db_session):
-        entry = time_entry_service.create_time_entry(
-            db_session,
-            description="Default tag test",
-            duration_hours=1.0,
-            entry_time=_DEFAULT_TIME,
-        )
-        assert entry.note.tags == ["internal-only"]
-
-    def test_default_tag_when_tags_empty(self, db_session):
-        entry = time_entry_service.create_time_entry(
-            db_session,
-            description="Empty tag test",
-            duration_hours=1.0,
-            entry_time=_DEFAULT_TIME,
-            tags=[],
-        )
-        assert entry.note.tags == ["internal-only"]
-
-    def test_valid_tags_accepted(self, db_session):
-        entry = time_entry_service.create_time_entry(
-            db_session,
-            description="Carry-forward task",
-            duration_hours=1.0,
-            entry_time=_DEFAULT_TIME,
-            tags=["carry-forward"],
-        )
-        assert "carry-forward" in entry.note.tags
-
-    def test_invalid_tag_raises_invalid_tags_error(self, db_session):
-        with pytest.raises(InvalidTagsError) as exc_info:
-            time_entry_service.create_time_entry(
-                db_session,
-                description="Bad tag",
-                duration_hours=1.0,
+    def test_writes_the_entry_and_its_task_note(self, fake_uow: FakeUnitOfWork) -> None:
+        with fake_uow:
+            entry = time_entry_service.create_time_entry(
+                fake_uow, description="Service layer test", duration_hours=1.0,
                 entry_time=_DEFAULT_TIME,
-                tags=["not-a-tag"],
             )
-        assert "not-a-tag" in exc_info.value.invalid_tags
-
-    def test_client_id_stamped_on_entry_and_note(self, db_session):
-        client_id = _set_active_client(db_session, "TestCorp-time")
-        entry = time_entry_service.create_time_entry(
-            db_session,
-            description="Attributed entry",
-            duration_hours=1.0,
-            entry_time=_DEFAULT_TIME,
+        row = fake_uow.store['time_entries'][entry.id]
+        note = fake_uow.store['notes'][row['note_id']]
+        assert (row['duration_hours'], row['entry_time']) == (Decimal('1.0'), _DEFAULT_TIME)
+        assert (note['content'], note['source'], note['meeting_id']) == (
+            "Service layer test", "task", None,
         )
-        assert entry.client_id == client_id
-        assert entry.note.client_id == client_id
 
-    def test_client_id_none_when_no_active_client(self, db_session):
-        SystemStateRepository(db_session).set("active_client_id", "")
-        entry = time_entry_service.create_time_entry(
-            db_session,
-            description="Internal entry",
-            duration_hours=1.0,
-            entry_time=_DEFAULT_TIME,
-        )
+    def test_a_missing_start_time_raises_and_writes_nothing(
+        self, fake_uow: FakeUnitOfWork
+    ) -> None:
+        with fake_uow:
+            with pytest.raises(MissingStartTimeError):
+                time_entry_service.create_time_entry(
+                    fake_uow, description="No time", duration_hours=1.0, entry_time=None,
+                )
+        assert fake_uow.store.get('notes', {}) == {}
+        assert fake_uow.store.get('time_entries', {}) == {}
+
+    def test_entry_date_defaults_to_today_and_the_note_is_not_backdated(
+        self, fake_uow: FakeUnitOfWork
+    ) -> None:
+        with fake_uow:
+            entry = time_entry_service.create_time_entry(
+                fake_uow, description="Today entry", duration_hours=1.0,
+                entry_time=_DEFAULT_TIME,
+            )
+        assert entry.entry_date == date.today()
+        assert fake_uow.store['notes'][entry.note_id]['created_at'].date() == date.today()
+
+    def test_a_backdated_entry_backdates_its_note(self, fake_uow: FakeUnitOfWork) -> None:
+        with fake_uow:
+            entry = time_entry_service.create_time_entry(
+                fake_uow, description="Backdated entry", duration_hours=1.0,
+                entry_time=_DEFAULT_TIME, entry_date=_SENTINEL,
+            )
+        assert entry.entry_date == _SENTINEL
+        assert fake_uow.store['notes'][entry.note_id]['created_at'].date() == _SENTINEL
+
+    @pytest.mark.parametrize('tags', [None, []])
+    def test_no_tags_default_to_internal_only(
+        self, fake_uow: FakeUnitOfWork, tags: list | None
+    ) -> None:
+        with fake_uow:
+            entry = time_entry_service.create_time_entry(
+                fake_uow, description="Default tag", duration_hours=1.0,
+                entry_time=_DEFAULT_TIME, tags=tags,
+            )
+        assert fake_uow.store['notes'][entry.note_id]['tags'] == ["internal-only"]
+
+    def test_an_invalid_tag_raises_and_writes_nothing(self, fake_uow: FakeUnitOfWork) -> None:
+        with fake_uow:
+            with pytest.raises(InvalidTagsError) as exc_info:
+                time_entry_service.create_time_entry(
+                    fake_uow, description="Bad tag", duration_hours=1.0,
+                    entry_time=_DEFAULT_TIME, tags=["not-a-tag"],
+                )
+        assert exc_info.value.invalid_tags == ["not-a-tag"]
+        assert fake_uow.store.get('notes', {}) == {}
+
+    def test_the_active_client_is_stamped_on_entry_and_note(
+        self, fake_uow: FakeUnitOfWork
+    ) -> None:
+        fake_uow.store['system_state'] = {'active_client_id': '7'}
+        with fake_uow:
+            entry = time_entry_service.create_time_entry(
+                fake_uow, description="Attributed entry", duration_hours=1.0,
+                entry_time=_DEFAULT_TIME,
+            )
+        assert entry.client_id == 7
+        assert fake_uow.store['notes'][entry.note_id]['client_id'] == 7
+
+    def test_no_active_client_leaves_both_unset(self, fake_uow: FakeUnitOfWork) -> None:
+        fake_uow.store['system_state'] = {'active_client_id': ''}
+        with fake_uow:
+            entry = time_entry_service.create_time_entry(
+                fake_uow, description="Internal entry", duration_hours=1.0,
+                entry_time=_DEFAULT_TIME,
+            )
         assert entry.client_id is None
-        assert entry.note.client_id is None
+        assert fake_uow.store['notes'][entry.note_id]['client_id'] is None
 
-    def test_category_passthrough(self, db_session):
-        entry = time_entry_service.create_time_entry(
-            db_session,
-            description="Meeting time",
-            duration_hours=1.0,
-            entry_time=_DEFAULT_TIME,
-            category="meeting",
+    def test_category_meeting_and_project_go_on_the_entry_alone(
+        self, fake_uow: FakeUnitOfWork
+    ) -> None:
+        meeting_id = _seed_meeting(fake_uow.store, datetime(2099, 1, 1, 9, 0))
+        with fake_uow:
+            entry = time_entry_service.create_time_entry(
+                fake_uow, description="Meeting time", duration_hours=1.0,
+                entry_time=_DEFAULT_TIME, category="meeting", meeting_id=meeting_id,
+                project_id=None,
+            )
+        assert (entry.category, entry.meeting_id, entry.project_id) == (
+            "meeting", meeting_id, None,
         )
-        assert entry.category == "meeting"
+        assert fake_uow.store['notes'][entry.note_id]['meeting_id'] is None
 
-    def test_project_id_passthrough(self, db_session):
-        entry = time_entry_service.create_time_entry(
-            db_session,
-            description="Project work",
-            duration_hours=1.0,
-            entry_time=_DEFAULT_TIME,
-            project_id=None,
-        )
-        assert entry.project_id is None
+    def test_a_carry_forward_entry_makes_its_note_a_task(self, fake_uow: FakeUnitOfWork) -> None:
+        with fake_uow:
+            entry = time_entry_service.create_time_entry(
+                fake_uow, description="Follow up on vendor contract", duration_hours=0.5,
+                entry_time=_DEFAULT_TIME, tags=["carry-forward"],
+            )
+        tasks = list(fake_uow.store['task_status'].values())
+        assert [(t['note_id'], t['status']) for t in tasks] == [(entry.note_id, 'active')]
 
-    def test_linked_note_source_is_task(self, db_session):
-        entry = time_entry_service.create_time_entry(
-            db_session,
-            description="Source check",
-            duration_hours=1.0,
-            entry_time=_DEFAULT_TIME,
-        )
-        assert entry.note.source == "task"
-
-    def test_create_time_entry_fires_cf_hook(self, db_session):
-        """Item 69 Gate 3: create_time_entry() applies apply_cf_hook_on_create,
-        the same relocated hook every other create-path surface uses."""
-        entry = time_entry_service.create_time_entry(
-            db_session,
-            description="Follow up on vendor contract",
-            duration_hours=0.5,
-            entry_time=_DEFAULT_TIME,
-            tags=["carry-forward"],
-        )
-        ts = TaskStatusRepository(db_session).get_by_note_id(entry.note.id)
-        assert ts is not None
-        assert ts.status == "active"
-
-    def test_create_time_entry_no_hook_without_carry_forward(self, db_session):
-        entry = time_entry_service.create_time_entry(
-            db_session,
-            description="No CF tag here",
-            duration_hours=0.5,
-            entry_time=_DEFAULT_TIME,
-        )
-        ts = TaskStatusRepository(db_session).get_by_note_id(entry.note.id)
-        assert ts is None
-
-
-def _seed_meeting(session, title: str) -> Meeting:
-    meeting = Meeting(
-        title=title,
-        start_time=datetime(2099, 1, 1, 9, 0),
-        end_time=datetime(2099, 1, 1, 9, 30),
-        is_recurring=False,
-    )
-    session.add(meeting)
-    session.flush()
-    return meeting
+    def test_no_task_without_carry_forward(self, fake_uow: FakeUnitOfWork) -> None:
+        with fake_uow:
+            time_entry_service.create_time_entry(
+                fake_uow, description="No CF tag here", duration_hours=0.5,
+                entry_time=_DEFAULT_TIME,
+            )
+        assert fake_uow.store.get('task_status', {}) == {}
 
 
 class TestCreatePairedTimeEntry:
-    """Item 69 Gate 4 — create_paired_time_entry() derives meeting_id and
-    client_id from the already-created Note, never independent parameters
-    (Design Rules 4 and 9), so the pair cannot diverge."""
+    """create_paired_time_entry takes the entry's meeting and client from its note."""
 
-    def test_create_paired_time_entry_derives_meeting_id_from_note(self, db_session):
-        meeting = _seed_meeting(db_session, "Sentinel paired-entry meeting 2099")
-        note = notes_service.create_note(
-            db_session,
-            content="Sentinel paired-entry note 2099",
-            source='meeting',
-            meeting_id=meeting.id,
-        )
-        entry = time_entry_service.create_paired_time_entry(
-            db_session,
-            note,
-            duration_hours=1.0,
-            entry_date=_SENTINEL,
-            entry_time=_DEFAULT_TIME,
-        )
-        assert entry.meeting_id == meeting.id
+    def test_meeting_and_client_come_from_the_note(self, fake_uow: FakeUnitOfWork) -> None:
+        meeting_id = _seed_meeting(fake_uow.store, datetime(2099, 1, 1, 9, 0))
+        _seed_note(fake_uow.store, "Sentinel paired", meeting_id=meeting_id, client_id=3)
+        fake_uow.store['system_state'] = {'active_client_id': '9'}
+        with fake_uow:
+            note = fake_uow.notes.get_by_id(1)
+            entry = time_entry_service.create_paired_time_entry(
+                fake_uow, note, duration_hours=1.0, entry_date=_SENTINEL,
+                entry_time=_DEFAULT_TIME,
+            )
+        assert (entry.note_id, entry.meeting_id, entry.client_id) == (1, meeting_id, 3)
 
-    def test_create_paired_time_entry_derives_client_id_from_note(self, db_session):
-        # Note's client_id must differ from whatever active_client_id would
-        # resolve to at call time, or this test can't distinguish "derived
-        # from note" from "independently resolved and happened to match."
-        note_client = Client(name="Sentinel paired-entry note client", is_active=True)
-        other_client = Client(name="Sentinel paired-entry other active client", is_active=True)
-        db_session.add_all([note_client, other_client])
-        db_session.flush()
-
-        note = notes_service.create_note(
-            db_session,
-            content="Sentinel paired-entry client-id note 2099",
-        )
-        note.client_id = note_client.id
-        db_session.commit()
-
-        SystemStateRepository(db_session).set_int("active_client_id", other_client.id)
-
-        entry = time_entry_service.create_paired_time_entry(
-            db_session,
-            note,
-            duration_hours=1.0,
-            entry_date=_SENTINEL,
-            entry_time=_DEFAULT_TIME,
-        )
-        assert entry.client_id == note_client.id
-        assert entry.client_id != other_client.id
-
-    def test_create_paired_time_entry_stamps_synced_at_when_clockify_id_given(self, db_session):
-        note = notes_service.create_note(
-            db_session,
-            content="Sentinel paired-entry clockify note 2099",
-        )
-        entry = time_entry_service.create_paired_time_entry(
-            db_session,
-            note,
-            duration_hours=1.0,
-            entry_date=_SENTINEL,
-            entry_time=_DEFAULT_TIME,
-            clockify_id="clockify-sentinel-123",
-        )
+    def test_a_clockify_id_stamps_synced_at(self, fake_uow: FakeUnitOfWork) -> None:
+        _seed_note(fake_uow.store, "Sentinel clockify")
+        with fake_uow:
+            entry = time_entry_service.create_paired_time_entry(
+                fake_uow, fake_uow.notes.get_by_id(1), duration_hours=1.0,
+                entry_date=_SENTINEL, entry_time=_DEFAULT_TIME,
+                clockify_id="clockify-sentinel-123",
+            )
         assert entry.clockify_id == "clockify-sentinel-123"
-        assert entry.synced_at is not None
+        assert abs(datetime.now() - entry.synced_at) < timedelta(minutes=1)
 
-    def test_create_paired_time_entry_no_synced_at_without_clockify_id(self, db_session):
-        note = notes_service.create_note(
-            db_session,
-            content="Sentinel paired-entry no-clockify note 2099",
-        )
-        entry = time_entry_service.create_paired_time_entry(
-            db_session,
-            note,
-            duration_hours=1.0,
-            entry_date=_SENTINEL,
-            entry_time=_DEFAULT_TIME,
-        )
-        assert entry.clockify_id is None
-        assert entry.synced_at is None
-
-
-def _seed_condense_meeting(session, title: str, start: datetime, minutes: int = 30) -> Meeting:
-    meeting = Meeting(
-        title=title,
-        start_time=start,
-        end_time=start + timedelta(minutes=minutes),
-        is_recurring=False,
-    )
-    session.add(meeting)
-    session.flush()
-    return meeting
-
-
-def _seed_meeting_entry(session, meeting: Meeting, entry_date: date, entry_time: time, content: str):
-    note = NotesRepository(session).create(
-        content=content, tags=['internal-only'], meeting_id=meeting.id, source='meeting',
-    )
-    return time_entry_service.create_paired_time_entry(
-        session, note, duration_hours=0.5, entry_date=entry_date,
-        entry_time=entry_time, category='meeting',
-    )
-
-
-def _seed_condensed_note(session, meeting: Meeting, content: str):
-    return NotesRepository(session).create(
-        content=content, tags=['internal-only'], meeting_id=meeting.id, source='condensed',
-    )
+    def test_no_clockify_id_leaves_synced_at_unset(self, fake_uow: FakeUnitOfWork) -> None:
+        _seed_note(fake_uow.store, "Sentinel no clockify")
+        with fake_uow:
+            entry = time_entry_service.create_paired_time_entry(
+                fake_uow, fake_uow.notes.get_by_id(1), duration_hours=1.0,
+                entry_date=_SENTINEL, entry_time=_DEFAULT_TIME, category='meeting',
+            )
+        assert (entry.clockify_id, entry.synced_at, entry.category) == (None, None, 'meeting')
 
 
 class TestLinkCondensedNote:
-    """Issue #168 — link_condensed_note() repoints or creates the meeting's entry."""
+    """link_condensed_note repoints the meeting's entry on its date, or creates one."""
 
-    def test_creates_an_entry_when_the_meeting_has_none(self, db_session):
-        meeting = _seed_condense_meeting(
-            db_session, "Sentinel link create 2099", datetime(2099, 2, 1, 9, 0))
-        condensed = _seed_condensed_note(db_session, meeting, "Sentinel link create summary")
-
-        entry, created = time_entry_service.link_condensed_note(db_session, meeting, condensed)
-
+    def test_creates_an_entry_when_the_meeting_has_none(self, fake_uow: FakeUnitOfWork) -> None:
+        meeting_id = _seed_meeting(fake_uow.store, datetime(2099, 2, 1, 9, 0))
+        condensed_id = _seed_note(fake_uow.store, "Summary", meeting_id, source='condensed')
+        with fake_uow:
+            entry, created = time_entry_service.link_condensed_note(
+                fake_uow, meeting_id, fake_uow.notes.get_by_id(condensed_id),
+            )
         assert created is True
-        assert entry.note_id == condensed.id
-        assert entry.meeting_id == meeting.id
-        assert entry.entry_date == date(2099, 2, 1)
-        assert entry.entry_time == time(9, 0)
-        assert entry.duration_hours == Decimal('0.50')
-        assert entry.category == 'meeting'
+        assert (entry.note_id, entry.meeting_id, entry.category) == (
+            condensed_id, meeting_id, 'meeting',
+        )
+        assert (entry.entry_date, entry.entry_time, entry.duration_hours) == (
+            date(2099, 2, 1), time(9, 0), Decimal('0.5'),
+        )
 
-    def test_repoints_the_existing_entry(self, db_session):
-        meeting = _seed_condense_meeting(
-            db_session, "Sentinel link repoint 2099", datetime(2099, 2, 2, 9, 0))
-        existing = _seed_meeting_entry(
-            db_session, meeting, date(2099, 2, 2), time(9, 0), "Sentinel link repoint detail")
-        condensed = _seed_condensed_note(db_session, meeting, "Sentinel link repoint summary")
+    def test_repoints_the_existing_entry(self, fake_uow: FakeUnitOfWork) -> None:
+        meeting_id = _seed_meeting(fake_uow.store, datetime(2099, 2, 2, 9, 0))
+        detail_id = _seed_note(fake_uow.store, "Detail", meeting_id)
+        existing_id = _seed_entry(fake_uow.store, detail_id, meeting_id, date(2099, 2, 2), time(9, 0))
+        condensed_id = _seed_note(fake_uow.store, "Summary", meeting_id, source='condensed')
+        with fake_uow:
+            entry, created = time_entry_service.link_condensed_note(
+                fake_uow, meeting_id, fake_uow.notes.get_by_id(condensed_id),
+            )
+        assert (created, entry.id, entry.note_id) == (False, existing_id, condensed_id)
+        assert len(fake_uow.store['time_entries']) == 1
 
-        entry, created = time_entry_service.link_condensed_note(db_session, meeting, condensed)
-
-        assert created is False
-        assert entry.id == existing.id
-        assert entry.note_id == condensed.id
-        assert len(TimeEntriesRepository(db_session).get_by_meeting(meeting.id)) == 1
-
-    def test_repoints_only_the_earliest_entry_of_that_meeting(self, db_session):
+    def test_repoints_only_the_earliest_entry_of_that_meeting(
+        self, fake_uow: FakeUnitOfWork
+    ) -> None:
+        store = fake_uow.store
         day = date(2099, 2, 3)
-        meeting_a = _seed_condense_meeting(
-            db_session, "Sentinel link earliest A 2099", datetime(2099, 2, 3, 9, 0))
-        meeting_b = _seed_condense_meeting(
-            db_session, "Sentinel link earliest B 2099", datetime(2099, 2, 3, 11, 0))
-        early = _seed_meeting_entry(db_session, meeting_a, day, time(9, 0), "Sentinel A early")
-        late = _seed_meeting_entry(db_session, meeting_a, day, time(9, 15), "Sentinel A late")
-        other = _seed_meeting_entry(db_session, meeting_b, day, time(11, 0), "Sentinel B entry")
-        late_note_id, other_note_id = late.note_id, other.note_id
-        condensed = _seed_condensed_note(db_session, meeting_a, "Sentinel A summary")
+        meeting_a = _seed_meeting(store, datetime(2099, 2, 3, 9, 0))
+        meeting_b = _seed_meeting(store, datetime(2099, 2, 3, 11, 0))
+        late_note = _seed_note(store, "A late", meeting_a)
+        late = _seed_entry(store, late_note, meeting_a, day, time(9, 15))
+        early = _seed_entry(store, _seed_note(store, "A early", meeting_a), meeting_a, day, time(9, 0))
+        other_note = _seed_note(store, "B", meeting_b)
+        other = _seed_entry(store, other_note, meeting_b, day, time(11, 0))
+        condensed_id = _seed_note(store, "Summary", meeting_a, source='condensed')
+        with fake_uow:
+            time_entry_service.link_condensed_note(
+                fake_uow, meeting_a, fake_uow.notes.get_by_id(condensed_id),
+            )
+        entries = store['time_entries']
+        assert entries[early]['note_id'] == condensed_id
+        assert entries[late]['note_id'] == late_note
+        assert entries[other]['note_id'] == other_note
 
-        time_entry_service.link_condensed_note(db_session, meeting_a, condensed)
+    def test_ignores_the_meeting_entries_on_other_dates(self, fake_uow: FakeUnitOfWork) -> None:
+        store = fake_uow.store
+        meeting_id = _seed_meeting(store, datetime(2099, 2, 4, 9, 0))
+        prior_note = _seed_note(store, "Prior day", meeting_id)
+        prior = _seed_entry(store, prior_note, meeting_id, date(2099, 2, 3), time(9, 0))
+        condensed_id = _seed_note(store, "Summary", meeting_id, source='condensed')
+        with fake_uow:
+            entry, created = time_entry_service.link_condensed_note(
+                fake_uow, meeting_id, fake_uow.notes.get_by_id(condensed_id),
+            )
+        assert (created, entry.entry_date) == (True, date(2099, 2, 4))
+        assert entry.id != prior
+        assert store['time_entries'][prior]['note_id'] == prior_note
 
-        assert early.note_id == condensed.id
-        assert late.note_id == late_note_id
-        assert other.note_id == other_note_id
+    def test_an_unknown_meeting_raises_naming_the_id(self, fake_uow: FakeUnitOfWork) -> None:
+        condensed_id = _seed_note(fake_uow.store, "Summary", source='condensed')
+        with fake_uow:
+            with pytest.raises(ServiceValidationError, match="99999"):
+                time_entry_service.link_condensed_note(
+                    fake_uow, 99999, fake_uow.notes.get_by_id(condensed_id),
+                )
 
-    def test_ignores_the_meeting_entries_on_other_dates(self, db_session):
-        meeting = _seed_condense_meeting(
-            db_session, "Sentinel link other date 2099", datetime(2099, 2, 4, 9, 0))
-        prior = _seed_meeting_entry(
-            db_session, meeting, date(2099, 2, 3), time(9, 0), "Sentinel prior-day detail")
-        prior_note_id = prior.note_id
-        condensed = _seed_condensed_note(db_session, meeting, "Sentinel other date summary")
+    def test_another_clients_project_on_the_existing_entry_raises(
+        self, fake_uow: FakeUnitOfWork
+    ) -> None:
+        store = fake_uow.store
+        meeting_id = _seed_meeting(store, datetime(2099, 2, 5, 9, 0))
+        existing = _seed_entry(
+            store, _seed_note(store, "Detail", meeting_id), meeting_id, date(2099, 2, 5), time(9, 0),
+        )
+        store['time_entries'][existing].update(client_id=2, project_id=5)
+        store['projects'] = {5: {'id': 5, 'client_id': 1}}
+        condensed_id = _seed_note(store, "Summary", meeting_id, source='condensed')
+        with fake_uow:
+            with pytest.raises(ValueError, match="Cannot link time entry to mismatched project"):
+                time_entry_service.link_condensed_note(
+                    fake_uow, meeting_id, fake_uow.notes.get_by_id(condensed_id),
+                )
 
-        entry, created = time_entry_service.link_condensed_note(db_session, meeting, condensed)
 
-        assert created is True
-        assert entry.id != prior.id
-        assert entry.entry_date == date(2099, 2, 4)
-        assert prior.note_id == prior_note_id
+class TestLogMeetingTime:
+    """log_meeting_time writes a meeting's note and its paired entry in one unit of work."""
+
+    def test_writes_the_meeting_note_and_its_entry(self, fake_uow: FakeUnitOfWork) -> None:
+        meeting_id = _seed_meeting(fake_uow.store, datetime(2099, 1, 1, 9, 0))
+        fake_uow.store['system_state'] = {'active_client_id': '4'}
+        backdated = datetime(2099, 1, 1, 12, 0)
+
+        result = time_entry_service.log_meeting_time(
+            fake_uow, meeting_id, content="Sentinel standup", tags=["client-report"],
+            duration_hours=0.5, entry_date=_SENTINEL, entry_time=time(9, 0),
+            created_at=backdated,
+        )
+
+        assert fake_uow.committed is True
+        assert result == time_entry_service.CreatedEntry(
+            entry_id=result.entry_id, note_id=result.note_id, content="Sentinel standup",
+            duration_hours=Decimal('0.5'), display_time="09:00",
+        )
+        note = fake_uow.store['notes'][result.note_id]
+        entry = fake_uow.store['time_entries'][result.entry_id]
+        assert (note['source'], note['meeting_id'], note['tags'], note['created_at']) == (
+            'meeting', meeting_id, ["client-report"], backdated,
+        )
+        assert (entry['note_id'], entry['meeting_id'], entry['client_id'], entry['category']) == (
+            result.note_id, meeting_id, 4, 'meeting',
+        )
+
+    def test_category_and_project_go_on_the_entry(self, fake_uow: FakeUnitOfWork) -> None:
+        meeting_id = _seed_meeting(fake_uow.store, datetime(2099, 1, 1, 9, 0))
+        fake_uow.store['system_state'] = {'active_client_id': '1'}
+        fake_uow.store['projects'] = {5: {'id': 5, 'client_id': 1}}
+
+        result = time_entry_service.log_meeting_time(
+            fake_uow, meeting_id, content="Sentinel", tags=None, duration_hours=1.0,
+            entry_date=_SENTINEL, entry_time=_DEFAULT_TIME, category='review', project_id=5,
+        )
+
+        entry = fake_uow.store['time_entries'][result.entry_id]
+        assert (entry['category'], entry['project_id']) == ('review', 5)
+        assert fake_uow.store['notes'][result.note_id]['project_id'] is None
+
+    def test_a_failed_entry_rolls_back_the_note(self, fake_uow: FakeUnitOfWork) -> None:
+        meeting_id = _seed_meeting(fake_uow.store, datetime(2099, 1, 1, 9, 0))
+        fake_uow.store['system_state'] = {'active_client_id': '2'}
+        fake_uow.store['projects'] = {5: {'id': 5, 'client_id': 1}}
+
+        with pytest.raises(ValueError, match="mismatched project"):
+            time_entry_service.log_meeting_time(
+                fake_uow, meeting_id, content="Sentinel", tags=None, duration_hours=1.0,
+                entry_date=_SENTINEL, entry_time=_DEFAULT_TIME, project_id=5,
+            )
+
+        assert fake_uow.rolled_back is True
+        assert fake_uow.store.get('notes', {}) == {}
+
+
+class TestLogTaskTime:
+    """log_task_time writes a task's note and entry in one unit of work."""
+
+    def test_writes_the_task_and_returns_its_values(self, fake_uow: FakeUnitOfWork) -> None:
+        result = time_entry_service.log_task_time(
+            fake_uow, description="Sentinel task", duration_hours=1.25,
+            entry_time=time(14, 30), entry_date=_SENTINEL, category='development',
+        )
+
+        assert fake_uow.committed is True
+        assert result == time_entry_service.CreatedEntry(
+            entry_id=result.entry_id, note_id=result.note_id, content="Sentinel task",
+            duration_hours=Decimal('1.25'), display_time="14:30",
+        )
+        note = fake_uow.store['notes'][result.note_id]
+        assert (note['source'], note['meeting_id']) == ('task', None)
+        assert fake_uow.store['time_entries'][result.entry_id]['category'] == 'development'
+
+    def test_a_missing_start_time_raises_and_rolls_back(self, fake_uow: FakeUnitOfWork) -> None:
+        with pytest.raises(MissingStartTimeError):
+            time_entry_service.log_task_time(
+                fake_uow, description="No time", duration_hours=1.0,
+            )
+
+        assert fake_uow.rolled_back is True
+        assert fake_uow.store.get('notes', {}) == {}
+
+    def test_a_failed_entry_rolls_back_the_note_and_its_task(
+        self, fake_uow: FakeUnitOfWork
+    ) -> None:
+        fake_uow.store['system_state'] = {'active_client_id': '2'}
+        fake_uow.store['projects'] = {5: {'id': 5, 'client_id': 1}}
+
+        with pytest.raises(ValueError, match="mismatched project"):
+            time_entry_service.log_task_time(
+                fake_uow, description="Sentinel", duration_hours=1.0,
+                entry_time=_DEFAULT_TIME, tags=["carry-forward"], project_id=5,
+            )
+
+        assert fake_uow.store.get('notes', {}) == {}
+        assert fake_uow.store.get('task_status', {}) == {}

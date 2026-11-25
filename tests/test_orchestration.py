@@ -14,12 +14,17 @@ import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 from unittest.mock import MagicMock, call, patch
 
 import pytest
 
 from workmain.database.models import Meeting
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+
+    from workmain.integrations.slack.slack_eod import SlackEodManager
 
 SENTINEL_DATE = date(2099, 1, 1)
 
@@ -1358,10 +1363,8 @@ class TestDoubleExecution:
     def test_empty_result_message_posts_fallback(self, tmp_path):
         from workmain.orchestration.action_executor import ActionResult
         daemon = _make_daemon(_make_store(tmp_path))
-        with patch('workmain.daemon.daemon.get_db') as mock_db, \
-             patch('workmain.orchestration.action_executor.ActionExecutor') as mock_ae, \
+        with patch('workmain.orchestration.action_executor.ActionExecutor') as mock_ae, \
              patch.object(daemon, '_maybe_post_correction_summary'):
-            mock_db.return_value.session_scope.return_value.__enter__.return_value = MagicMock()
             mock_ae.return_value.execute.return_value = ActionResult(success=True, message='')
             daemon._execute_action({'action': 'create_note', 'content': 'x'})
         daemon._socket_client.post_message.assert_any_call('D_TEST', 'Action completed.')
@@ -1664,3 +1667,73 @@ class TestStepWarningReachesSlack:
 
         blocks = manager._send_blocks.call_args.kwargs['blocks']
         assert line in blocks[0]['text']['text']
+
+
+class TestActionsReachTheirUseCasesWithNoScopeOpen:
+    """
+    The daemon and the Slack EOD conversation write a note or a time entry through its use case.
+
+    Nothing is patched between _execute_action or _execute_and_reprompt and
+    the use case; UnitOfWork refuses to enter inside an open session_scope(),
+    and execute() would turn that refusal into a failure, so the row being
+    written shows the use case ran with no scope open. The daemon's
+    create_note is TestActionResultFollowsCommit.test_t4.
+    """
+
+    @staticmethod
+    def _eod_manager(tmp_path: Path, posts: list) -> 'SlackEodManager':
+        from workmain.integrations.slack.slack_eod import SlackEodManager
+        manager = SlackEodManager(MagicMock(), MagicMock(), _make_store(tmp_path))
+        manager._send = lambda channel, text: posts.append(text)
+        manager._reprompt_current_step = lambda session: None
+        return manager
+
+    @staticmethod
+    def _task_entry(db_session: 'Session', description: str) -> tuple:
+        from workmain.database.models import Note, TimeEntry
+        note = db_session.query(Note).filter(Note.content == description).one()
+        entry = db_session.query(TimeEntry).filter(TimeEntry.note_id == note.id).one()
+        return note, entry
+
+    def test_the_daemon_logs_a_time_entry(self, tmp_path: Path, db_session: 'Session') -> None:
+        description = 'Sentinel daemon time entry 2099-96'
+        daemon = _make_daemon(_make_store(tmp_path))
+
+        daemon._execute_action({
+            'action': 'create_time_entry', 'description': description,
+            'duration_minutes': 45, 'start_time': '1015',
+        })
+
+        note, entry = self._task_entry(db_session, description)
+        assert (note.source, entry.display_time, float(entry.duration_hours)) == (
+            'task', '10:15', 0.75,
+        )
+
+    def test_slack_eod_writes_a_note(self, tmp_path: Path, db_session: 'Session') -> None:
+        from workmain.database.models import Note
+        content = 'Sentinel slack eod note 2099-96'
+        posts = []
+
+        self._eod_manager(tmp_path, posts)._execute_and_reprompt(
+            MagicMock(channel_id='D_TEST'),
+            {'action': 'create_note', 'content': content, 'tags': ['carry-forward']},
+        )
+
+        note = db_session.query(Note).filter(Note.content == content).one()
+        assert (note.tags, note.source) == (['carry-forward'], 'ad-hoc')
+        assert note.task_status is not None
+
+    def test_slack_eod_logs_a_time_entry(self, tmp_path: Path, db_session: 'Session') -> None:
+        description = 'Sentinel slack eod time entry 2099-96'
+        posts = []
+
+        self._eod_manager(tmp_path, posts)._execute_and_reprompt(
+            MagicMock(channel_id='D_TEST'),
+            {'action': 'create_time_entry', 'description': description,
+             'duration_minutes': 30, 'start_time': '16:00'},
+        )
+
+        note, entry = self._task_entry(db_session, description)
+        assert (note.source, entry.display_time, float(entry.duration_hours)) == (
+            'task', '16:00', 0.5,
+        )

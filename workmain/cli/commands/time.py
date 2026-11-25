@@ -281,87 +281,85 @@ def time_add(description: Optional[str], duration: str, time: str,
             if parsed_tags:
                 note_tags = parsed_tags
 
-        if meeting_obj:
-            # Meeting path — converged onto create_note() + create_paired_time_entry()
-            # (Item 69 Gate 4); also fixes the note's client_id-NULL omission
-            primary_content = notes if notes else description
-            note = notes_service.create_note(
-                session,
-                content=primary_content,
+        # The entry is written after this scope closes, so read the
+        # meeting's values here.
+        meeting_id = meeting_obj.id if meeting_obj else None
+        meeting_title = meeting_obj.title if meeting_obj else None
+
+    from workmain.services.unit_of_work import UnitOfWork
+
+    if meeting_id is not None:
+        # Meeting path: the note carries the meeting, and the entry is paired with it
+        primary_content = notes if notes else description
+        entry = time_entry_service.log_meeting_time(
+            UnitOfWork(),
+            meeting_id,
+            content=primary_content,
+            tags=note_tags,
+            duration_hours=duration_hours,
+            entry_date=entry_date,
+            entry_time=entry_time,
+            category=category,
+            project_id=project,
+            created_at=note_created_at,
+        )
+    else:
+        # Non-meeting path — delegate to service (handles client_id + tag validation)
+        entry = time_entry_service.log_task_time(
+            UnitOfWork(),
+            description=description,
+            duration_hours=duration_hours,
+            entry_time=entry_time,
+            entry_date=entry_date,
+            category=category,
+            tags=note_tags,
+            project_id=project,
+        )
+
+    # Success message
+    click.echo(f"✓ Time entry added (ID: {entry.entry_id})")
+    click.echo(f"  {duration_hours}h - {entry.content}")
+    click.echo(f"  Time: {entry.display_time}")
+    if category:
+        click.echo(f"  Category: {category}")
+    if meeting_id is not None:
+        click.echo(f"  Linked to meeting: [#{meeting_id}] {meeting_title}")
+
+    if notes and meeting_id is not None:
+        click.echo(f"✓ Note created (ID: {entry.note_id}) and linked to meeting [#{meeting_id}]")
+    elif meeting_id is not None:
+        click.echo(f"✓ Note created (ID: {entry.note_id}) linked to meeting [#{meeting_id}]")
+
+        if click.confirm(f"\nAdd additional notes to this meeting?", default=False):
+            note_content = click.prompt("Enter note content")
+            extra_note = notes_service.add_note(
+                UnitOfWork(),
+                content=note_content,
                 tags=note_tags,
                 source='meeting',
-                meeting_id=meeting_obj.id,
+                meeting_id=meeting_id,
                 created_at=note_created_at,
             )
-            entry = time_entry_service.create_paired_time_entry(
-                session,
-                note,
-                duration_hours=duration_hours,
-                entry_date=entry_date,
-                entry_time=entry_time,
-                category=category,
-                project_id=project,
-            )
+            click.echo(f"✓ Note created (ID: {extra_note.id}) and linked to meeting [#{meeting_id}]")
+    else:
+        click.echo(f"✓ Note created (ID: {entry.note_id})")
+
+    # Prompt for Clockify sync
+    click.echo()
+    if click.confirm("Sync to Clockify now?", default=False):
+        # Sync this entry: read the plan in a scope, and push after it closes
+        with get_db().session_scope() as session:
+            plan = clockify_service.plan_entry_push(session, entry.entry_id)
+        result = clockify_service.push(plan)
+        for line in result.warnings:
+            click.echo(f"⚠ {line}", err=True)
+
+        if result.totals.successful > 0:
+            click.echo("✓ Synced to Clockify")
         else:
-            # Non-meeting path — delegate to service (handles client_id + tag validation)
-            entry = time_entry_service.create_time_entry(
-                session,
-                description=description,
-                duration_hours=duration_hours,
-                entry_time=entry_time,
-                entry_date=entry_date,
-                category=category,
-                tags=note_tags,
-                project_id=project,
-            )
-            note = entry.note
-
-        # Success message
-        click.echo(f"✓ Time entry added (ID: {entry.id})")
-        click.echo(f"  {duration_hours}h - {note.content}")
-        click.echo(f"  Time: {entry.display_time}")
-        if category:
-            click.echo(f"  Category: {category}")
-        if meeting_obj:
-            click.echo(f"  Linked to meeting: [#{meeting_obj.id}] {meeting_obj.title}")
-
-        if notes and meeting_obj:
-            click.echo(f"✓ Note created (ID: {note.id}) and linked to meeting [#{meeting_obj.id}]")
-        elif meeting_obj:
-            click.echo(f"✓ Note created (ID: {note.id}) linked to meeting [#{meeting_obj.id}]")
-
-            session.commit()
-            if click.confirm(f"\nAdd additional notes to this meeting?", default=False):
-                note_content = click.prompt("Enter note content")
-                extra_note = notes_service.create_note(
-                    session,
-                    content=note_content,
-                    tags=note_tags,
-                    source='meeting',
-                    meeting_id=meeting_obj.id,
-                    created_at=note_created_at,
-                )
-                click.echo(f"✓ Note created (ID: {extra_note.id}) and linked to meeting [#{meeting_obj.id}]")
-        else:
-            click.echo(f"✓ Note created (ID: {note.id})")
-
-        # Prompt for Clockify sync
-        session.commit()
-        click.echo()
-        if click.confirm("Sync to Clockify now?", default=False):
-            # Sync this entry
-            result = clockify_service.push(
-                clockify_service.plan_entry_push(session, entry.id)
-            )
-            for line in result.warnings:
-                click.echo(f"⚠ {line}", err=True)
-
-            if result.totals.successful > 0:
-                click.echo("✓ Synced to Clockify")
-            else:
-                click.echo("✗ Sync failed")
-                if result.failed.rows:
-                    click.echo(f"  Error: {result.failed.rows[0].error}")
+            click.echo("✗ Sync failed")
+            if result.failed.rows:
+                click.echo(f"  Error: {result.failed.rows[0].error}")
 
 
 @time.command('edit')

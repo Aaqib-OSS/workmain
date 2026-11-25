@@ -1,24 +1,20 @@
 """
-CLI-level coverage for 'workmain notes add' — Item 69 Gate 4's convergence of
-surface #2 (the meeting time-entry follow-on prompt) onto
-notes_service.create_note() + time_entry_service.create_paired_time_entry(),
-replacing its former hard-coded tags=['both'] with a real, caller-specified
-tag entered at a new interactive prompt (Design Rule 11, mirroring the
-existing 'notes log' per-line pattern: click.prompt with default="",
-show_default=False, then parse_tags(..., apply_default=True)).
+CLI-level coverage for 'workmain notes add'.
 
-Item 69's spec named this coverage tests/test_notes.py, which does not exist
-in this repo; this file follows the established per-subcommand test file
-convention already used elsewhere for notes.py (test_notes_list.py,
-test_notes_show.py, test_notes_edit.py, test_notes_log.py) instead.
+Each test runs the command through CliRunner against the test's database,
+with nothing patched between the command and the use cases it reaches
+(notes_service.add_note, time_entry_service.log_meeting_time), and asserts
+the exit code and the rows the path writes. UnitOfWork refuses to enter
+inside an open session_scope(), so a passing test also shows each use case
+ran with the command's scope closed.
 """
 
-import unittest
 from datetime import datetime
 from unittest.mock import patch
 
 import click
 from click.testing import CliRunner
+from sqlalchemy.orm import Session
 
 from workmain.cli.commands.notes import notes
 from workmain.database.models import Meeting, Note, TimeEntry
@@ -27,7 +23,7 @@ _SENTINEL_PRIMARY_CONTENT = "Sentinel notes add primary content 2099-07-28"
 _SENTINEL_TIME_ENTRY_CONTENT = "Sentinel notes add time entry content 2099-07-28"
 
 
-def _seed_meeting(session, title: str) -> Meeting:
+def _seed_meeting(session: Session, title: str) -> Meeting:
     m = Meeting(
         title=title,
         start_time=datetime(2099, 6, 2, 9, 0),
@@ -40,67 +36,57 @@ def _seed_meeting(session, title: str) -> Meeting:
     return m
 
 
-class TestNotesAddMeetingFollowOnTagPrompt(unittest.TestCase):
-    """Surface #2 (meeting time-entry follow-on) now prompts for a real tag
-    instead of hard-coding tags=['both'] — Item 69 Gate 4, Design Rule 11."""
+class TestNotesAdd:
+    """notes add writes its note, and on a meeting the follow-on time entry, through its use cases."""
 
-    def setUp(self):
-        from dotenv import load_dotenv
-        load_dotenv()
-        from workmain.database.connection import get_db
-        db = get_db()
-        self.session = db.get_session()
-        self._seeded_meeting_ids = []
-        self.runner = CliRunner()
+    def test_a_note_without_a_meeting_is_written_alone(self, db_session: Session) -> None:
+        result = CliRunner().invoke(notes, ["add", _SENTINEL_PRIMARY_CONTENT, "-t", "cf"])
 
-    def tearDown(self):
-        for content in (_SENTINEL_PRIMARY_CONTENT, _SENTINEL_TIME_ENTRY_CONTENT):
-            note = self.session.query(Note).filter(Note.content == content).first()
-            if note:
-                self.session.query(TimeEntry).filter(TimeEntry.note_id == note.id).delete()
-                self.session.query(Note).filter(Note.id == note.id).delete()
-        for mid in self._seeded_meeting_ids:
-            self.session.query(Meeting).filter(Meeting.id == mid).delete()
-        self.session.commit()
-        self.session.close()
+        assert result.exit_code == 0, result.output
+        note = db_session.query(Note).filter(Note.content == _SENTINEL_PRIMARY_CONTENT).one()
+        assert (note.tags, note.source, note.meeting_id) == (["carry-forward"], "ad-hoc", None)
+        assert db_session.query(TimeEntry).filter(TimeEntry.note_id == note.id).count() == 0
 
-    def test_notes_add_meeting_followon_prompts_and_stamps_real_tag(self):
-        meeting = _seed_meeting(self.session, "Sentinel Notes Add Meeting 2099")
-        self._seeded_meeting_ids.append(meeting.id)
+    def test_a_meeting_note_and_its_follow_on_entry_with_the_prompted_tag(
+        self, db_session: Session
+    ) -> None:
+        meeting = _seed_meeting(db_session, "Sentinel Notes Add Meeting 2099")
 
-        result = self.runner.invoke(
+        result = CliRunner().invoke(
             notes,
-            [
-                "add",
-                _SENTINEL_PRIMARY_CONTENT,
-                "-m",
-                str(meeting.id),
-            ],
-            # y: create time entry; description; #cr tag entered at the new prompt
+            ["add", _SENTINEL_PRIMARY_CONTENT, "-m", str(meeting.id)],
+            # y: create time entry; description; #cr tag entered at the prompt
             input=f"y\n{_SENTINEL_TIME_ENTRY_CONTENT}\n#cr\n",
         )
 
-        self.assertEqual(result.exit_code, 0, result.output)
-
-        te_note = (
-            self.session.query(Note)
-            .filter(Note.content == _SENTINEL_TIME_ENTRY_CONTENT)
-            .first()
+        assert result.exit_code == 0, result.output
+        primary = db_session.query(Note).filter(Note.content == _SENTINEL_PRIMARY_CONTENT).one()
+        assert (primary.meeting_id, primary.tags) == (meeting.id, ["internal-only"])
+        te_note = db_session.query(Note).filter(
+            Note.content == _SENTINEL_TIME_ENTRY_CONTENT
+        ).one()
+        assert (te_note.tags, te_note.source, te_note.meeting_id) == (
+            ["client-report"], "meeting", meeting.id,
         )
-        self.assertIsNotNone(te_note)
-        self.assertEqual(te_note.tags, ["client-report"])
-        self.assertNotEqual(te_note.tags, ["both"])
-
-        entry = (
-            self.session.query(TimeEntry)
-            .filter(TimeEntry.note_id == te_note.id)
-            .first()
+        entry = db_session.query(TimeEntry).filter(TimeEntry.note_id == te_note.id).one()
+        assert (entry.meeting_id, entry.category, float(entry.duration_hours)) == (
+            meeting.id, "meeting", 0.5,
         )
-        self.assertIsNotNone(entry)
-        self.assertEqual(entry.meeting_id, meeting.id)
+
+    def test_declining_the_time_entry_writes_only_the_note(self, db_session: Session) -> None:
+        meeting = _seed_meeting(db_session, "Sentinel Notes Add Decline Meeting 2099")
+
+        result = CliRunner().invoke(
+            notes, ["add", _SENTINEL_PRIMARY_CONTENT, "-m", str(meeting.id)], input="n\n",
+        )
+
+        assert result.exit_code == 0, result.output
+        note = db_session.query(Note).filter(Note.content == _SENTINEL_PRIMARY_CONTENT).one()
+        assert db_session.query(TimeEntry).filter(TimeEntry.meeting_id == meeting.id).count() == 0
+        assert note.meeting_id == meeting.id
 
 
-def test_t12_note_persists_when_the_time_entry_prompt_is_cancelled(db_session):
+def test_t12_note_persists_when_the_time_entry_prompt_is_cancelled(db_session: Session) -> None:
     """The note is committed before "Create time entry for this meeting?", so
     cancelling that prompt keeps it (#96)."""
     meeting = _seed_meeting(db_session, "Sentinel Notes Add Abort Meeting 2099-96")
