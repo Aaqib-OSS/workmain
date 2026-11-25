@@ -1,0 +1,169 @@
+# Repositories hold their session privately — Spec
+
+**Status:** Draft
+**Author:** Spanner
+**Date:** 20261125
+**Read at:** `1f625e5`
+**Branch:** `feature/issue-283-repository-private-session` (from `dev`)
+**Target release:** v1.62.0
+**Originating item:** Issue #283
+**Design study:** `../design/DESIGN_REPOSITORY_PRIVATE_SESSION.md`
+
+---
+
+## Decision Log
+
+| Date | Source | Decision or finding | Resolution |
+| --- | --- | --- | --- |
+| 20261124 | Ray | Branch type `feature/*`: the change edits `workmain/**` and `tests/**`, and a rename is not provable behaviour-neutral by AST equality (`docs/standards/2-git.md` §2.2). | Branch field. |
+| 20261125 | Ray | No rule is added to `docs/standards/4-database.md` §4.3. Its first bullet already states that all data access goes through a repository, so only the example changes (design study Q1, withdrawn). | DR5, Step 2. |
+| 20261125 | Ray | Criterion 2's search becomes a standing step in `.github/workflows/tests.yml`'s `session-rules` job, on this branch (design study Q2). | DR6, Step 3, AC2.2. |
+| 20261125 | Spanner | The issue's second criterion's check misses a read by name (`getattr(x, '_session')`) and `scripts/`, which builds repositories (design study F5, F13). It also matches only lowercase names, and its `grep -v` drops a whole line that holds `self._session` and another read. AC2.1 restates it as one PCRE search over every form. The issue body's edit is made at close-out (`docs/standards/1-workflow.md` §1.2). | AC2.1. |
+
+---
+
+## 1. Scope
+
+**In scope:**
+
+- The 12 repository modules in `workmain/database/repositories/`: each repository holds its session as `self._session` instead of `self.session`.
+- `tests/test_unit_of_work.py`: the four tests that read a repository's `session` (R4) get the session another way, and one new test shows no repository has a `session` attribute.
+- `docs/standards/4-database.md` §4.3: the repository example's code block.
+- `.github/workflows/tests.yml`: one new step in the `session-rules` job.
+- The results artifact, `docs/dev/results/REPOSITORY_PRIVATE_SESSION_RESULTS.md`.
+
+**Out of scope:**
+
+- The seven classes outside the repositories that hold `self.session` (R7). They are not repositories, and #198's conversion issues own them.
+- `workmain/services/unit_of_work.py`. It builds each repository with a positional session (`repository_class(session)`), which the rename leaves working, and it holds no session attribute of its own.
+- `tests/mocks/fake_unit_of_work.py`. Its fakes hold no `session` (design study F8).
+- Any repository method, signature, docstring or constructor parameter. The constructor parameter stays `session`.
+- §4.3's rule text. No rule is added (Decision Log, 20261125).
+- The two existing `session-rules` steps, including how they treat a `grep` error (§7).
+- `scripts/baseline/`, restricted by #188.
+
+## 2. Verified current state
+
+Verified at `1f625e5`. `workmain/`, `tests/`, `docs/standards/` and `.github/` are unchanged from `287db27`, where the design study read them.
+
+| # | Claim | Evidence (file:line, symbol) |
+| --- | --- | --- |
+| R1 | 12 repository classes, each setting `self.session = session` in `__init__`: `AiCostRepository`, `ClientRepository`, `EmailRepository`, `GDriveRepository`, `MeetingsRepository`, `NotesRepository`, `NotificationConfigRepository`, `ReportsRepository`, `ScheduleExceptionRepository`, `SystemStateRepository`, `TaskStatusRepository`, `TimeEntriesRepository`. `NotificationConfigData` in the same directory is a data holder with no session. | `grep -rnE 'self\.session *=' workmain/database/repositories/`; `grep -nE '^class ' workmain/database/repositories/*.py` |
+| R2 | `self.session` occurs 202 times across those 12 files, assignments included. | `grep -rnE 'self\.session\b' workmain/database/repositories/ \| wc -l` |
+| R3 | `UnitOfWork.REPOSITORIES` maps 12 names to exactly the 12 classes in R1, and `__enter__` builds each as `repository_class(session)`. | `workmain/services/unit_of_work.py` `UnitOfWork.REPOSITORIES`, `UnitOfWork.__enter__` |
+| R4 | Call sites of a repository's `session` attribute outside its own class, found by ``git grep -nE '\b[A-Za-z_][A-Za-z0-9_]*(\(\))?\.session\b' -- workmain tests automation scripts ':!scripts/baseline' ':!workmain/database/repositories' \| grep -vE '\bself\.session\b'``. Each was read and is a read through a repository: `tests/test_unit_of_work.py:107` `TestUnitOfWork::test_repositories_built_on_its_session_while_entered` (`repository.session is opened[0]`); `:142` `TestUnitOfWork::test_repositories_absent_after_commit_raises` (`mp.setattr(uow.system_state.session, 'commit', ...)`); `:262` `TestRecordUnitOfWork::test_record_runs_on_record_scope` and `:268` `TestRecordUnitOfWork::test_default_runs_on_session_scope` (`uow.system_state.session.execute(text('SHOW lock_timeout'))`). | the search; `tests/test_unit_of_work.py` |
+| R5 | No read by name: no `getattr`, `vars` or `__dict__` read of `'session'`, and the only `'session'` string literals are a pytest fixture scope (`tests/conftest.py:115`) and the hidden-name tuple of `TestUnitOfWork::test_exposes_no_session_or_transaction_control` (`tests/test_unit_of_work.py:148`), which checks the unit of work, not a repository. No class subclasses a repository. | ``git grep -nE "getattr\([^)]*['\"]session['\"]\|vars\(\|__dict__\[['\"]session" -- workmain tests automation scripts ':!scripts/baseline'``; ``git grep -nE "['\"]session['\"]" -- workmain tests automation``; ``git grep -nE 'class \w+\(\w*Repository\)' -- workmain tests`` |
+| R6 | Inside the repositories, the reads that cross to another repository are `ClientRepository`'s `SystemStateRepository(self.session)` in `set_active`, `clear_active` and `get_active`. They read the class's own attribute, so they rename with it. | `workmain/database/repositories/client_repository.py:172`, `:185`, `:194` |
+| R7 | Seven modules outside the repositories hold `self.session` on classes of their own: `workmain/ai/note_condenser.py`, `workmain/ai/prompt_builder.py`, `workmain/ai/report_generator.py`, `workmain/daemon/inspection_engine.py`, `workmain/services/schedule_service.py`, `workmain/templates_engine/field_manager.py`, `workmain/templates_engine/renderer.py`. R4's search shows nothing reads them from outside. | `git grep -lE '\bself\.session\b' -- workmain ':!workmain/database/repositories'` |
+| R8 | `tests/test_unit_of_work.py` has `_sessions_opened()`, a context manager that records every session `DatabaseConnection.get_session` returns inside its block. `test_repository_that_fails_to_build_closes_the_scope` already monkeypatches an entry of `UnitOfWork.REPOSITORIES`. | `tests/test_unit_of_work.py` `_sessions_opened`, `TestUnitOfWork::test_repository_that_fails_to_build_closes_the_scope` |
+| R9 | `session_scope()` and `record_scope()` each open one session through `get_session()`, and `record_scope()` sets `lock_timeout` to `RECORD_LOCK_TIMEOUT`. | `workmain/database/connection.py` `DatabaseConnection.session_scope`, `DatabaseConnection.record_scope`, `RECORD_LOCK_TIMEOUT` |
+| R10 | The only document statement of the attribute is §4.3's example, lines 59–68 of `docs/standards/4-database.md`, inside the fence at 58–69. No other file in `CLAUDE.md`, `docs/standards/`, `docs/ARCHITECTURE.md`, `.claude/` or `docs/dev/` names it. | ``git grep -nE 'self\.session\|\.session\b' -- CLAUDE.md docs/standards docs/ARCHITECTURE.md .claude docs/dev`` |
+| R11 | `.github/workflows/tests.yml`'s `session-rules` job has two steps, each a `grep` that exits 1 on a match and prints `none found` otherwise. It runs on every push and pull request to `dev` and `main`, and checks out without `fetch-depth`, so `git grep` runs on the checked-out tree. GitHub runs a `run` block with `bash -e`. | `.github/workflows/tests.yml` job `session-rules` |
+| R12 | The search AC2.1 states returns nothing at `1f625e5`. On a probe file it matches `repo._session`, `myself._session`, `uow.clients._session` and `getattr(r, "_session")`, and not `self._session`, `x.db_session` or `self._session_factory`. | AC2.1's command; the probe run in the scratchpad, 20261125 |
+| R13 | The rename and Step 2's edit, simulated in a scratch worktree, pass `python3 automation/style_check.py --base origin/dev`: 0 violations. | design study F17; re-run with Step 2's edit, 20261125 |
+| R14 | Baseline at `287db27`, a bare `pytest`: 1850 passed, 0 failed, 0 skipped (1 xfailed, 3 xpassed). | design study F14 |
+
+## 3. Design rules
+
+- **DR1 — Each repository holds its session as `self._session`.** Each of the 12 classes in R1 assigns `self._session = session` in `__init__`, and every `self.session` in its module becomes `self._session`. Nothing else in a repository module changes. No repository keeps a `session` attribute, property or alias.
+- **DR2 — No code outside the repositories reads a repository's session.** The four tests in R4 get the session they need from the scope, not from a repository: from `_sessions_opened()` (R8), or from the argument a repository class was constructed with.
+- **DR3 — Each test in R4 keeps the property it checks today:**
+  - `test_repositories_built_on_its_session_while_entered`: while entered, each name in `UnitOfWork.REPOSITORIES` holds an instance of its class, every one of them was built on the one session the scope opened, and exactly one session was opened.
+  - `test_repositories_absent_after_commit_raises`: when the scope's commit raises, the exception propagates and no repository is left set.
+  - `TestRecordUnitOfWork::test_record_runs_on_record_scope`: the session a `UnitOfWork(record=True)` runs on has `lock_timeout` equal to `RECORD_LOCK_TIMEOUT`.
+  - `TestRecordUnitOfWork::test_default_runs_on_session_scope`: the session a `UnitOfWork()` runs on has the server's default `lock_timeout`, which differs from `RECORD_LOCK_TIMEOUT`.
+- **DR4 — One new test shows no repository exposes a session.** In `tests/test_unit_of_work.py` `TestUnitOfWork`, it builds each class in `UnitOfWork.REPOSITORIES` on `db_session` and asserts the instance has no `session` attribute. It does not read `_session`.
+- **DR5 — §4.3's example shows `self._session`.** Only its code block changes (Step 2).
+- **DR6 — The `session-rules` job runs AC2.1's search on every run.** The step fails when the search matches, and fails when `git grep` errors (exit above 1), so an error cannot read as `none found`. It prints `none found` otherwise. Its text is Step 3's.
+
+## 4. Steps
+
+| Step | Deliverable | Files |
+| --- | --- | --- |
+| 1 | DR1, DR2, DR3, DR4. One step, because the rename breaks the four tests in R4 (`docs/standards/1-workflow.md` §1.2). The suite is green at its commit. | the 12 repository modules in R1; `tests/test_unit_of_work.py` |
+| 2 | DR5: §4.3's example, as quoted below. | `docs/standards/4-database.md` |
+| 3 | DR6: the new `session-rules` step, as quoted below. | `.github/workflows/tests.yml` |
+| 4 | The results artifact, checking every criterion in §5 against the delivered code. | `docs/dev/results/REPOSITORY_PRIVATE_SESSION_RESULTS.md` |
+
+**Step 2.** In `docs/standards/4-database.md` §4.3, replace:
+
+```python
+  class SomethingRepository:
+      def __init__(self, session: Session) -> None:
+          self.session = session
+
+      def create(self, name: str) -> Something:
+          obj = Something(name=name)
+          self.session.add(obj)
+          self.session.flush()
+          self.session.refresh(obj)
+          return obj
+```
+
+with:
+
+```python
+  class SomethingRepository:
+      def __init__(self, session: Session) -> None:
+          self._session = session
+
+      def create(self, name: str) -> Something:
+          obj = Something(name=name)
+          self._session.add(obj)
+          self._session.flush()
+          self._session.refresh(obj)
+          return obj
+```
+
+The fence and its indentation stay as they are in the file.
+
+**Step 3.** In `.github/workflows/tests.yml`, append to the `session-rules` job's `steps`, after the `No get_session() outside connection.py` step:
+
+```yaml
+      # docs/standards/4-database.md §4.3: data access goes through a
+      # repository's methods, so nothing outside the repositories reads a
+      # repository's session: no `<name>._session` other than `self._session`,
+      # and no '_session' string, the form getattr takes. git grep exits 1
+      # when nothing matches; above 1 is an error, which fails the step.
+      - name: No read of a repository's session outside the repositories
+        run: |
+          status=0
+          git grep -nP "(?<!\bself)\._session\b|['\"]_session['\"]" -- workmain tests automation scripts ':!workmain/database/repositories' ':!scripts/baseline' || status=$?
+          if [ "$status" -eq 0 ]; then exit 1; fi
+          if [ "$status" -ne 1 ]; then echo "git grep exit $status"; exit "$status"; fi
+          echo "none found"
+```
+
+### Authorization points
+
+None.
+
+## 5. Acceptance criteria
+
+The change renames an attribute. Every entry path that reaches a repository, whether surface, service, workflow or daemon, reaches it through the same methods, so the full suite (AC4.1) is the evidence that the paths still work. No single path is named.
+
+| AC | Criterion | How it is checked |
+| --- | --- | --- |
+| AC1.1 | No repository module refers to a public `session` attribute | `grep -rnE 'self\.session\b' workmain/database/repositories/` returns no hits |
+| AC1.2 | No repository built on a session has a `session` attribute | `pytest tests/test_unit_of_work.py` passes, with DR4's test iterating every class in `UnitOfWork.REPOSITORIES` |
+| AC1.3 | §4.3's example shows a repository holding its session as `_session` | `grep -nE 'self\.session\b' docs/standards/4-database.md` returns no hits, and `grep -cE 'self\._session\b' docs/standards/4-database.md` prints `4` |
+| AC2.1 | No code outside the repositories reads another object's `_session`, by attribute or by name | ``git grep -nP "(?<!\bself)\._session\b\|['\"]_session['\"]" -- workmain tests automation scripts ':!workmain/database/repositories' ':!scripts/baseline'`` prints nothing and exits 1 |
+| AC2.2 | Every push and pull request to `dev` or `main` runs AC2.1's search | The `session-rules` job of the run on the pull request that merges this branch to `dev` shows `none found` under the step `No read of a repository's session outside the repositories` |
+| AC3.1 | The four tests in R4 check what DR3 states without reading a repository's session | `pytest tests/test_unit_of_work.py::TestUnitOfWork::test_repositories_built_on_its_session_while_entered tests/test_unit_of_work.py::TestUnitOfWork::test_repositories_absent_after_commit_raises tests/test_unit_of_work.py::TestRecordUnitOfWork` passes; AC2.1's search, run over `tests/`, prints nothing; and `grep -nE '\.session\b' tests/test_unit_of_work.py` returns no hits |
+| AC4.1 | The full suite passes | A bare `pytest` reports 0 failed |
+
+AC1.1 is the issue's first check, unchanged. AC2.1 restates the issue's second (Decision Log, 20261125). AC3.1 widens the issue's third from `TestRecordUnitOfWork` to all four tests in R4.
+
+## 6. Test plan
+
+- **Baseline before this work:** 1850 passed, 0 failed, 0 skipped (1 xfailed, 3 xpassed), from a bare `pytest` at `287db27` (R14). The results artifact re-measures at `1f625e5`.
+- **Expected after:** 1850 + *n* passed, 0 failed, 0 skipped, where *n* is the number of test items DR4's test collects (1 unparametrized, 12 if parametrized over `UnitOfWork.REPOSITORIES`). xfailed and xpassed unchanged.
+- **Test files:** `tests/test_unit_of_work.py`: the four tests in R4 rewritten to DR3, and DR4's test added to `TestUnitOfWork`. No other test file changes.
+
+## 7. Risks and rollback
+
+- **A repository branch written before this lands.** A later branch that adds a repository method from the old example writes `self.session`, which raises `AttributeError` when called. The suite catches it wherever the method is tested, and AC1.1's search finds it. No other branch touches these files today (design study F11).
+- **The new CI step is report-only**, like the rest of `tests.yml`, so a match shows on the run but does not block a merge.
+- **`git grep -P` needs git built with PCRE.** Ubuntu's git is; if a runner's is not, `git grep` errors, and DR6 makes the step fail rather than pass.
+- **Existing defect, outside scope:** the two existing `session-rules` steps treat a `grep` error (exit 2) as `none found`, because `if grep ...; then exit 1; fi` reads any non-zero exit as no match.
+- **Rollback:** each step is one commit. Reverting Step 1 restores `self.session` and the four tests together. Steps 2 and 3 revert on their own.

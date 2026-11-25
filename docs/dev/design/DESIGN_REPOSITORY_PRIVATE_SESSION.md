@@ -67,9 +67,9 @@ Issue #283 asks that no repository expose its session as a public attribute, so 
 | Q | Question | Answer |
 | --- | --- | --- |
 | Q1 | Is the property also stated as a rule in §4.3, or carried by the example alone? | Withdrawn 20261125, on Ray's challenge: §4.3's first bullet already states the rule (F10a), so a second statement duplicates it. The example is updated; no rule is added (§4). |
-| Q2 | Should criterion 2's search become a standing step in `tests.yml`'s `session-rules` job? The problem is real: after close-out nothing runs the search, so a new `repo._session` read is found only if someone greps for it (F16). The issue did not ask for a standing check. A step on this branch adds `.github/workflows/tests.yml` to a `feature/*` file set, though §2.2 lists `.github/` as `chore/*` scope. It also edits a file whose issue, #297, is still open. Recommended: add the step on this branch. It enforces this issue's own criterion, in the job where §4's other session rules already run. The alternatives are a follow-up `chore/*` issue, or no standing check. | |
+| Q2 | Should criterion 2's search become a standing step in `tests.yml`'s `session-rules` job? The problem is real: after close-out nothing runs the search, so a new `repo._session` read is found only if someone greps for it (F16). The issue did not ask for a standing check. A step on this branch adds `.github/workflows/tests.yml` to a `feature/*` file set, though §2.2 lists `.github/` as `chore/*` scope. It also edits a file whose issue, #297, is still open. Recommended: add the step on this branch. It enforces this issue's own criterion, in the job where §4's other session rules already run. The alternatives are a follow-up `chore/*` issue, or no standing check. | Answered 20261125 by Ray: add the step on this branch. |
 
 ## 6. Disposition
 
-- Promoted to:
+- Promoted to: `../specs/REPOSITORY_PRIVATE_SESSION_SPEC.md`
 - Superseded by:
