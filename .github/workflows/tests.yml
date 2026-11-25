@@ -201,3 +201,29 @@ jobs:
         run: |
           if grep -rn 'get_session()' workmain/ --include='*.py' | grep -v connection.py; then exit 1; fi
           echo "none found"
+
+      # docs/standards/4-database.md §4.3: data access goes through a
+      # repository's methods, and a repository holds its session as
+      # `_session`, as §4.3's example does. A public `self.session` hands the
+      # session to any code holding the repository. grep exits 1 when nothing
+      # matches; above 1 is an error, which fails the step.
+      - name: No public session attribute in a repository
+        run: |
+          status=0
+          grep -rnE 'self\.session\b' workmain/database/repositories/ || status=$?
+          if [ "$status" -eq 0 ]; then exit 1; fi
+          if [ "$status" -ne 1 ]; then echo "grep exit $status"; exit "$status"; fi
+          echo "none found"
+
+      # docs/standards/4-database.md §4.3: data access goes through a
+      # repository's methods, so nothing outside the repositories reads a
+      # repository's session: no `<name>._session` other than `self._session`,
+      # and no '_session' string, the form getattr takes. git grep exits 1
+      # when nothing matches; above 1 is an error, which fails the step.
+      - name: No read of a repository's session outside the repositories
+        run: |
+          status=0
+          git grep -nP "(?<!\bself)\._session\b|['\"]_session['\"]" -- workmain tests automation scripts ':!workmain/database/repositories' ':!scripts/baseline' || status=$?
+          if [ "$status" -eq 0 ]; then exit 1; fi
+          if [ "$status" -ne 1 ]; then echo "git grep exit $status"; exit "$status"; fi
+          echo "none found"
