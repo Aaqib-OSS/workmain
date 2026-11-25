@@ -4,8 +4,10 @@ Clockify status, report, push and pull as results for the clockify commands.
 A function here returns frozen dataclasses of plain values and prints and asks
 nothing. No function opens, commits or rolls back the session it is given: the
 command owns that scope and closes it before any Clockify write. A Clockify
-write and the record of it (a time entry's link, or an imported entry) use a
-record_scope() the function opens itself (docs/standards/4-database.md §4.3).
+write and the record of it (docs/standards/4-database.md §4.3) commit on their
+own: a time entry's link in a record_scope() _record_clockify_link opens
+itself, and an imported entry in the UnitOfWork(record=True) the caller hands
+apply_pull, a use case that enters it only to import.
 
 A call to Clockify that ends the whole operation and fails is raised as
 IntegrationError. A push or pull that fails for some entries returns a result
@@ -32,6 +34,7 @@ from workmain.services.exceptions import (
     ServiceValidationError,
 )
 from workmain.services.results import Page
+from workmain.services.unit_of_work import UnitOfWork
 from workmain.utils.tag_utils import parse_tags
 
 CLOCKIFY_DIR = Path(__file__).parent.parent.parent / "staging" / "clockify"
@@ -434,7 +437,25 @@ def classify(session: Session, entry: ClockifyEntry) -> PullItem:
     return PullItem(entry, "new", None, Page((), 0))
 
 
-def apply_pull(item: PullItem, answer: Optional[PullAnswer]) -> PullOutcome:
+def apply_pull(uow: UnitOfWork, item: PullItem, answer: PullAnswer | None) -> PullOutcome:
+    """
+    Apply one pulled entry: skip it, link it, or import it.
+
+    The import is the one path that enters uow: it writes a notes row with
+    source='clockify' and the time_entries row paired with it, carrying the
+    Clockify id, which commit together. A link is recorded by
+    _record_clockify_link in a record_scope() of its own, and a skip writes
+    nothing.
+
+    Args:
+        uow: A UnitOfWork(record=True) not yet entered; entered only to import
+        item: The classified Clockify entry
+        answer: The operator's answer, or None when no question was asked
+
+    Returns:
+        The outcome, as the pull report shows it. A failed import is the
+        'failed' outcome, with nothing written.
+    """
     entry = item.entry
     description = entry.description or NO_DESCRIPTION
 
@@ -473,22 +494,21 @@ def apply_pull(item: PullItem, answer: Optional[PullAnswer]) -> PullOutcome:
             )
 
     try:
-        with get_db().record_scope() as session:
+        with uow:
             note = notes_service.create_note(
-                session, content=description, tags=tags, source="clockify"
+                uow, content=description, tags=tags, source="clockify"
             )
             created = time_entry_service.create_paired_time_entry(
-                session,
+                uow,
                 note,
                 duration_hours=entry.duration_hours,
                 entry_date=entry.entry_date,
                 entry_time=entry.entry_time,
                 clockify_id=entry.clockify_id,
             )
-            entry_id = created.id
+            return outcome("imported", created.id, warnings=warnings)
     except Exception as e:
         return outcome("failed", detail=str(e), warnings=warnings)
-    return outcome("imported", entry_id, warnings=warnings)
 
 
 def pull_result(

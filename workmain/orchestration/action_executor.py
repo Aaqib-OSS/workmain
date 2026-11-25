@@ -34,9 +34,11 @@ class ActionExecutor:
     """
     Executes confirmed action dicts against the database.
 
-    Each execute() call runs its action in a session_scope() of its own,
-    which commits when the action returns and rolls back when it raises.
-    The caller opens no scope around execute().
+    Each execute() call commits or rolls back on its own. An action that
+    writes a note or a time entry calls its use case, which enters a
+    UnitOfWork of its own; every other action runs in a session_scope() that
+    execute() opens for it, which commits when the action returns and rolls
+    back when it raises. The caller opens no scope around execute().
     """
 
     # ------------------------------------------------------------------
@@ -57,9 +59,12 @@ class ActionExecutor:
             ActionExecutorError: On unknown action_type.
         """
         action_type = action.get("action", "")
-        dispatch = {
+        # Each of these calls a use case, which builds its own unit of work.
+        use_case_dispatch = {
             "create_time_entry":    self._execute_create_time_entry,
             "create_note":          self._execute_create_note,
+        }
+        dispatch = {
             "update_task":          self._execute_update_task,
             "defer_task":           self._execute_defer_task,
             "confirm_report":       self._execute_confirm_report,
@@ -67,11 +72,14 @@ class ActionExecutor:
             "deduplicate_task":     self._execute_deduplicate_task,
             "write_correction_note": self._execute_write_correction_note,
         }
+        use_case_handler = use_case_dispatch.get(action_type)
         handler = dispatch.get(action_type)
-        if handler is None:
+        if use_case_handler is None and handler is None:
             raise ActionExecutorError(f"Unknown action_type: '{action_type}'")
 
         try:
+            if use_case_handler is not None:
+                return use_case_handler(action)
             with get_db().session_scope() as session:
                 return handler(session, action)
         except ActionExecutorError:
@@ -84,13 +92,12 @@ class ActionExecutor:
     # Action handlers
     # ------------------------------------------------------------------
 
-    def _execute_create_time_entry(self, session: Session, action: dict) -> ActionResult:
-        from workmain.database.repositories.time_entries_repo import (
-            TimeEntriesRepository,
-        )
+    def _execute_create_time_entry(self, action: dict) -> ActionResult:
         from workmain.services import time_entry_service
         from workmain.services.exceptions import InvalidTagsError, MissingStartTimeError
+        from workmain.services.unit_of_work import UnitOfWork
         from workmain.utils.tag_utils import get_valid_full_names
+        from workmain.utils.time_parser import parse_time
 
         description = action.get("description", "")
         duration_minutes = int(action.get("duration_minutes", 0))
@@ -100,19 +107,19 @@ class ActionExecutor:
         start_time_str = action.get("start_time")
         if start_time_str:
             try:
-                entry_time = TimeEntriesRepository(session).parse_time(str(start_time_str))
+                entry_time = parse_time(str(start_time_str))
             except ValueError:
                 logger.warning("Invalid start_time format '%s', treating as not provided", start_time_str)
                 entry_time = None
 
-        # create_time_entry has no `tags` field in the schema (v1.6) — always None today.
+        # This action's schema has no `tags` field (v1.6), so it is always None today.
         # Pass it anyway so no further change is needed if a tags field is added later.
         # With tags=None the service applies the ["internal-only"] default.
         tags = action.get("tags")
 
         try:
-            entry = time_entry_service.create_time_entry(
-                session,
+            entry = time_entry_service.log_task_time(
+                UnitOfWork(),
                 description=description,
                 duration_hours=duration_hours,
                 entry_time=entry_time,
@@ -138,19 +145,20 @@ class ActionExecutor:
         return ActionResult(
             success=True,
             message=f"✓ Logged {hrs_str} for '{description}' at {entry_time.strftime('%H:%M')}.",
-            entity_id=entry.id,
+            entity_id=entry.entry_id,
         )
 
-    def _execute_create_note(self, session: Session, action: dict) -> ActionResult:
+    def _execute_create_note(self, action: dict) -> ActionResult:
         from workmain.services import notes_service
         from workmain.services.exceptions import InvalidTagsError
+        from workmain.services.unit_of_work import UnitOfWork
         from workmain.utils.tag_utils import get_valid_full_names
 
         content = action.get("content", "")
         tags = action.get("tags")  # full names per schema, or None
 
         try:
-            note = notes_service.create_note(session, content=content, tags=tags)
+            note = notes_service.add_note(UnitOfWork(), content=content, tags=tags)
         except InvalidTagsError as e:
             return ActionResult(
                 success=False,

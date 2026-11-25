@@ -13,7 +13,8 @@ from click.testing import CliRunner
 
 from workmain.cli.commands.meetings import meetings
 from workmain.database.models import Meeting, TimeEntry
-from workmain.services import notes_service, time_entry_service
+from workmain.database.repositories.notes_repo import NotesRepository
+from workmain.database.repositories.time_entries_repo import TimeEntriesRepository
 
 
 def test_reschedule_keeps_the_approved_updates_when_a_later_prompt_is_cancelled(db_session):
@@ -27,16 +28,15 @@ def test_reschedule_keeps_the_approved_updates_when_a_later_prompt_is_cancelled(
     db_session.commit()
     entry_ids = []
     for index in range(2):
-        note = notes_service.create_note(
-            db_session,
+        note = NotesRepository(db_session).create(
             content=f"Sentinel reschedule entry {index} 2099-96",
             tags=['internal-only'],
             source='meeting',
             meeting_id=meeting.id,
         )
-        entry = time_entry_service.create_paired_time_entry(
-            db_session,
-            note,
+        entry = TimeEntriesRepository(db_session).create(
+            note_id=note.id,
+            meeting_id=meeting.id,
             duration_hours=0.5,
             entry_date=date(2099, 6, 1),
             entry_time=time(9, 0),

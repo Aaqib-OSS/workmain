@@ -1,53 +1,37 @@
 """
-CLI-level coverage for 'workmain meetings condense' — Item 69 Gate 5's
-convergence of surface #9 onto notes_service.create_note() +
-time_entry_service.create_paired_time_entry(), replacing its former
-hard-coded tags=['both'] with note_condenser's computed resolved_tags
-(Design Rule 8), and preserving the existing_today create-or-relink branch
-verbatim (Design Rule 10).
+CLI-level coverage for 'workmain meetings condense'.
 
-Item 69's spec named this coverage tests/test_meetings.py, which does not
-exist in this repo; this file follows the established per-subcommand test
-file convention already used for meetings.py (test_meetings_edit.py,
-test_meetings_track.py — this item's own Gate 4 precedent).
-
-Mocks ProviderManager.generate — a true singleton, so patching the class
-method affects the in-process CLI-invoked session too — to avoid a live AI
-call and control the condensed summary content deterministically.
+Each test runs the command through CliRunner against the test's database and
+asserts the exit code, the rows the path writes or leaves alone, and on a
+refusal the Error line on stderr. Nothing is patched between the command and
+meetings_service.record_condensation; UnitOfWork refuses to enter inside an
+open session_scope(), so a passing test also shows the use case ran with the
+command's scope closed. The provider's reply comes from
+tests/mocks/stub_providers.py, through
+provider_manager._provider_manager_instance.
 """
 
-import unittest
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import patch
 
-from click.testing import CliRunner
+from click.testing import CliRunner, Result
+from sqlalchemy.orm import Session
 
-from workmain.ai.base_provider import FinishStatus, GenerationResponse, ProviderType
+from tests.mocks.stub_providers import StubProvider, complete, cut_off, stubbed_manager
+from workmain.ai import provider_manager as pm_module
+from workmain.ai.base_provider import ProviderType
 from workmain.cli.commands.meetings import meetings
-from workmain.database.models import Meeting, Note, TimeEntry
+from workmain.database.models import AiCost, Client, Meeting, Note, Project, TimeEntry
 from workmain.database.repositories.notes_repo import NotesRepository
+from workmain.database.repositories.time_entries_repo import TimeEntriesRepository
 
 _MEETING_DATE = datetime(2099, 6, 4, 9, 0)
 _SENTINEL_SUMMARY_V1 = "Sentinel condensed summary 2099-07-28 v1"
 _SENTINEL_SUMMARY_V2 = "Sentinel condensed summary 2099-07-28 v2"
 
 
-def _fake_response(content: str) -> GenerationResponse:
-    return GenerationResponse(
-        content=content,
-        provider=ProviderType.CLAUDE,
-        model="test-model",
-        tokens_used=10,
-        prompt_tokens=5,
-        completion_tokens=5,
-        thinking_tokens=None,
-        cost=0.0,
-        finish=FinishStatus.COMPLETE,
-        finish_reason="end_turn",
-    )
-
-
-def _seed_meeting(session, title: str) -> Meeting:
+def _seed_meeting(session: Session, title: str) -> Meeting:
     m = Meeting(
         title=title,
         start_time=_MEETING_DATE,
@@ -60,182 +44,148 @@ def _seed_meeting(session, title: str) -> Meeting:
     return m
 
 
-class TestMeetingsCondenseUsesComputedTags(unittest.TestCase):
-    """Surface #9 no longer hard-codes tags=['both'] on the condensed note —
-    it now uses note_condenser's _compute_condensed_tags() classifier output
-    (Item 69 Gate 5, Design Rule 8)."""
+def _seed_note(session: Session, meeting: Meeting, content: str, tags: list[str]) -> Note:
+    return NotesRepository(session).create(
+        content=content, tags=tags, meeting_id=meeting.id, source="meeting",
+        created_at=_MEETING_DATE,
+    )
 
-    def setUp(self):
-        from dotenv import load_dotenv
-        load_dotenv()
-        from workmain.database.connection import get_db
-        db = get_db()
-        self.session = db.get_session()
-        self._seeded_meeting_ids = []
-        self.runner = CliRunner()
 
-    def tearDown(self):
-        for mid in self._seeded_meeting_ids:
-            notes = self.session.query(Note).filter(Note.meeting_id == mid).all()
-            note_ids = [n.id for n in notes]
-            if note_ids:
-                self.session.query(TimeEntry).filter(
-                    TimeEntry.note_id.in_(note_ids)
-                ).delete(synchronize_session=False)
-                self.session.query(Note).filter(
-                    Note.id.in_(note_ids)
-                ).delete(synchronize_session=False)
-            self.session.query(Meeting).filter(Meeting.id == mid).delete()
-        self.session.commit()
-        self.session.close()
+def _condense(tmp_path: Path, meeting_id: int, stubs: dict[str, StubProvider]) -> Result:
+    manager = stubbed_manager(tmp_path, stubs, {"note_condensation": ("gemini", "claude")})
+    with patch.object(pm_module, "_provider_manager_instance", manager):
+        return CliRunner(mix_stderr=False).invoke(meetings, ["condense", str(meeting_id)])
 
-    @patch("workmain.ai.provider_manager.ProviderManager.generate")
-    def test_meetings_condense_uses_computed_tags_not_both(self, mock_generate):
-        mock_generate.return_value = (_fake_response(_SENTINEL_SUMMARY_V1), None)
 
-        meeting = _seed_meeting(self.session, "Sentinel Meetings Condense Mixed 2099")
-        self._seeded_meeting_ids.append(meeting.id)
+def _answer(summary: str) -> dict[str, StubProvider]:
+    return {"gemini": complete(ProviderType.GEMINI, content=summary)}
 
-        # Genuinely mixed-audience source notes: internal-only + client-report
-        # -> conservative collapse to ['internal-only'] (Ray, 20260728), never
-        # the old hard-coded ['both'].
-        NotesRepository(self.session).create(
-            content="Internal detail", tags=["internal-only"],
-            meeting_id=meeting.id, source="meeting", created_at=_MEETING_DATE,
-        )
-        NotesRepository(self.session).create(
-            content="Client-visible detail", tags=["client-report"],
-            meeting_id=meeting.id, source="meeting", created_at=_MEETING_DATE,
-        )
 
-        result = self.runner.invoke(meetings, ["condense", str(meeting.id)])
-        self.assertEqual(result.exit_code, 0, result.output)
+def _condensed(session: Session, meeting_id: int) -> list[Note]:
+    return session.query(Note).filter(
+        Note.meeting_id == meeting_id, Note.source == "condensed"
+    ).order_by(Note.id).all()
 
-        condensed_note = (
-            self.session.query(Note)
-            .filter(Note.meeting_id == meeting.id, Note.source == "condensed")
-            .first()
-        )
-        self.assertIsNotNone(condensed_note)
-        self.assertEqual(condensed_note.tags, ["internal-only"])
-        self.assertNotEqual(condensed_note.tags, ["both"])
 
-    @patch("workmain.ai.provider_manager.ProviderManager.generate")
-    def test_condense_existing_today_relinks_not_recreates(self, mock_generate):
-        mock_generate.side_effect = [
-            (_fake_response(_SENTINEL_SUMMARY_V1), None),
-            (_fake_response(_SENTINEL_SUMMARY_V2), None),
-        ]
+def _entries(session: Session, meeting_id: int) -> list[TimeEntry]:
+    return session.query(TimeEntry).filter(TimeEntry.meeting_id == meeting_id).all()
 
-        meeting = _seed_meeting(self.session, "Sentinel Meetings Condense Relink 2099")
-        self._seeded_meeting_ids.append(meeting.id)
-        NotesRepository(self.session).create(
-            content="Both-tagged detail", tags=["both"],
-            meeting_id=meeting.id, source="meeting", created_at=_MEETING_DATE,
+
+class TestMeetingsCondense:
+    """meetings condense records the summary, its note and its entry through record_condensation."""
+
+    def test_condense_writes_the_summary_note_and_entry_with_the_computed_tags(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        meeting = _seed_meeting(db_session, "Sentinel Meetings Condense Mixed 2099")
+        # Mixed-audience source notes collapse to ['internal-only'] (Ray, 20260728)
+        _seed_note(db_session, meeting, "Internal detail", ["internal-only"])
+        _seed_note(db_session, meeting, "Client-visible detail", ["client-report"])
+        db_session.commit()
+
+        result = _condense(tmp_path, meeting.id, _answer(_SENTINEL_SUMMARY_V1))
+
+        assert result.exit_code == 0, result.output
+        db_session.expire_all()
+        assert db_session.get(Meeting, meeting.id).condensed_summary == _SENTINEL_SUMMARY_V1
+        (condensed,) = _condensed(db_session, meeting.id)
+        assert (condensed.content, condensed.tags) == (_SENTINEL_SUMMARY_V1, ["internal-only"])
+        (entry,) = _entries(db_session, meeting.id)
+        assert (entry.note_id, entry.entry_date, entry.category) == (
+            condensed.id, _MEETING_DATE.date(), "meeting",
         )
 
-        result1 = self.runner.invoke(meetings, ["condense", str(meeting.id)])
-        self.assertEqual(result1.exit_code, 0, result1.output)
+    def test_a_second_condense_repoints_the_entry_rather_than_adding_one(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        meeting = _seed_meeting(db_session, "Sentinel Meetings Condense Relink 2099")
+        _seed_note(db_session, meeting, "Both-tagged detail", ["both"])
+        db_session.commit()
 
-        entries_after_first = (
-            self.session.query(TimeEntry)
-            .join(Note, TimeEntry.note_id == Note.id)
-            .filter(Note.meeting_id == meeting.id)
-            .all()
+        (tmp_path / "v1").mkdir()
+        (tmp_path / "v2").mkdir()
+
+        first = _condense(tmp_path / "v1", meeting.id, _answer(_SENTINEL_SUMMARY_V1))
+        assert first.exit_code == 0, first.output
+        db_session.expire_all()
+        (first_entry,) = _entries(db_session, meeting.id)
+
+        second = _condense(tmp_path / "v2", meeting.id, _answer(_SENTINEL_SUMMARY_V2))
+
+        assert second.exit_code == 0, second.output
+        db_session.expire_all()
+        (entry,) = _entries(db_session, meeting.id)
+        latest = _condensed(db_session, meeting.id)[-1]
+        assert (entry.id, entry.note_id, latest.content) == (
+            first_entry.id, latest.id, _SENTINEL_SUMMARY_V2,
         )
-        self.assertEqual(len(entries_after_first), 1)
-        first_entry_id = entries_after_first[0].id
 
-        result2 = self.runner.invoke(meetings, ["condense", str(meeting.id)])
-        self.assertEqual(result2.exit_code, 0, result2.output)
-
-        # The CLI invocation commits via its own separate session; expire
-        # this session's identity map so the requery below reflects that
-        # commit instead of returning the already-loaded (now-stale) object.
-        self.session.expire_all()
-
-        entries_after_second = (
-            self.session.query(TimeEntry)
-            .join(Note, TimeEntry.note_id == Note.id)
-            .filter(Note.meeting_id == meeting.id)
-            .all()
+    def test_a_failed_link_writes_no_summary_and_keeps_the_cost_row(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        meeting = _seed_meeting(db_session, "Sentinel Meetings Condense Link Failure 2099")
+        _seed_note(db_session, meeting, "Sentinel condense source", ["internal-only"])
+        # The meeting's entry on its date carries another client's project, so
+        # repointing it at the condensed note fails in the repository.
+        owner = Client(name="Sentinel Condense Project Owner 2099")
+        other = Client(name="Sentinel Condense Entry Client 2099")
+        db_session.add_all([owner, other])
+        db_session.flush()
+        project = Project(name="Sentinel Condense Project 2099", client_id=owner.id)
+        db_session.add(project)
+        db_session.flush()
+        detail = _seed_note(db_session, meeting, "Sentinel entry detail", ["internal-only"])
+        entry = TimeEntriesRepository(db_session).create(
+            note_id=detail.id, duration_hours=0.5, entry_date=_MEETING_DATE.date(),
+            entry_time=_MEETING_DATE.time(), meeting_id=meeting.id, client_id=other.id,
         )
-        # Design Rule 10: the existing_today branch relinks, it never spawns
-        # a second TimeEntry for the same meeting occurrence.
-        self.assertEqual(len(entries_after_second), 1)
-        self.assertEqual(entries_after_second[0].id, first_entry_id)
+        entry.project_id = project.id
+        db_session.commit()
 
-        second_note = (
-            self.session.query(Note)
-            .filter(Note.meeting_id == meeting.id, Note.content == _SENTINEL_SUMMARY_V2)
-            .first()
-        )
-        self.assertIsNotNone(second_note)
-        self.assertEqual(entries_after_second[0].note_id, second_note.id)
+        result = _condense(tmp_path, meeting.id, _answer(_SENTINEL_SUMMARY_V1))
 
+        assert result.exit_code == 1, result.output
+        db_session.expire_all()
+        assert db_session.get(Meeting, meeting.id).condensed_summary is None
+        assert _condensed(db_session, meeting.id) == []
+        assert db_session.get(TimeEntry, entry.id).note_id == detail.id
+        assert db_session.query(AiCost).filter(
+            AiCost.meeting_id == meeting.id, AiCost.interaction_type == "note_condensation",
+        ).count() == 1
 
-class TestMeetingsCondenseRefusal(unittest.TestCase):
-    """Issue #148 — a refused condensation exits non-zero with its cause on
-    stderr; a recovered fallback is reported on stderr (DR9, DR10)."""
+    def test_a_refused_condensation_exits_3_with_its_cause_and_writes_nothing(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        meeting = _seed_meeting(db_session, "Sentinel Meetings Condense Refusal 2099")
+        _seed_note(db_session, meeting, "Discussed refusal", ["client-report"])
+        db_session.commit()
 
-    def setUp(self):
-        import tempfile
-
-        from dotenv import load_dotenv
-        load_dotenv()
-        from workmain.database.connection import get_db
-        self.session = get_db().get_session()
-        self._tmp = tempfile.TemporaryDirectory()
-        self._meeting_ids = []
-
-    def tearDown(self):
-        for mid in self._meeting_ids:
-            note_ids = [n.id for n in self.session.query(Note).filter(Note.meeting_id == mid)]
-            if note_ids:
-                self.session.query(TimeEntry).filter(
-                    TimeEntry.note_id.in_(note_ids)
-                ).delete(synchronize_session=False)
-                self.session.query(Note).filter(
-                    Note.id.in_(note_ids)
-                ).delete(synchronize_session=False)
-            self.session.query(Meeting).filter(Meeting.id == mid).delete()
-        self.session.commit()
-        self.session.close()
-        self._tmp.cleanup()
-
-    def _invoke(self, stubs):
-        from pathlib import Path
-
-        from tests.mocks.stub_providers import stubbed_manager
-        from workmain.ai import provider_manager as pm_module
-
-        meeting = _seed_meeting(self.session, "Sentinel Meetings Condense Refusal 2099")
-        self._meeting_ids.append(meeting.id)
-        NotesRepository(self.session).create(
-            content="Discussed refusal", tags=["client-report"],
-            meeting_id=meeting.id, source="meeting", created_at=_MEETING_DATE,
-        )
-        manager = stubbed_manager(Path(self._tmp.name), stubs, {"note_condensation": ("gemini", "claude")})
-        with patch.object(pm_module, "_provider_manager_instance", manager):
-            return CliRunner(mix_stderr=False).invoke(meetings, ["condense", str(meeting.id)])
-
-    def test_refused_condensation_exits_3_with_cause_on_stderr(self):
-        from tests.mocks.stub_providers import cut_off
-        result = self._invoke({
+        result = _condense(tmp_path, meeting.id, {
             "gemini": cut_off(ProviderType.GEMINI),
             "claude": cut_off(ProviderType.CLAUDE),
         })
-        self.assertEqual(result.exit_code, 3, result.output)
-        self.assertIn("note_condensation", result.stderr)
-        self.assertIn("4000", result.stderr)
-        self.assertEqual(len(result.stderr.strip().splitlines()), 1)
 
-    def test_fallback_condensation_warns_on_stderr(self):
-        from tests.mocks.stub_providers import complete, cut_off
-        result = self._invoke({
+        assert result.exit_code == 3, result.output
+        assert "note_condensation" in result.stderr
+        assert "4000" in result.stderr
+        assert len(result.stderr.strip().splitlines()) == 1
+        db_session.expire_all()
+        assert db_session.get(Meeting, meeting.id).condensed_summary is None
+        assert _condensed(db_session, meeting.id) == []
+
+    def test_a_fallback_reply_is_recorded_as_the_summary(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        meeting = _seed_meeting(db_session, "Sentinel Meetings Condense Fallback 2099")
+        _seed_note(db_session, meeting, "Discussed fallback", ["client-report"])
+        db_session.commit()
+
+        result = _condense(tmp_path, meeting.id, {
             "gemini": cut_off(ProviderType.GEMINI),
             "claude": complete(ProviderType.CLAUDE, content="Recovered summary"),
         })
-        self.assertEqual(result.exit_code, 0, result.output)
-        self.assertIn("⚠", result.stderr)
-        self.assertIn("claude answered note_condensation because gemini failed", result.stderr)
+
+        assert result.exit_code == 0, result.output
+        db_session.expire_all()
+        assert db_session.get(Meeting, meeting.id).condensed_summary == "Recovered summary"
+        assert [n.content for n in _condensed(db_session, meeting.id)] == ["Recovered summary"]

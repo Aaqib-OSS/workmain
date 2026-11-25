@@ -27,7 +27,13 @@ from workmain.cli.params import DateParamType, MonthParamType
 from workmain.database.connection import get_db
 from workmain.database.repositories.meetings_repo import MeetingsRepository
 from workmain.database.repositories.notes_repo import NotesRepository
-from workmain.services import ai_cost_service, notes_service, time_entry_service
+from workmain.services import (
+    ai_cost_service,
+    meetings_service,
+    notes_service,
+    time_entry_service,
+)
+from workmain.services.unit_of_work import UnitOfWork
 from workmain.utils.ai_arguments import require_provider
 from workmain.utils.cost_display import BY_PROVIDER, detail_view, totals_fields
 from workmain.utils.date_utils import resolve_date_window
@@ -261,6 +267,7 @@ def notes_add(text: Optional[str], tags: Optional[str], meeting: Optional[str],
       workmain notes add -m  (interactive picker)
     """
     db = get_db()
+    meeting_title = meeting_start = meeting_end = None
     with db.session_scope() as session:
         meetings_repo = MeetingsRepository(session)
 
@@ -316,60 +323,61 @@ def notes_add(text: Optional[str], tags: Optional[str], meeting: Optional[str],
             tag_str = " ".join(f"#{t}" for t in corrected)
             _, all_tags, _ = parse_tags(tag_str, apply_default=True)
 
-        # Create note via service (handles client_id stamping and tag validation)
-        note = notes_service.create_note(
-            session,
-            content=clean_text,
-            tags=all_tags,
-            source=source,
-            meeting_id=meeting_id,
-            project_id=project,
-        )
+        # The note is written after this scope closes, so read the meeting's
+        # values here.
+        if meeting_id is not None:
+            meeting_obj = meetings_repo.get_by_id(meeting_id)
+            if meeting_obj is not None:
+                meeting_title = meeting_obj.title
+                meeting_start = meeting_obj.start_time
+                meeting_end = meeting_obj.end_time
 
-        # Success message
-        click.echo(f"✓ Note added (ID: {note.id})")
-        click.echo(f"  Tags: {note.display_tags}")
-        if note.meeting:
-            click.echo(f"  Meeting: [#{note.meeting.id}] {note.meeting.title}")
+    # Create note via service (handles client_id stamping and tag validation)
+    note = notes_service.add_note(
+        UnitOfWork(),
+        content=clean_text,
+        tags=all_tags,
+        source=source,
+        meeting_id=meeting_id,
+        project_id=project,
+    )
 
-            # Prompt to create time entry for the meeting
-            meeting_duration = (
-                note.meeting.end_time - note.meeting.start_time
-            ).total_seconds() / 3600
+    # Success message
+    click.echo(f"✓ Note added (ID: {note.id})")
+    click.echo(f"  Tags: {note.display_tags}")
+    if meeting_title is not None:
+        click.echo(f"  Meeting: [#{meeting_id}] {meeting_title}")
 
-            session.commit()
-            if click.confirm(
-                f"\nCreate time entry for this meeting ({meeting_duration:.2f}h)?",
-                default=True
-            ):
-                time_description = click.prompt(
-                    "Description",
-                    default=f"Meeting: {note.meeting.title}"
-                )
+        # Prompt to create time entry for the meeting
+        meeting_duration = (meeting_end - meeting_start).total_seconds() / 3600
 
-                click.echo("Add tags inline: #ilo #cf (blank for internal-only)")
-                tag_input = click.prompt("Tags", default="", show_default=False)
-                _, te_tags, te_invalid = parse_tags(tag_input, apply_default=True)
-                if te_invalid:
-                    click.echo(f"  ⚠️  Invalid tags ignored: {', '.join(te_invalid)}")
+        if click.confirm(
+            f"\nCreate time entry for this meeting ({meeting_duration:.2f}h)?",
+            default=True
+        ):
+            time_description = click.prompt(
+                "Description",
+                default=f"Meeting: {meeting_title}"
+            )
 
-                te_note = notes_service.create_note(
-                    session,
-                    content=time_description,
-                    tags=te_tags,
-                    source='meeting',
-                    meeting_id=note.meeting.id,
-                )
-                time_entry_service.create_paired_time_entry(
-                    session,
-                    te_note,
-                    duration_hours=meeting_duration,
-                    entry_date=note.meeting.start_time.date(),
-                    entry_time=note.meeting.start_time.time(),
-                    category='meeting',
-                )
+            click.echo("Add tags inline: #ilo #cf (blank for internal-only)")
+            tag_input = click.prompt("Tags", default="", show_default=False)
+            _, te_tags, te_invalid = parse_tags(tag_input, apply_default=True)
+            if te_invalid:
+                click.echo(f"  ⚠️  Invalid tags ignored: {', '.join(te_invalid)}")
 
-                click.echo(f"✓ Time entry created: {meeting_duration:.2f}h - {time_description}")
+            time_entry_service.log_meeting_time(
+                UnitOfWork(),
+                meeting_id,
+                content=time_description,
+                tags=te_tags,
+                duration_hours=meeting_duration,
+                entry_date=meeting_start.date(),
+                entry_time=meeting_start.time(),
+                category='meeting',
+            )
+
+            click.echo(f"✓ Time entry created: {meeting_duration:.2f}h - {time_description}")
 
 
 @notes.command('edit')
@@ -563,138 +571,133 @@ def notes_log(meeting: str):
 
                     meeting_obj, _ = matches[choice - 1]
 
-            # Get bulk input
-            click.echo(f"\nAdding notes to meeting: {meeting_obj.title}")
+            meeting_id = meeting_obj.id
+            meeting_title = meeting_obj.title
+
+        # Get bulk input
+        click.echo(f"\nAdding notes to meeting: {meeting_title}")
+        click.echo()
+
+        # Check for $EDITOR environment variable
+        editor = os.environ.get('EDITOR')
+        notes_text = None
+
+        if editor:
+            click.echo(f"Opening editor: {editor}")
+            click.echo("Enter notes (one per line), save and close to continue")
             click.echo()
 
-            # Check for $EDITOR environment variable
-            editor = os.environ.get('EDITOR')
-            notes_text = None
+            with tempfile.NamedTemporaryFile(mode='w+', suffix='.txt', delete=False) as tf:
+                temp_path = tf.name
+                tf.write("# Enter notes below (one per line)\n")
+                tf.write("# Lines starting with # are ignored\n")
+                tf.write("# Add tags with #ilo #cf etc.\n")
+                tf.write("#\n")
 
-            if editor:
-                click.echo(f"Opening editor: {editor}")
-                click.echo("Enter notes (one per line), save and close to continue")
-                click.echo()
+            try:
+                subprocess.call([editor, temp_path])
 
-                with tempfile.NamedTemporaryFile(mode='w+', suffix='.txt', delete=False) as tf:
-                    temp_path = tf.name
-                    tf.write("# Enter notes below (one per line)\n")
-                    tf.write("# Lines starting with # are ignored\n")
-                    tf.write("# Add tags with #ilo #cf etc.\n")
-                    tf.write("#\n")
+                with open(temp_path, 'r') as f:
+                    lines = f.readlines()
+
+                notes_text = '\n'.join([
+                    line.strip()
+                    for line in lines
+                    if line.strip() and not line.strip().startswith('#')
+                ])
+
+            finally:
+                os.unlink(temp_path)
+
+        else:
+            click.echo("Enter notes (one per line)")
+            click.echo("Add tags inline: Fixed bug #ilo #cf")
+            click.echo("Press Enter on blank line to finish")
+            click.echo()
+
+            lines = []
+            while True:
+                line = click.prompt("", default="", show_default=False)
+                if not line.strip():
+                    break
+                lines.append(line)
+
+            notes_text = '\n'.join(lines)
+
+        # Parse and create notes (if any were entered)
+        note_lines = []
+        if notes_text and notes_text.strip():
+            note_lines = [line.strip() for line in notes_text.split('\n') if line.strip()]
+
+        created_count = 0
+        if note_lines:
+            click.echo()
+            click.echo(f"Creating {len(note_lines)} note(s)...")
+            click.echo()
+
+            for line in note_lines:
+                clean_text, note_tags, invalid = parse_tags(line, apply_default=True)
+
+                if invalid:
+                    click.echo(f"  ⚠️  Invalid tags in: {line[:50]}...")
+                    click.echo(f"      Ignored: {', '.join(invalid)}")
 
                 try:
-                    subprocess.call([editor, temp_path])
-
-                    with open(temp_path, 'r') as f:
-                        lines = f.readlines()
-
-                    notes_text = '\n'.join([
-                        line.strip()
-                        for line in lines
-                        if line.strip() and not line.strip().startswith('#')
-                    ])
-
-                finally:
-                    os.unlink(temp_path)
-
-            else:
-                click.echo("Enter notes (one per line)")
-                click.echo("Add tags inline: Fixed bug #ilo #cf")
-                click.echo("Press Enter on blank line to finish")
-                click.echo()
-
-                lines = []
-                while True:
-                    line = click.prompt("", default="", show_default=False)
-                    if not line.strip():
-                        break
-                    lines.append(line)
-
-                notes_text = '\n'.join(lines)
-
-            # Parse and create notes (if any were entered)
-            note_lines = []
-            if notes_text and notes_text.strip():
-                note_lines = [line.strip() for line in notes_text.split('\n') if line.strip()]
-
-            created_count = 0
-            if note_lines:
-                click.echo()
-                click.echo(f"Creating {len(note_lines)} note(s)...")
-                click.echo()
-
-                for line in note_lines:
-                    clean_text, note_tags, invalid = parse_tags(line, apply_default=True)
-
-                    if invalid:
-                        click.echo(f"  ⚠️  Invalid tags in: {line[:50]}...")
-                        click.echo(f"      Ignored: {', '.join(invalid)}")
-
-                    try:
-                        with session.begin_nested():
-                            note = notes_service.create_note(
-                                session,
-                                content=clean_text,
-                                tags=note_tags or ['internal-only'],
-                                source='meeting',
-                                meeting_id=meeting_obj.id,
-                            )
-                        created_count += 1
-                        click.echo(f"  ✓ {note.display_tags} {clean_text[:60]}")
-
-                    except Exception as e:
-                        click.echo(f"  ✗ Failed: {line[:50]}... ({e})")
-
-                click.echo()
-                click.echo(f"✓ Created {created_count} of {len(note_lines)} note(s)")
-                click.echo()
-            else:
-                click.echo("\nNo notes entered.")
-                click.echo()
-
-            # Prompt to condense notes and create time entry
-            # When no notes or only #ifo notes, condensation produces "Attended <meeting>"
-            session.commit()
-            if click.confirm("Condense notes and create time entry?", default=True):
-                try:
-                    with session.begin_nested():
-                        from workmain.ai.note_condenser import get_note_condenser
-                        from workmain.ai.provider_manager import get_provider_manager
-                        _rc = get_provider_manager().get_report_config('note_condensation')
-                        _provider_display = _rc.primary_provider.value.capitalize() if _rc else 'AI'
-                        click.echo(f"\nSending to {_provider_display}...")
-                        condenser = get_note_condenser(session)
-                        summary, resolved_tags, notice, _ = condenser.condense_meeting(meeting_obj)
-                        click.echo(f"✓ Condensed: \"{summary}\"")
-                        if notice:
-                            click.echo(f"⚠ {notice.message}")
-
-                        # Create note from condensed summary
-                        condensed_note = notes_service.create_note(
-                            session,
-                            content=summary,
-                            tags=resolved_tags,
-                            meeting_id=meeting_obj.id,
-                            source='condensed',
-                        )
-                        click.echo(f"✓ Note created (ID: {condensed_note.id})")
-
-                        entry, created = time_entry_service.link_condensed_note(
-                            session, meeting_obj, condensed_note,
-                        )
-                        if created:
-                            click.echo(f"✓ Time entry created (ID: {entry.id}, {entry.duration_hours:.2f}h)")
-                        else:
-                            click.echo(f"✓ Time entry (ID: {entry.id}) linked to condensed note")
-
-                        click.echo()
+                    note = notes_service.add_note(
+                        UnitOfWork(),
+                        content=clean_text,
+                        tags=note_tags or ['internal-only'],
+                        source='meeting',
+                        meeting_id=meeting_id,
+                    )
+                    created_count += 1
+                    click.echo(f"  ✓ {note.display_tags} {clean_text[:60]}")
 
                 except Exception as e:
-                    click.echo(f"\n✗ Condensation failed: {e}")
-                    click.echo("You can condense later with:")
-                    click.echo(f"  workmain meetings condense \"{meeting_obj.title}\"")
-                    click.echo()
+                    click.echo(f"  ✗ Failed: {line[:50]}... ({e})")
+
+            click.echo()
+            click.echo(f"✓ Created {created_count} of {len(note_lines)} note(s)")
+            click.echo()
+        else:
+            click.echo("\nNo notes entered.")
+            click.echo()
+
+        # Prompt to condense notes and create time entry
+        # When no notes or only #ifo notes, condensation produces "Attended <meeting>"
+        if click.confirm("Condense notes and create time entry?", default=True):
+            try:
+                from workmain.ai.note_condenser import get_note_condenser
+                from workmain.ai.provider_manager import get_provider_manager
+                _rc = get_provider_manager().get_report_config('note_condensation')
+                _provider_display = _rc.primary_provider.value.capitalize() if _rc else 'AI'
+                click.echo(f"\nSending to {_provider_display}...")
+                with db.session_scope() as session:
+                    condenser = get_note_condenser(session)
+                    summary, resolved_tags, notice, _ = condenser.condense_meeting(
+                        MeetingsRepository(session).get_by_id(meeting_id)
+                    )
+                click.echo(f"✓ Condensed: \"{summary}\"")
+                if notice:
+                    click.echo(f"⚠ {notice.message}")
+
+                # Record the summary, its note and its time entry together
+                condensed = meetings_service.record_condensation(
+                    UnitOfWork(), meeting_id, summary, resolved_tags,
+                )
+                click.echo(f"✓ Note created (ID: {condensed.note_id})")
+                if condensed.created:
+                    click.echo(f"✓ Time entry created (ID: {condensed.entry_id}, {condensed.duration_hours:.2f}h)")
+                else:
+                    click.echo(f"✓ Time entry (ID: {condensed.entry_id}) linked to condensed note")
+
+                click.echo()
+
+            except Exception as e:
+                click.echo(f"\n✗ Condensation failed: {e}")
+                click.echo("You can condense later with:")
+                click.echo(f"  workmain meetings condense \"{meeting_title}\"")
+                click.echo()
 
     except Exception as e:
         click.echo(f"\n✗ Error: {e}")
