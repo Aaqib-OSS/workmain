@@ -8,10 +8,10 @@ link_condensed_note are operations on a unit of work already entered, which
 never enter one; meetings_service.record_condensation and
 clockify_service.apply_pull call them inside their own unit of work.
 
-Every entry is written with its note first (the note-first pattern): a task's
-note is written by create_time_entry, and every other entry's note by
-notes_service.create_note before create_paired_time_entry pairs an entry with
-it.
+Every entry is written with its note first (the note-first pattern), and
+every note through notes_service.create_note: create_time_entry calls it for
+a task's note, and every other caller calls it before create_paired_time_entry
+pairs an entry with the note.
 """
 
 from dataclasses import dataclass
@@ -21,14 +21,8 @@ from decimal import Decimal
 
 from workmain.database.models import Note, TimeEntry
 from workmain.services import notes_service
-from workmain.services.exceptions import (
-    InvalidTagsError,
-    MissingStartTimeError,
-    ServiceValidationError,
-)
-from workmain.services.notes_service import apply_cf_hook_on_create
+from workmain.services.exceptions import MissingStartTimeError, ServiceValidationError
 from workmain.services.unit_of_work import UnitOfWork
-from workmain.utils.tag_utils import get_tag_system
 
 
 @dataclass(frozen=True)
@@ -95,19 +89,6 @@ def create_time_entry(
     if entry_date is None:
         entry_date = date.today()
 
-    tag_system = get_tag_system()
-
-    if not tags:
-        resolved_tags = ["internal-only"]
-    else:
-        _, invalid = tag_system.validate_full_names(tags)
-        if invalid:
-            valid_vocab = tag_system.get_valid_full_names()
-            raise InvalidTagsError(invalid_tags=invalid, valid_tags=valid_vocab)
-        resolved_tags = tags
-
-    active_client_id = uow.system_state.get_int("active_client_id")
-
     # Backdate the note's created_at to entry_date when it is not today, so
     # date-scoped report queries find the note.
     note_created_at = (
@@ -115,14 +96,15 @@ def create_time_entry(
         if entry_date != date.today() else None
     )
 
-    note = uow.notes.create(
+    # create_note validates and defaults the tags, stamps the active client
+    # and applies the carry-forward hook; the entry takes the note's client.
+    note = notes_service.create_note(
+        uow,
         content=description,
-        tags=resolved_tags,
+        tags=tags,
         source="task",
-        client_id=active_client_id,
         created_at=note_created_at,
     )
-    apply_cf_hook_on_create(uow, note)
 
     return uow.time_entries.create(
         note_id=note.id,
@@ -130,7 +112,7 @@ def create_time_entry(
         entry_date=entry_date,
         entry_time=entry_time,
         category=category,
-        client_id=active_client_id,
+        client_id=note.client_id,
         meeting_id=meeting_id,
         project_id=project_id,
     )
