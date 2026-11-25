@@ -20,9 +20,10 @@ Issue #283 asks that no repository expose its session as a public attribute, so 
 - `workmain/services/unit_of_work.py` and `tests/test_unit_of_work.py`; `tests/mocks/fake_unit_of_work.py`.
 - Every statement of the repository's session attribute in `CLAUDE.md`, `docs/standards/`, `docs/ARCHITECTURE.md`, `.claude/` and `docs/dev/`.
 - `automation/architecture_check.py` and `automation/session_param_check.py`, for any check that reads the attribute.
+- `.github/workflows/tests.yml`, every job, for a step the rename breaks or a home for a standing check. `automation/style_check.py` was also run over the rename, simulated in a scratch worktree (F17). Added 20261125, on Ray's prompt: the first read left `.github/` out without naming it.
 - §1.3's search by file, for every file the work will change (F11).
 - Open local branches, for overlap with the same files.
-- Left out: `docs/archive/` (history, §1.5); `scripts/baseline/` (#188).
+- Left out: `docs/archive/` (history, §1.5); `scripts/baseline/` (#188); `.github/ISSUE_TEMPLATE/`, which the work does not touch.
 
 ## 3. Findings
 
@@ -43,7 +44,9 @@ Issue #283 asks that no repository expose its session as a public attribute, so 
 | F12 | Neither `automation/architecture_check.py` nor `automation/session_param_check.py` reads a session attribute. #158's check is a grep in that issue's criteria (`session\.(query\|add\|delete)\(` outside the repositories), not a standing tool. | `automation/architecture_check.py`; `automation/session_param_check.py`; #158 body |
 | F13 | The issue's second criterion's check, `git grep -nE '\b[a-z_]+\._session\b' -- workmain tests automation ':!workmain/database/repositories' \| grep -vE '\bself\._session\b'`, returns nothing today. It does not cover a name read through `getattr(x, '_session')`, or `scripts/`, which uses repositories (F5). §1.2 requires that a check cover every form of what it counts, so the spec restates the criterion with both forms and `scripts/` (excluding `scripts/baseline/`) added, and says the issue body needs the edit. | §1.2 "An issue's acceptance criteria validate the work" |
 | F14 | The suite is green at the read commit: 1850 passed, 1 xfailed, 3 xpassed. | `pytest -q` at 287db27 |
-| F15 | The issue predates the §4 rewrites of 20261114 to 20261120 (4737662, 71915c6), and none of them changes its problem: repositories still expose `session`, and the unit of work still exposes the repositories. Since then #278 moved the note and time-entry writes onto the unit of work, so the leak path is in live code. What is dated: the counts (F2, F6), criterion 2's check (F13), and the form, which states the fix under "Direction" where §1.3 now asks for a question under "Fix in mind". | `git log --since=2026-11-14 -- docs/standards/4-database.md`; commit 207e8a0 |
+| F15 | The issue predates the §4 rewrites of 20261114 to 20261120 (4737662, 71915c6), and none of them changes its problem: repositories still expose `session`, and the unit of work still exposes the repositories. Since then #278 moved the note and time-entry writes onto the unit of work, so the leak path is in live code. The CI workflow arrived after the issue (#297, 20261124), with a job that runs §4's session rules as standing searches (F16). The issue's criteria are one-time searches because no such job existed when it was written. What is dated: the counts (F2, F6), criterion 2's check (F13), and the form, which states the fix under "Direction" where §1.3 now asks for a question under "Fix in mind". | `git log --since=2026-11-14 -- docs/standards/4-database.md`; commit 207e8a0 |
+| F16 | `.github/workflows/tests.yml` runs on every push and pull request to `dev` and `main`, and reports without blocking. Its `session-rules` job states §4.1 and §4.3 rules as searches: no `.commit()` or `.rollback()` under `workmain/database/repositories/`, and no `get_session()` outside `connection.py`. The rename breaks neither step, and `self._session.commit()` would still match the first. The `suite` job runs `pytest`, so criterion 1's new test runs on every push. Nothing runs criterion 2's search after close-out. The workflow came from #297, still open, whose Fix in mind named the two `session-rules` steps. | `.github/workflows/tests.yml` jobs `suite`, `session-rules`; #297 |
+| F17 | The rename passes the style check. The rename `self.session` → `self._session` was applied across the 12 repository files in a scratch worktree at b9b8914, and `python3 automation/style_check.py --base origin/dev` reported 13 changed files, 0 violations, exit 0. | scratch worktree, since removed |
 
 ## 4. Governing rules and options
 
@@ -64,6 +67,7 @@ Issue #283 asks that no repository expose its session as a public attribute, so 
 | Q | Question | Answer |
 | --- | --- | --- |
 | Q1 | Is the property also stated as a rule in §4.3, or carried by the example alone? | Withdrawn 20261125, on Ray's challenge: §4.3's first bullet already states the rule (F10a), so a second statement duplicates it. The example is updated; no rule is added (§4). |
+| Q2 | Should criterion 2's search become a standing step in `tests.yml`'s `session-rules` job? The problem is real: after close-out nothing runs the search, so a new `repo._session` read is found only if someone greps for it (F16). The issue did not ask for a standing check. A step on this branch adds `.github/workflows/tests.yml` to a `feature/*` file set, though §2.2 lists `.github/` as `chore/*` scope. It also edits a file whose issue, #297, is still open. Recommended: add the step on this branch. It enforces this issue's own criterion, in the job where §4's other session rules already run. The alternatives are a follow-up `chore/*` issue, or no standing check. | |
 
 ## 6. Disposition
 
