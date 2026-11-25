@@ -12,8 +12,6 @@
 
 Complete. The five functions in the note and time-entry write family are now operations on an entered unit of work: `create_note`, `apply_cf_hook_on_create`, `create_time_entry`, `create_paired_time_entry` and `link_condensed_note`. Every caller outside `workmain/services/` reaches them through one of five use cases: `add_note`, `log_meeting_time`, `log_task_time`, `record_condensation` (in the new `workmain/services/meetings_service.py`) and `apply_pull`. Each caller builds a unit of work per call, with no scope open. The condenser no longer writes: the summary, the condensed note and the linked entry commit together. `ActionExecutor` takes no session, opens a scope for each session-taking action, and sends its two write actions to their use cases. `CLAUDE.md` § Note Write-Path Convergence is deleted, and its two pointers are corrected. Step 3 stopped once on a departure, which Ray resolved (§4).
 
-Four criteria need Ray's sign-off: AC1.2, AC2.2, AC4.1 and AC6.2. Each is a reading of a table in §5 or of the docstrings.
-
 ## 2. What shipped, by step
 
 | Step | Delivered | Files changed | Tests |
@@ -29,16 +27,16 @@ Four criteria need Ray's sign-off: AC1.2, AC2.2, AC4.1 and AC6.2. Each is a read
 | AC | Status | Evidence |
 | --- | --- | --- |
 | AC1.1 | Met | `git grep -nP "(?<![\"'])\b(create_note\|create_paired_time_entry\|create_time_entry\|link_condensed_note)\b(?![\"'])" -- workmain ':!workmain/services' ':!workmain/integrations/clockify'` exits 1 with no hits (run at `b3819e0`). |
-| AC1.2 | **Not met** | `Awaiting Ray`: a reading of §5 "Former call sites". |
+| AC1.2 | Met | Ray, 20261124: a reading of §5 "Former call sites". |
 | AC1.3 | Met | Service: `tests/test_meetings_service.py::TestRecordCondensation::test_a_failed_link_writes_no_summary_and_no_condensed_note`. End to end: `tests/test_notes_log.py::TestNotesLog::test_t17_a_failed_link_writes_no_summary_and_keeps_the_cost_and_the_notes` and `tests/test_meetings_condense.py::TestMeetingsCondense::test_a_failed_link_writes_no_summary_and_keeps_the_cost_row`. Both end-to-end tests assert through `db_session` that `condensed_summary` is `None`, that no `source='condensed'` note exists, and that the meeting's `note_condensation` `AiCost` row exists. All pass. |
 | AC2.1 | Met | The spec's `python3 -c "import inspect; …"` check prints `[]`. |
-| AC2.2 | **Not met** | `Awaiting Ray`: a reading of §5 "Functions and their service tests". |
+| AC2.2 | Met | Ray, 20261124: a reading of §5 "Functions and their service tests". |
 | AC2.3 | Met | `pytest tests/test_fake_unit_of_work.py`: 166 passed, 0 failed, 0 skipped. This includes `TestFakeParity`, and a contract class for each method DR9 names (§5 "Fakes and their contract tests"). |
 | AC3.1 | Met | Every path's test passes (§5 "Entry paths and their tests"). Clockify paths replace only `ClockifyClient`, and their `apply_pull` wrapper recorded `scope_open()` as `[False]`. Condense paths replace only `_provider_manager_instance`. |
-| AC4.1 | **Not met** | `Awaiting Ray`: a reading of §5 "Use cases and their parameters". |
+| AC4.1 | Met | Ray, 20261124: a reading of §5 "Use cases and their parameters". |
 | AC5.1 | Met | `tests/test_clockify_service.py::TestPull::test_s28_an_import_stays_recorded_when_a_later_unit_of_work_fails` passes. It applies the import on a `UnitOfWork(record=True)`, raises inside a later `UnitOfWork()`, and finds the note and the entry through `db_session`. A `record_scope()` spy is called once. |
 | AC6.1 | Met | `git grep -n -i -E 'write-path (convergence\|map)' -- ':!docs/archive' ':!CHANGELOG.md' ':!docs/dev/specs/NOTE_TIME_ENTRY_USE_CASES_SPEC.md' ':!docs/dev/design/DESIGN_NOTE_TIME_ENTRY_USE_CASES.md'` exits 1 with no hits (run at `b3819e0`). |
-| AC6.2 | **Not met** | `Awaiting Ray`: a reading of `docs/ARCHITECTURE.md` §2 Application, and the module and function docstrings of `workmain/services/notes_service.py`, `time_entry_service.py` and `meetings_service.py`, for which function writes a note with its time entry. |
+| AC6.2 | Met | Ray, 20261124: a reading of `docs/ARCHITECTURE.md` §2 Application, and the module and function docstrings of `workmain/services/notes_service.py`, `time_entry_service.py` and `meetings_service.py`, for which function writes a note with its time entry. |
 | AC7.1 | Met | `python3 automation/architecture_check.py` prints `New findings: 0` and `PASS` (run at `b3819e0`). |
 | AC8.1 | Met | Bare `pytest` at `b3819e0`: 1850 passed, 0 failed, 0 skipped (note: 1 xfailed, 3 xpassed). |
 
