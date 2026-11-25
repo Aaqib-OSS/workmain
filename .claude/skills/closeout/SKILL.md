@@ -68,9 +68,9 @@ Each carries that type's full perform sequence: what gets committed on the branc
 
 ## The stop
 
-Every close-out crosses one authorization point (`docs/standards/1-workflow.md` §1.4): **merging this branch to `main`** — which takes the shape of waiting for Ray to merge the pull request to `main` — `dev → main` on `feature/*`, the branch itself on `chore/*` and `hotfix/*` — since `docs/standards/2-git.md` §2.2 requires the pull request and he merges it himself. It is one `AskUserQuestion` call stating what is about to happen, and stopping ends the run naming what has already happened and what has not.
+Every close-out crosses one authorization point (`docs/standards/1-workflow.md` §1.4): **merging this branch to `main`** — which takes the shape of waiting for Ray to merge the pull request to `main` — `dev → main` on `feature/*`, the branch itself on `chore/*` and `hotfix/*` — since `docs/standards/2-git.md` §2.2 requires the pull request and he merges it himself. It is one `AskUserQuestion` call stating what is about to happen, and stopping ends the run naming what has already happened and what has not. A `feature/*` close-out also waits for Ray to merge its pull request into `dev`. That merge is not an authorization point, but it takes the same shape: one `AskUserQuestion` call, and *defer* exits cleanly.
 
-A `feature/*` branch found on `origin` is outside `docs/standards/2-git.md` §2.3. A `chore/*` or `hotfix/*` branch on `origin` is expected; Ray deletes it when he merges the pull request. Close-out only deletes local branches (`docs/standards/1-workflow.md` §1.4). Every other step of the variant runs without stopping (`docs/standards/1-workflow.md` §1.4).
+A working branch on `origin` is expected (`docs/standards/2-git.md` §2.3); Ray deletes it when he merges the pull request. Close-out only deletes local branches (`docs/standards/1-workflow.md` §1.4). Every other step of the variant runs without stopping (`docs/standards/1-workflow.md` §1.4).
 
 **A failing check stops the run.** The wait steps run `gh pr checks <N> --watch`. When any check fails, the run reports each failing check and its failed log lines (`gh run view <run-id> --log-failed`), and stops. The pull request stays open and the branch stays. The implementing role fixes the failure on this branch and records it in the spec's decision log and the results artifact. Ray then re-runs `/closeout`, whose resume point is the push step.
 
@@ -85,7 +85,7 @@ The body carries, in this order, every item that applies to the branch type:
 - the AC verdict from `automation/closeout_acs.py` — the verdict line it prints
 - the version, the tag, and the Release URL — `feature/*` and `hotfix/*` only (`docs/standards/2-git.md` §2.2)
 - the confirmed ActiveEnterTimestamp — `feature/*` and `hotfix/*` only (`docs/standards/2-git.md` §2.6)
-- the PR number — on every branch type
+- the PR numbers — every branch type has one; `feature/*` has two, into `dev` and `dev → main`
 
 The body carries only the items that apply to the branch type.
 

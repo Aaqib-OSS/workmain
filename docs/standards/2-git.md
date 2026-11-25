@@ -27,6 +27,7 @@ chore/*    — documentation/process/tooling only. From main, merges to main AND
 
 **`dev`**
 
+- Receives `feature/*` through a GitHub pull request. `/closeout` opens it and waits for its checks. **Ray merges it himself**, as a merge commit.
 - Always equal to, or one feature ahead of, `main`.
 - One direct commit: the release bump `/closeout` makes after a feature merge (§2.5).
 - **`dev → main` goes through a GitHub PR.**
@@ -54,8 +55,7 @@ chore/*    — documentation/process/tooling only. From main, merges to main AND
 ### 2.3 Branch deletion
 
 - `main` and `dev` are the only permanent branches on `origin`.
-- **`feature/*` stays local** and merges to `dev` locally.
-- **`hotfix/*` and `chore/*` are pushed to `origin`** for their pull request to `main` (§2.2). Ray deletes the remote branch when he merges the pull request.
+- **Every working branch is pushed to `origin`** for its pull request (§2.2): `feature/*` to `dev`, and `hotfix/*` and `chore/*` to `main`. Ray deletes the remote branch when he merges the pull request.
 - A working branch is deleted locally once it has merged everywhere §2.1 sends it. Close-out deletes the local branch only.
 
 **Every merge is `--no-ff`.**

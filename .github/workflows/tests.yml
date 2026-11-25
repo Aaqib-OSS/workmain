@@ -9,9 +9,9 @@ name: tests
 
 on:
   push:
-    branches: [dev, main]   # main: hotfix/* and chore/* merges arrive by push, with no pull request
+    branches: [dev, main]   # the merge of each pull request, and the release bump on dev
   pull_request:
-    branches: [main]
+    branches: [dev, main]   # feature/* to dev; dev, hotfix/* and chore/* to main
 
 permissions:
   contents: read
@@ -113,12 +113,13 @@ jobs:
       #
       # A pull request from a fork gets no secrets, so its run fails closed here.
       #
-      # Base: origin/main on a push to dev or a pull request to main; on a push
-      # to main, the commit main pointed at before the push.
+      # Base: on a pull request, the branch it targets (origin/dev or
+      # origin/main); on a push to dev, origin/main; on a push to main, the
+      # commit main pointed at before the push.
       - name: Check the changed lines
         env:
           DEV_REAL_VALUES: ${{ secrets.DEV_REAL_VALUES }}
-          BASE: ${{ (github.event_name == 'push' && github.ref_name == 'main') && github.event.before || 'origin/main' }}
+          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || (github.ref_name == 'main' && github.event.before || 'origin/main') }}
         run: |
           IFS=',' read -ra entries <<< "$DEV_REAL_VALUES"
           for entry in "${entries[@]}"; do
