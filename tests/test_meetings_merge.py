@@ -13,7 +13,7 @@ from click.testing import CliRunner
 
 from workmain.cli.commands.meetings import meetings
 from workmain.database.models import Meeting, Note
-from workmain.services import notes_service
+from workmain.database.repositories.notes_repo import NotesRepository
 
 
 def _meeting(session, title: str) -> Meeting:
@@ -32,8 +32,7 @@ def _meeting(session, title: str) -> Meeting:
 def test_merge_keeps_moved_notes_when_the_delete_prompt_is_cancelled(db_session):
     old = _meeting(db_session, "Sentinel Merge Old 2099-96")
     new = _meeting(db_session, "Sentinel Merge New 2099-96")
-    note = notes_service.create_note(
-        db_session,
+    note = NotesRepository(db_session).create(
         content="Sentinel merge note 2099-96",
         tags=['internal-only'],
         source='meeting',

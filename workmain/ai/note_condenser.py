@@ -5,7 +5,6 @@ Takes multiple meeting notes and condenses them into a professional, concise sum
 suitable for time tracking entries.
 """
 
-from datetime import datetime
 from typing import List, Optional, Tuple
 
 from sqlalchemy.orm import Session
@@ -132,6 +131,10 @@ class NoteCondenser:
         """
         Condense all notes from a meeting into a single summary.
 
+        Writes nothing to the meeting: the caller records the summary, with
+        the condensed note and its time entry, through
+        meetings_service.record_condensation.
+
         Args:
             meeting: Meeting object with notes to condense
 
@@ -159,9 +162,6 @@ class NoteCondenser:
         if not notes:
             # All notes are info-only (#ifo), return default message
             default_summary = f"Attended {db_meeting.title}"
-            db_meeting.condensed_summary = default_summary
-            db_meeting.condensed_at = datetime.now()
-            self.session.flush()
             return default_summary, resolved_tags, None, []
         
         request = self.build_condensation_request(db_meeting, notes)
@@ -174,12 +174,7 @@ class NoteCondenser:
             context_label=db_meeting.title,
         )
 
-        # Update meeting with condensed summary
-        db_meeting.condensed_summary = response.content.strip()
-        db_meeting.condensed_at = datetime.now()
-        self.session.flush()
-
-        return db_meeting.condensed_summary, resolved_tags, notice, response.cost_record_ids
+        return response.content.strip(), resolved_tags, notice, response.cost_record_ids
 
     def _build_condensation_prompt(
         self,

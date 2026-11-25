@@ -695,7 +695,8 @@ def track(title_or_id: str, date: Optional[datetime]):
             default=default_desc
         )
 
-        from workmain.services import notes_service, time_entry_service
+        from workmain.services import time_entry_service
+        from workmain.services.unit_of_work import UnitOfWork
         from workmain.utils.tag_utils import parse_tags
 
         click.echo("Add tags inline: #ilo #cf (blank for internal-only)")
@@ -704,27 +705,28 @@ def track(title_or_id: str, date: Optional[datetime]):
         if invalid_tags:
             console.print(f"[yellow]⚠ Invalid tags ignored: {', '.join(invalid_tags)}[/yellow]")
 
-        note = notes_service.create_note(
-            session,
-            content=description,
-            tags=note_tags,
-            source='meeting',
-            meeting_id=meeting.id,
-        )
-        entry = time_entry_service.create_paired_time_entry(
-            session,
-            note,
-            duration_hours=duration_hours,
-            entry_date=meeting.start_time.date(),
-            entry_time=meeting.start_time.time(),
-            category='meeting',
-        )
+        # The entry is written after this scope closes, so read the
+        # meeting's values here.
+        meeting_id = meeting.id
+        meeting_title = meeting.title
+        meeting_start = meeting.start_time
 
-        console.print(f"\n[green]✓ Time entry created:[/green]")
-        console.print(f"  Duration: {duration_hours:.2f}h")
-        console.print(f"  Meeting: [#{meeting.id}] {meeting.title}")
-        console.print(f"  Date: {meeting.start_time.strftime('%Y-%m-%d %H:%M')}")
-        console.print()
+    time_entry_service.log_meeting_time(
+        UnitOfWork(),
+        meeting_id,
+        content=description,
+        tags=note_tags,
+        duration_hours=duration_hours,
+        entry_date=meeting_start.date(),
+        entry_time=meeting_start.time(),
+        category='meeting',
+    )
+
+    console.print(f"\n[green]✓ Time entry created:[/green]")
+    console.print(f"  Duration: {duration_hours:.2f}h")
+    console.print(f"  Meeting: [#{meeting_id}] {meeting_title}")
+    console.print(f"  Date: {meeting_start.strftime('%Y-%m-%d %H:%M')}")
+    console.print()
 
 
 @meetings.command('today')
@@ -880,30 +882,31 @@ def meetings_condense(meeting_title: str):
                 if notice:
                     err_console.print(f"[yellow]⚠[/yellow] {escape(notice.message)}")
 
-                # Create a note from the condensed summary
-                from workmain.services import notes_service, time_entry_service
-                condensed_note = notes_service.create_note(
-                    session,
-                    content=summary,
-                    tags=resolved_tags,
-                    meeting_id=meeting.id,
-                    source='condensed',
-                )
-                console.print(f"[green]✓ Note created (ID: {condensed_note.id})[/green]")
-
-                entry, created = time_entry_service.link_condensed_note(
-                    session, meeting, condensed_note,
-                )
-                if created:
-                    console.print(f"[green]✓ Time entry created (ID: {entry.id}, {entry.duration_hours:.2f}h)[/green]")
-                else:
-                    console.print(f"[green]✓ Time entry (ID: {entry.id}) linked to condensed note[/green]")
-
-                console.print()
-
             except ValueError as e:
                 err_console.print(f"[red]✗ Condensation failed:[/red] {escape(str(e))}")
                 sys.exit(failure_exit_code(e))
+
+            meeting_id = meeting.id
+
+        # Record the summary, its note and its time entry together, after the
+        # scope closes
+        from workmain.services import meetings_service
+        from workmain.services.unit_of_work import UnitOfWork
+        try:
+            condensed = meetings_service.record_condensation(
+                UnitOfWork(), meeting_id, summary, resolved_tags,
+            )
+        except ValueError as e:
+            err_console.print(f"[red]✗ Condensation failed:[/red] {escape(str(e))}")
+            sys.exit(failure_exit_code(e))
+        console.print(f"[green]✓ Note created (ID: {condensed.note_id})[/green]")
+
+        if condensed.created:
+            console.print(f"[green]✓ Time entry created (ID: {condensed.entry_id}, {condensed.duration_hours:.2f}h)[/green]")
+        else:
+            console.print(f"[green]✓ Time entry (ID: {condensed.entry_id}) linked to condensed note[/green]")
+
+        console.print()
 
     except Exception as e:
         err_console.print(f"[red]✗ Error:[/red] {escape(str(e))}")

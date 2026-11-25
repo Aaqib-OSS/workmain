@@ -147,7 +147,7 @@ class TimeEntriesRepository:
             TimeEntry.clockify_id == clockify_id
         ).first()
     
-    def get_by_meeting(self, meeting_id: int) -> List[TimeEntry]:
+    def get_by_meeting(self, meeting_id: int) -> list[TimeEntry]:
         """
         Get all time entries linked to a specific meeting.
         

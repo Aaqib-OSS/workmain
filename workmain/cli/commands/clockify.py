@@ -26,6 +26,7 @@ from workmain.cli.output import (
 from workmain.cli.params import DateParamType
 from workmain.database.connection import get_db
 from workmain.services import clockify_service
+from workmain.services.unit_of_work import UnitOfWork
 
 STATUS = RecordView(
     "Clockify",
@@ -165,7 +166,7 @@ def _pull_entries(renderer, entries, interactive: bool):
         answer = None
         if interactive and item.kind != "linked":
             answer = _ask(renderer, item)
-        outcomes.append(clockify_service.apply_pull(item, answer))
+        outcomes.append(clockify_service.apply_pull(UnitOfWork(record=True), item, answer))
     return tuple(outcomes)
 
 

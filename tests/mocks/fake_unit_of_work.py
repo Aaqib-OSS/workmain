@@ -21,11 +21,12 @@ from __future__ import annotations
 
 import contextvars
 import copy
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
+from decimal import Decimal
 from types import TracebackType
 from typing import Dict, List, Optional, Type
 
-from workmain.database.models import Client, Meeting, Note, TaskStatus
+from workmain.database.models import Client, Meeting, Note, TaskStatus, TimeEntry
 from workmain.database.repositories.client_repository import ClientRepository
 from workmain.database.repositories.system_state_repository import SystemStateRepository
 from workmain.services.unit_of_work import _OPEN_SCOPE_MESSAGE, _REENTRY_MESSAGE
@@ -85,6 +86,29 @@ def _next_id(rows: dict) -> int:
     return max(rows, default=0) + 1
 
 
+def _build_meeting(row: dict) -> Meeting:
+    """
+    Build a sessionless Meeting from a meetings row.
+
+    Args:
+        row: A meetings row in FakeMeetingsRepository's shape; a seed that
+            never reaches FakeMeetingsRepository may omit every key but id,
+            title and client_id, and each omitted key reads as None
+
+    Returns:
+        A new Meeting
+    """
+    return Meeting(
+        id=row['id'],
+        title=row['title'],
+        client_id=row.get('client_id'),
+        start_time=row.get('start_time'),
+        end_time=row.get('end_time'),
+        condensed_summary=row.get('condensed_summary'),
+        condensed_at=row.get('condensed_at'),
+    )
+
+
 def _build_note(store: dict, row: dict) -> Note:
     """
     Build a sessionless Note from a notes row, with its meeting.
@@ -103,17 +127,45 @@ def _build_note(store: dict, row: dict) -> Note:
         id=row['id'],
         content=row['content'],
         tags=row['tags'],
+        source=row.get('source'),
         created_at=created_at,
         created_date=None if created_at is None else created_at.date(),
         meeting_id=row['meeting_id'],
+        project_id=row.get('project_id'),
         client_id=row['client_id'],
     )
     meeting_row = _rows(store, 'meetings').get(row['meeting_id'])
-    note.meeting = (
-        None if meeting_row is None
-        else Meeting(id=meeting_row['id'], title=meeting_row['title'])
-    )
+    note.meeting = None if meeting_row is None else _build_meeting(meeting_row)
     return note
+
+
+def _validate_client_project(
+    store: dict, client_id: int | None, project_id: int | None, record: str
+) -> None:
+    """
+    Refuse a project of another client, as the real repositories do.
+
+    Args:
+        store: The fake unit of work's store; projects rows are id, client_id
+        client_id: The row's client, or None
+        project_id: The row's project, or None
+        record: 'note' or 'time entry', as the real message names it
+
+    Raises:
+        ValueError: The project does not exist, or belongs to another client,
+            with the real repository's message. Nothing is checked unless
+            both ids are set.
+    """
+    if project_id is None or client_id is None:
+        return
+    project = _rows(store, 'projects').get(project_id)
+    if project is None:
+        raise ValueError(f"Project {project_id} does not exist")
+    if project['client_id'] != client_id:
+        raise ValueError(
+            f"Project {project_id} belongs to client {project['client_id']}, "
+            f"not client {client_id}. Cannot link {record} to mismatched project."
+        )
 
 
 class FakeClientRepository:
@@ -122,10 +174,11 @@ class FakeClientRepository:
 
     Row shapes, each a dict keyed by id under store['<table>']:
         clients: id, name, is_active, created_at (aware, UTC)
-        projects, report_recipients, reports, time_entries: id, client_id
+        projects, report_recipients, reports: id, client_id
 
-    It also reads and unlinks notes and meetings rows, in the shapes
-    FakeNotesRepository's docstring states, which hold client_id.
+    It also reads and unlinks notes, meetings and time_entries rows, in the
+    shapes FakeNotesRepository's, FakeMeetingsRepository's and
+    FakeTimeEntriesRepository's docstrings state, which hold client_id.
     """
 
     RESERVED_NAME = ClientRepository.RESERVED_NAME
@@ -257,10 +310,12 @@ class FakeNotesRepository:
     The notes table, held in store['notes'], and the meetings it names.
 
     Row shapes, each a dict keyed by id under store['<table>']:
-        notes: id, content, tags, created_at (naive local time), meeting_id,
-            client_id. A row has no created_date: a read derives it from
-            created_at, as the computed column does.
-        meetings: id, title, client_id
+        notes: id, content, tags, source, created_at (naive local time),
+            meeting_id, project_id, client_id. A row has no created_date: a
+            read derives it from created_at, as the computed column does. A
+            seed may omit source and project_id, which read as None.
+        meetings: in FakeMeetingsRepository's shape
+        projects: id, client_id, read when a note names a project
     """
 
     def __init__(self, store: dict) -> None:
@@ -271,6 +326,32 @@ class FakeNotesRepository:
             store: The fake unit of work's store
         """
         self._store = store
+
+    def create(
+        self,
+        content: str,
+        tags: list[str],
+        project_id: int | None = None,
+        meeting_id: int | None = None,
+        source: str = 'ad-hoc',
+        created_at: datetime | None = None,
+        client_id: int | None = None,
+    ) -> Note:
+        """Write a note with its tags deduplicated and sorted, refusing another client's project."""
+        _validate_client_project(self._store, client_id, project_id, 'note')
+        rows = self._store.setdefault('notes', {})
+        note_id = _next_id(rows)
+        rows[note_id] = {
+            'id': note_id,
+            'content': content,
+            'tags': sorted(set(tags)) if tags else [],
+            'source': source,
+            'created_at': created_at or datetime.now(),
+            'meeting_id': meeting_id,
+            'project_id': project_id,
+            'client_id': client_id,
+        }
+        return _build_note(self._store, rows[note_id])
 
     def get_by_id(self, note_id: int) -> Optional[Note]:
         """Return the note with its meeting, or None if not found."""
@@ -364,6 +445,29 @@ class FakeTaskStatusRepository:
             pairs.append((row, note))
         return pairs
 
+    def ensure_active(self, note_id: int) -> TaskStatus:
+        """Return the note's task made active, creating it when the note has none."""
+        row = self._row_for_note(note_id)
+        if row is None:
+            rows = self._store.setdefault(self._TABLE, {})
+            task_id = _next_id(rows)
+            now = datetime.now()
+            row = rows[task_id] = {
+                'id': task_id,
+                'note_id': note_id,
+                'status': 'active',
+                'completed_at': None,
+                'forwarding_note_id': None,
+                'created_at': now,
+                'updated_at': now,
+            }
+        elif row['status'] != 'active':
+            row['status'] = 'active'
+            row['completed_at'] = None
+            row['forwarding_note_id'] = None
+            row['updated_at'] = datetime.now()
+        return self._task(row)
+
     def set_completed(self, note_id: int) -> TaskStatus:
         """Mark task as completed."""
         return self._set_status(note_id, 'completed')
@@ -412,6 +516,175 @@ class FakeTaskStatusRepository:
         return len(self._filtered(status, search, date_filter))
 
 
+class FakeTimeEntriesRepository:
+    """
+    The time_entries table, held in store['time_entries'].
+
+    Row shape, a dict keyed by id under store['time_entries']:
+        time_entries: id, note_id, duration_hours (Decimal), entry_date,
+            entry_time, category, project_id, meeting_id, client_id,
+            clockify_id, synced_at, created_at (naive local time)
+
+    It reads notes rows in FakeNotesRepository's shape, to attach each
+    entry's note, and projects rows (id, client_id) to check an entry's
+    project.
+    """
+
+    _TABLE = 'time_entries'
+
+    def __init__(self, store: dict) -> None:
+        """
+        Build the repository over the shared store.
+
+        Args:
+            store: The fake unit of work's store
+        """
+        self._store = store
+
+    def _entry(self, row: dict) -> TimeEntry:
+        """Build a new sessionless TimeEntry from a row, with its note when it exists."""
+        entry = TimeEntry(
+            id=row['id'],
+            note_id=row['note_id'],
+            duration_hours=row['duration_hours'],
+            entry_date=row['entry_date'],
+            entry_time=row['entry_time'],
+            category=row['category'],
+            project_id=row['project_id'],
+            meeting_id=row['meeting_id'],
+            client_id=row['client_id'],
+            clockify_id=row['clockify_id'],
+            synced_at=row['synced_at'],
+            created_at=row['created_at'],
+        )
+        note_row = _rows(self._store, 'notes').get(row['note_id'])
+        if note_row is not None:
+            entry.note = _build_note(self._store, note_row)
+        return entry
+
+    def create(
+        self,
+        note_id: int,
+        duration_hours: float,
+        entry_date: date,
+        entry_time: time,
+        category: str | None = None,
+        project_id: int | None = None,
+        meeting_id: int | None = None,
+        client_id: int | None = None,
+        clockify_id: str | None = None,
+        synced_at: datetime | None = None,
+        created_at: datetime | None = None,
+    ) -> TimeEntry:
+        """Write an entry, its duration as a Decimal, refusing another client's project."""
+        _validate_client_project(self._store, client_id, project_id, 'time entry')
+        rows = self._store.setdefault(self._TABLE, {})
+        entry_id = _next_id(rows)
+        rows[entry_id] = {
+            'id': entry_id,
+            'note_id': note_id,
+            'duration_hours': Decimal(str(duration_hours)),
+            'entry_date': entry_date,
+            'entry_time': entry_time,
+            'category': category,
+            'project_id': project_id,
+            'meeting_id': meeting_id,
+            'client_id': client_id,
+            'clockify_id': clockify_id,
+            'synced_at': synced_at,
+            'created_at': created_at or datetime.now(),
+        }
+        return self._entry(rows[entry_id])
+
+    def get_by_meeting(self, meeting_id: int) -> list[TimeEntry]:
+        """
+        Return the meeting's entries with their notes, by date then time.
+
+        Entries tied on both keep Python's stable sort order, where SQL
+        leaves their order unstated.
+        """
+        rows = [
+            row for row in _rows(self._store, self._TABLE).values()
+            if row['meeting_id'] == meeting_id
+        ]
+        rows.sort(key=lambda row: (row['entry_date'], row['entry_time']))
+        return [self._entry(row) for row in rows]
+
+    def update(
+        self,
+        entry_id: int,
+        duration_hours: float | None = None,
+        entry_time: time | None = None,
+        category: str | None = None,
+        project_id: int | None = None,
+        meeting_id: int | None = None,
+        note_id: int | None = None,
+    ) -> TimeEntry | None:
+        """
+        Change the given fields, keeping each one passed as None.
+
+        The entry's own client is checked against the project it ends with,
+        as the real method checks it, before anything changes. Returns None
+        when no entry has the id.
+        """
+        row = _rows(self._store, self._TABLE).get(entry_id)
+        if row is None:
+            return None
+        effective_project_id = project_id if project_id is not None else row['project_id']
+        _validate_client_project(
+            self._store, row['client_id'], effective_project_id, 'time entry'
+        )
+        if duration_hours is not None:
+            row['duration_hours'] = Decimal(str(duration_hours))
+        changes = {
+            'entry_time': entry_time, 'category': category, 'project_id': project_id,
+            'meeting_id': meeting_id, 'note_id': note_id,
+        }
+        for key, value in changes.items():
+            if value is not None:
+                row[key] = value
+        return self._entry(row)
+
+
+class FakeMeetingsRepository:
+    """
+    The meetings table, held in store['meetings'].
+
+    Row shape, a dict keyed by id under store['meetings']:
+        meetings: id, title, client_id, start_time, end_time,
+            condensed_summary, condensed_at, each time naive local time. A
+            seed that never reaches this repository may hold only id, title
+            and client_id.
+    """
+
+    _TABLE = 'meetings'
+
+    def __init__(self, store: dict) -> None:
+        """
+        Build the repository over the shared store.
+
+        Args:
+            store: The fake unit of work's store
+        """
+        self._store = store
+
+    def get_by_id(self, meeting_id: int) -> Meeting | None:
+        """Return the meeting, or None if not found."""
+        row = _rows(self._store, self._TABLE).get(meeting_id)
+        return None if row is None else _build_meeting(row)
+
+    def set_condensed_summary(
+        self, meeting_id: int, summary: str, condensed_at: datetime
+    ) -> Meeting | None:
+        """Set the summary and when it was condensed; None if no meeting has the id."""
+        row = _rows(self._store, self._TABLE).get(meeting_id)
+        if row is None:
+            return None
+        row['condensed_summary'] = summary
+        row['condensed_at'] = condensed_at
+        return _build_meeting(row)
+
+
 class FakeUnitOfWork:
     """
     A unit of work over an in-memory store.
@@ -426,9 +699,11 @@ class FakeUnitOfWork:
 
     REPOSITORIES: Dict[str, type] = {
         'clients': FakeClientRepository,
+        'meetings': FakeMeetingsRepository,
         'notes': FakeNotesRepository,
         'system_state': FakeSystemStateRepository,
         'task_status': FakeTaskStatusRepository,
+        'time_entries': FakeTimeEntriesRepository,
     }
 
     def __init__(self, record: bool = False, store: Optional[dict] = None) -> None:
