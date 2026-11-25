@@ -7,6 +7,22 @@ and project versioning follows `docs/standards/2-git.md` §2.5.
 
 ## [Unreleased]
 
+## [1.62.0] - 2026-11-25
+
+Every repository kept the session it was built on in a public `session` attribute, so a use case holding a repository through its unit of work could query the database around the repository's methods, and no search could tell such a read apart. Each repository now holds its session as `_session`, and CI searches for a public session attribute and for any read of another object's `_session` on every push and pull request (#283).
+
+### Changed
+
+- `workmain/database/repositories/`: each of the 12 repositories holds its session as `self._session`. Constructors and methods are unchanged.
+- `docs/standards/4-database.md` §4.3: the repository example holds `self._session`.
+
+### Added
+
+- `.github/workflows/tests.yml`: two `session-rules` steps, `No public session attribute in a repository` and `No read of a repository's session outside the repositories`. Each fails on a match and on a search error.
+- `tests/test_unit_of_work.py`: `TestUnitOfWork::test_repository_has_no_session_attribute`, over every class in `UnitOfWork.REPOSITORIES`. The tests that read a repository's session now take it from the scope.
+
+Suite: 1862 passed, 0 failed, 0 skipped (note: 1 xfailed, 3 xpassed) (baseline 1850 passed, 0 failed, 0 skipped).
+
 ## [1.61.0] - 2026-11-24
 
 Each caller decided for itself which note and time-entry writes committed together, inside its own database session, so the same write could commit as a unit from one surface and partly from another. Each grouping is now one use case that enters a unit of work its caller builds, and commits or rolls back as a whole on every surface: the CLI commands, Slack, the daemon and the Clockify pull (#278).
