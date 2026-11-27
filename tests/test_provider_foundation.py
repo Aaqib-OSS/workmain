@@ -1000,22 +1000,24 @@ class TestOllamaProvider:
     def test_ollama_provider_generate_raises_unavailable(self) -> None:
         """OllamaProvider.generate() raises ProviderUnavailableError when host unreachable."""
         from workmain.ai.base_provider import GenerationRequest
-        # localhost:11434 not running → check_availability() returns UNAVAILABLE → raises
+        # The host refuses the connection → check_availability() returns UNAVAILABLE → raises
         p = OllamaProvider({'model': 'mistral-7b', 'host': 'localhost', 'port': 11434})
         request = GenerationRequest(prompt="test", max_tokens=64)
-        try:
-            p.generate(request)
-            assert False, "Expected ProviderUnavailableError"
-        except ProviderUnavailableError:
-            pass
+        with patch('urllib.request.urlopen', side_effect=ConnectionRefusedError("unreachable")):
+            try:
+                p.generate(request)
+                assert False, "Expected ProviderUnavailableError"
+            except ProviderUnavailableError:
+                pass
 
 
 
     def test_ollama_provider_test_connection_returns_false(self) -> None:
         """OllamaProvider.test_connection() returns False when host unreachable."""
-        # localhost:11434 not running → check_availability() returns UNAVAILABLE → False
+        # The host refuses the connection → check_availability() returns UNAVAILABLE → False
         p = OllamaProvider({'model': 'mistral-7b', 'host': 'localhost', 'port': 11434})
-        assert p.test_connection() is False
+        with patch('urllib.request.urlopen', side_effect=ConnectionRefusedError("unreachable")):
+            assert p.test_connection() is False
 
 
 
@@ -1035,9 +1037,10 @@ class TestOllamaProvider:
 
     def test_ollama_provider_check_availability_returns_unavailable(self) -> None:
         """OllamaProvider.check_availability() returns UNAVAILABLE when host unreachable."""
-        # localhost:11434 not running → URLError → returns ProviderStatus.UNAVAILABLE
+        # The host refuses the connection → the request raises → returns ProviderStatus.UNAVAILABLE
         p = OllamaProvider({'model': 'mistral-7b', 'host': 'localhost', 'port': 11434})
-        assert p.check_availability() == ProviderStatus.UNAVAILABLE
+        with patch('urllib.request.urlopen', side_effect=ConnectionRefusedError("unreachable")):
+            assert p.check_availability() == ProviderStatus.UNAVAILABLE
 
 
     # ---------------------------------------------------------------------------
