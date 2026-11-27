@@ -14,7 +14,7 @@
 
 ## 1. Summary
 
-Complete. `automation/issue_validator.py` refuses an issue whose check GitHub would display differently from its source, judged by GitHub's own renderer in one call per issue. `docs/standards/1-workflow.md` §1.2 and the three `docs/dev/` templates put their placeholders in backticks, so GitHub no longer drops them. The sweep edited 49 open issues, adding backticks to 111 checks, and every check in every open issue now displays as written. One criterion, AC4.2, waits on Ray's reading of the table in §5.
+Complete. `automation/issue_validator.py` refuses an issue whose check GitHub would display differently from its source, judged by GitHub's own renderer in one call per issue. `docs/standards/1-workflow.md` §1.2 and the three `docs/dev/` templates put their placeholders in backticks, so GitHub no longer drops them. The sweep edited 49 open issues, adding backticks to 111 checks, and every check in every open issue now displays as written.
 
 ## 2. What shipped, by step
 
@@ -34,7 +34,7 @@ Complete. `automation/issue_validator.py` refuses an issue whose check GitHub wo
 | AC2.1 | Met | §5 Live verification: all 16 lines step 2 changed display every placeholder they hold, and the search of the three templates finds only `docs/dev/design/_TEMPLATE_DESIGN.md:72`, the `Promoted to:` line |
 | AC3.1 | Met | §5 Live verification: after the sweep, 273 checks in 58 issues and 83 in 20 found in 135 open issues, and `validate_check_display` refuses none, in 78 calls |
 | AC4.1 | Met | §5 The sweep: every one of the 49 edited bodies equals its before-body, the snapshot, with every backtick removed, checked before each write and again from a fresh read after |
-| AC4.2 | **Not met** | `Awaiting Ray`: a reading of §5's table of edited checks, for whether each command, and only the command, is in backticks |
+| AC4.2 | Met | Ray, 20261127: a reading of §5's table of edited checks, for whether each command, and only the command, is in backticks |
 | AC5.1 | Met | `pytest automation/`: 153 passed, 0 failed, 0 skipped |
 
 ## 4. Deviations and decisions
