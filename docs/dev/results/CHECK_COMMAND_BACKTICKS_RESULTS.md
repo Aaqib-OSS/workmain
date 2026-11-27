@@ -1,6 +1,6 @@
 # A check that displays as written — Implementation Results
 
-**Status:** Active
+**Status:** Shipped
 
 **Author:** Spanner
 
@@ -55,6 +55,7 @@ Complete. `automation/issue_validator.py` refuses an issue whose check GitHub wo
 ## 5. Verification
 
 - **Test suite:** `pytest automation/` 153 passed, 0 failed, 0 skipped (baseline: 142 passed, 0 failed, 0 skipped). Bare `pytest`: 1862 passed, 0 failed, 0 skipped, with 1 xfailed and 3 xpassed, unchanged from the baseline.
+- **Close-out checks**, 20261127: preflight P1–P11 passed, with bare `pytest` at 1862 passed, 0 failed, 0 skipped (1 xfailed, 3 xpassed) and `pytest automation/` at 153 passed, 0 failed, 0 skipped. Pull request #311's checks all passed at `4982500`: Application suite, Style check on changed lines, Commit messages, Session rules, CodeQL.
 - **Live verification**, 20261127, after the sweep:
   - **AC1.2:** `python3 automation/issue_validator.py`, without `--create`, on a copy of `automation/fixtures/valid_minimal.json` with `labels` `["gap", "process"]`. With the check `git -C <live tree> rev-parse HEAD equals git rev-parse dev` it exits 1 and prints the `acs[0].check displays on GitHub as` line. With `` `git -C <live tree> rev-parse HEAD` equals `git rev-parse dev` `` it exits 0 and prints its `gh issue create` command.
   - **AC2.1:** the 16 lines `git diff aa863b4 0db1bdd` adds, each rendered through `gh api -X POST /markdown -f mode=gfm`, display every placeholder in their code spans. The three templates, searched outside code spans and fenced blocks for a `<…>` placeholder, return `docs/dev/design/_TEMPLATE_DESIGN.md:72` alone.

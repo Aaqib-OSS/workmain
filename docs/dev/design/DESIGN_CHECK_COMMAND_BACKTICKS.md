@@ -1,6 +1,6 @@
 # A check that displays as written — Design Study
 
-**Status:** Active
+**Status:** Shipped
 
 **Kind:** Design study
 
@@ -106,5 +106,5 @@ The read was read-only. The only things run were `gh issue list`, `gh api -X POS
 
 ## 6. Disposition
 
-- Promoted to:
-- Superseded by:
+- Promoted to: `../specs/CHECK_COMMAND_BACKTICKS_SPEC.md`
+- Superseded by: n/a
