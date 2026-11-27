@@ -74,7 +74,7 @@ The read was read-only. The only things run were `gh issue list`, `gh api -X POS
 - **§1.5:** a rule has one home, and a change to a rule finds every statement of it.
 - **`.claude/skills/session-start/references/spanner.md` § Working rules:** build only what the issue asks for, and offer only the options that survive.
 
-**The command rule (Fix in mind, second question).** Enforcing "a check's command is written in backticks" in the validator needs a hand-kept list of command words, and misjudges prose in both directions (F9, F10). The only surviving option is to leave it to the written rule in §1.2, and to review. The validator enforces display, which is the harm #284 names (F6). Q2 asks Ray to confirm.
+**The command rule (Fix in mind, second question).** Enforcing "a check's command is written in backticks" in the validator needs a hand-kept list of command words, and misjudges prose in both directions (F9, F10). So the validator does not enforce it, and enforces display, which is the harm #284 names (F6). No rule is written for it either (Q2): writing a command in backticks is standard Markdown practice, and the standards do not restate standard practice. §1.2 changes only where its own text displays altered (F11). AC2's first half, a reading of §1.2 for how to write a check, is restated in the spec's §5 to keep only its display half, and the issue body is edited at close-out (§1.2).
 
 **How the validator judges display (Fix in mind, first question).** Two options survive.
 
@@ -92,16 +92,17 @@ The read was read-only. The only things run were `gh issue list`, `gh api -X POS
 
 **Recommendation:** Option A. It is the only option whose judgement is exact, and it needs nothing the validator does not already use (F2). Option B's only advantage is working offline, and the validator cannot run offline anyway.
 
-**The sweep (Fix in mind, third question).** AC3 needs only the 41 altered checks fixed (F4). Under the written rule, the 97 unquoted commands that display correctly (F8) would break §1.2 from the day it ships. Q3 asks Ray which set the sweep covers.
+**The sweep (Fix in mind, third question).** The sweep covers both sets (Q3): the 41 checks that display altered (F4) and the 97 unquoted commands that display correctly (F8), in 49 issues. Choosing which text in a check is the command is a reading, done once per check. Every edited check is listed in the results artifact for Ray's review. Before the first edit, every open issue's body is backed up, and the changes are checked against that backup by AC3 and AC4. Where the backup is kept is Q5.
 
 ## 5. Open questions
 
 | Q | Question | Answer |
 | --- | --- | --- |
-| Q1 | Does the validator judge display by rendering through GitHub (Option A) or offline (Option B)? Recommended: A (§4). | |
-| Q2 | Is "a check's command is written in backticks" left to the written rule in §1.2 and to review, with the validator enforcing display only? This is the only surviving option (§4, F9, F10). | |
-| Q3 | Does the sweep cover only the 41 checks that display altered, in 21 issues (F4), or also the 97 unquoted commands that display correctly, in 49 issues together (F8)? Recommended: both. The new §1.2 rule then holds for every open issue from the day it ships. Each edit adds backticks only, AC4 proves that, and the results artifact lists every edited check for review. The cost is that choosing which text in a check is the command is a reading, done once per check and reviewable in that table. | |
-| Q4 | #295 is `parked` and names `docs/standards/1-workflow.md` (§1.3). Its finding, provider defaults written in code, is unrelated to this work. Only its checks are in the sweep (F4). Fold it in, or leave it parked? Recommended: leave it parked. | |
+| Q1 | Does the validator judge display by rendering through GitHub (Option A) or offline (Option B)? Recommended: A (§4). | Q1 answered 20261127: Option A. |
+| Q2 | Is "a check's command is written in backticks" left to the written rule in §1.2 and to review, with the validator enforcing display only? This is the only surviving option (§4, F9, F10). | Q2 answered 20261127: no rule is written. Backticks around a command are standard Markdown practice, and recording standard practice as a rule is what the standards exist to avoid. The validator enforces display only. |
+| Q3 | Does the sweep cover only the 41 checks that display altered, in 21 issues (F4), or also the 97 unquoted commands that display correctly, in 49 issues together (F8)? | Q3 answered 20261127: all of them, with a backup of every open issue taken before the sweep and the changes checked against it. |
+| Q4 | #295 is `parked` and names `docs/standards/1-workflow.md` (§1.3). Its finding, provider defaults written in code, is unrelated to this work. Only its checks are in the sweep (F4). Fold it in, or leave it parked? Recommended: leave it parked. | Q4 answered 20261127: leave it parked. |
+| Q5 | Where is the sweep's backup kept? §7 names no home for it, and the scratchpad does not survive a reboot. Recommended: a JSON file of every open issue's number, title and body, written by `gh issue list` before the first edit to a path outside the repository that Ray names. Its path and SHA-256 go in the results artifact. A body is restored from it with `gh issue edit --body-file`. GitHub's own edit history is a second copy. | |
 
 ## 6. Disposition
 
