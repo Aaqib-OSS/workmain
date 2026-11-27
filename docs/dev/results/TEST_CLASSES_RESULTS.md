@@ -14,7 +14,7 @@
 
 ## 1. Summary
 
-Complete, with AC2.3 and AC5.1's reading awaiting Ray. Every test in `tests/` is now a method of a plain class. The 82 tests from pull request #290 enter through its commit `402ec1a`, cherry-picked with Aaqibhafeez Khan as author and carrying `f6667a2`'s five test bodies and the style check's annotations (`5a6227a`). The four tests in command test files follow in their own files (`bfb5927`). The three Ollama unavailability tests now set up the failed request themselves, so they pass whatever listens on `localhost:11434` (`aef4690`). The module docstring of `tests/test_provider_foundation.py` describes the file as it is (`64a21ac`). The suite collects the same 1866 tests and gives the baseline counts.
+Complete, every test in `tests/` is now a method of a plain class. The 82 tests from pull request #290 enter through its commit `402ec1a`, cherry-picked with Aaqibhafeez Khan as author and carrying `f6667a2`'s five test bodies and the style check's annotations (`5a6227a`). The four tests in command test files follow in their own files (`bfb5927`). The three Ollama unavailability tests now set up the failed request themselves, so they pass whatever listens on `localhost:11434` (`aef4690`). The module docstring of `tests/test_provider_foundation.py` describes the file as it is (`64a21ac`). The suite collects the same 1866 tests and gives the baseline counts.
 
 ## 2. What shipped, by step
 
@@ -34,10 +34,10 @@ Complete, with AC2.3 and AC5.1's reading awaiting Ray. Every test in `tests/` is
 | AC1.2 | Met | The AC2.2 command, `python3 - "$(git merge-base origin/dev HEAD)" HEAD` at `64a21ac`: no `NOT PLAIN` and no `MISSING` line. |
 | AC2.1 | Met | The AC2.1 command at `64a21ac`: no diff line; counts `1866 tests collected` at the base, then `1866 tests collected` on the branch. |
 | AC2.2 | Met | The AC2.2 command at `64a21ac`: no output, so no `CHANGED` line. After Step 1's conflict resolution and before the five bodies were applied, the same comparison against `402ec1a` printed the 5 `CHANGED` lines §2 names. |
-| AC2.3 | Not met | `Awaiting Ray`: the four reworded docstrings, each against its version at `5d9bed2` (`git show 5d9bed2:<file>`), for whether it states the same behaviour: `tests/test_cli_logging.py::TestCliLogging::test_cli_python_warning_is_a_log_record_and_nothing_to_stderr`, `tests/test_notes_add.py::TestNotesAdd::test_t12_note_persists_when_the_time_entry_prompt_is_cancelled`, `tests/test_provider_foundation.py::TestProviderRouting::test_application_functions_entry_non_positive_int_raises_naming_it`, `tests/test_provider_foundation.py::TestProviderRouting::test_call_type_in_both_blocks_raises_naming_it`. |
+| AC2.3 | Met | Ray, 20261127: the four reworded docstrings, each against its version at `5d9bed2` (`git show 5d9bed2:<file>`), for whether it states the same behaviour: `tests/test_cli_logging.py::TestCliLogging::test_cli_python_warning_is_a_log_record_and_nothing_to_stderr`, `tests/test_notes_add.py::TestNotesAdd::test_t12_note_persists_when_the_time_entry_prompt_is_cancelled`, `tests/test_provider_foundation.py::TestProviderRouting::test_application_functions_entry_non_positive_int_raises_naming_it`, `tests/test_provider_foundation.py::TestProviderRouting::test_call_type_in_both_blocks_raises_naming_it`. |
 | AC3.1 | Met | Bare `pytest` at `64a21ac`: 1862 passed, 0 failed, 0 skipped, with 1 xfailed and 3 xpassed, equal to the §2 baseline, with the same `.env`. |
 | AC4.1 | Met | The AC4.1 command at `aef4690`: `3 passed, 123 deselected`, no `NO FAILED REQUEST` line. With nothing listening on 11434, the bare `pytest` of AC3.1 passes all three. Before the fix: §5. |
-| AC5.1 | Not met | The AC5.1 command at `64a21ac`: no output (at `5d9bed2` it printed line 2). `Awaiting Ray`: a reading of the module docstring of `tests/test_provider_foundation.py`, lines 1–11, for whether it describes the file as it is and not how it came to be. |
+| AC5.1 | Met | Ray, 20261127: a reading of the module docstring of `tests/test_provider_foundation.py`, lines 1–11, for whether it describes the file as it is and not how it came to be. The AC5.1 command at `64a21ac`: no output (at `5d9bed2` it printed line 2). |
 
 ## 4. Deviations and decisions
 
