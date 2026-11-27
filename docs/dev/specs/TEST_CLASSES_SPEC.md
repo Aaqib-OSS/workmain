@@ -1,6 +1,6 @@
 # Module-level tests into plain classes — Spec
 
-**Status:** Draft
+**Status:** Approved
 
 **Author:** Spanner
 
@@ -40,6 +40,7 @@
 | 20261127 | Caliper | 2, Spec defect, non-blocking: AC5.1's grep sits in a table cell, so its alternations are written `\|`. Copied from the raw file, `grep -nE '…\|…'` treats `\|` as a literal pipe. Run at `3db3cdf`, the raw form prints nothing and exits 1, while the form without escapes prints line 2. The row says "It prints line 2 at the **Read at:** commit", which holds only once the escapes are removed. As written, the command passes before any change is made. Fix: move the command into a fenced block below the table, as the AC1.1, AC2.1 and AC2.2 commands already are. AC2.1's `pytest --collect-only -q \| tail -1` has the same form, unchanged since `38aaea1`, but there pytest errors on the `\|` argument instead of passing silently. | Accepted. Both commands are now in fenced blocks: AC5.1's as its own block, and AC2.1's count as two lines in the AC2.1 block. Neither table cell holds an escaped pipe. |
 | 20261127 | Caliper | 2, Spec defect, non-blocking: DR2 lets four docstrings be reworded, provided each "says what it said before". Their names are in §2 and are confirmed by AST at `origin/dev`: exactly these four multi-line test docstrings have a summary sentence that continues onto the next line. AC2.2 leaves those four out of its docstring comparison, and no other criterion checks that a rewording keeps its meaning. Fix: AC2.2, or a new criterion, names a Ray reading of the four reworded docstrings against their versions at the branch's base. Alternatively the spec states that this property is not checked. | Accepted, first option. AC2.3 is a stated reading by Ray of the four docstrings against their versions at the branch's base. It maps to the issue's second criterion, which says no test is lost or changed by the move. |
 | 20261127 | Caliper | Pass at `3db3cdf`, changes since `38aaea1`: 24 items checked, 0 blocking, 3 non-blocking. | n/a |
+| 20261127 | Ray | Spec approved. `git diff 3db3cdf` on the spec, run before the status edit, shows only Decision Log rows and the resolutions of the pass's three non-blocking findings (`docs/standards/1-workflow.md` §1.1 Approval). | Adopted; **Status:** `Approved`. |
 
 ---
 
