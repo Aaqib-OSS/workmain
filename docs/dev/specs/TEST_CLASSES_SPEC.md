@@ -1,6 +1,6 @@
 # Module-level tests into plain classes — Spec
 
-**Status:** Draft
+**Status:** Approved
 
 **Author:** Spanner
 
@@ -42,6 +42,7 @@
 | 20261127 | Caliper | Pass at `3db3cdf`, changes since `38aaea1`: 24 items checked, 0 blocking, 3 non-blocking. | n/a |
 | 20261127 | Ray | Spec approved. `git diff 3db3cdf` on the spec, run before the status edit, shows only Decision Log rows and the resolutions of the pass's three non-blocking findings (`docs/standards/1-workflow.md` §1.1 Approval). | Adopted; **Status:** `Approved`. |
 | 20261127 | Anvil | §2's row for `tests/test_cost_display.py::test_costs_usage_error_exits_2_on_stderr` cites `tests/test_cost_display.py:133`. The `parametrize` decorator is on line 134 and the `def` on line 135, at the **Read at:** commit too. What the row states is true. | Accepted, verified at `5d9bed2`: line 133 is blank. Design study F10 is corrected in place. Ray, 20261127: fix §2 itself. §2's evidence now reads `tests/test_cost_display.py:134`, and **Status:** returns to `Draft` for Ray to approve again (`docs/standards/1-workflow.md` §1.1 Approval). |
+| 20261127 | Ray | Spec approved again after the §2 line correction (`dbb3ea9`). | Adopted; **Status:** `Approved`. |
 
 ---
 
