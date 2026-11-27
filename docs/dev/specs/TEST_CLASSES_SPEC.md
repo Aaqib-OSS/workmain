@@ -36,6 +36,10 @@
 | 20261127 | Caliper | Existing defect, non-blocking: line 2 of the module docstring in `tests/test_provider_foundation.py` reads "Provider Foundation Sprint", a process citation `docs/standards/3-code.md` §3 forbids. No step changes that line, so the style check doesn't flag it. | Verified at `tests/test_provider_foundation.py:2`. Reported to Ray in one line. Ray, 20261127: resolved in this issue. Verified that the rest of the docstring also describes history: "base_provider.py's additions" and "the OllamaProvider ABC-compliant stub". `docs/standards/3-code.md` §3 requires a docstring to describe the code as it is, so the whole docstring is rewritten, not just the one word. DR5, Step 4, AC5.1. The issue has no criterion for it, so AC5.1 is added to the issue body as a fifth criterion at close-out (`docs/standards/1-workflow.md` §1.2). |
 | 20261127 | Caliper | Pass at `38aaea1`, full: 25 items checked, 1 blocking, 6 non-blocking. | n/a |
 | 20261127 | Ray | The process citation in the module docstring of `tests/test_provider_foundation.py`, which Caliper reported as an existing defect, is resolved in this issue. | Adopted; §1, DR5, Step 4, AC5.1. |
+| 20261127 | Caliper | 2, Spec defect, non-blocking: AC5.1 checks less than DR5 requires. DR5, and the resolution of Decision Log row 36, require the whole module docstring to describe the file as it is. That means removing the "Sprint" citation and also the history in "base_provider.py's additions" and "the OllamaProvider ABC-compliant stub". AC5.1 only names citations, and its grep only matches the `_HISTORY` forms. Deleting the one word "Sprint " therefore turns AC5.1 green while the history stays (`SKILL.md` § Role 3, last paragraph; `docs/standards/1-workflow.md` §1.2). AC5.1 is also scoped to the whole file, and says it "cites no … backlog item". After the work the file still has its `Issue #N` comments (`tests/test_provider_foundation.py:226`, `:306`, `:822`, `:877`, `:1037` and others at `HEAD`), and §1 puts those out of scope. Read as written, the property is false even when the command passes. Fix: AC5.1's property becomes DR5's: the module docstring describes the file as it is, with no process citation. It is checked by the grep, run over the module docstring only, plus a Ray reading of that docstring for history, in the §1.2 sign-off form. | Accepted, verified: the `Issue #N` comments are at the lines cited. AC5.1's property is now DR5's. Its command searches the module docstring alone with the `_HISTORY` pattern, and prints line 2 at `3db3cdf`. A stated reading by Ray covers the history. |
+| 20261127 | Caliper | 2, Spec defect, non-blocking: AC5.1's grep sits in a table cell, so its alternations are written `\|`. Copied from the raw file, `grep -nE '…\|…'` treats `\|` as a literal pipe. Run at `3db3cdf`, the raw form prints nothing and exits 1, while the form without escapes prints line 2. The row says "It prints line 2 at the **Read at:** commit", which holds only once the escapes are removed. As written, the command passes before any change is made. Fix: move the command into a fenced block below the table, as the AC1.1, AC2.1 and AC2.2 commands already are. AC2.1's `pytest --collect-only -q \| tail -1` has the same form, unchanged since `38aaea1`, but there pytest errors on the `\|` argument instead of passing silently. | Accepted. Both commands are now in fenced blocks: AC5.1's as its own block, and AC2.1's count as two lines in the AC2.1 block. Neither table cell holds an escaped pipe. |
+| 20261127 | Caliper | 2, Spec defect, non-blocking: DR2 lets four docstrings be reworded, provided each "says what it said before". Their names are in §2 and are confirmed by AST at `origin/dev`: exactly these four multi-line test docstrings have a summary sentence that continues onto the next line. AC2.2 leaves those four out of its docstring comparison, and no other criterion checks that a rewording keeps its meaning. Fix: AC2.2, or a new criterion, names a Ray reading of the four reworded docstrings against their versions at the branch's base. Alternatively the spec states that this property is not checked. | Accepted, first option. AC2.3 is a stated reading by Ray of the four docstrings against their versions at the branch's base. It maps to the issue's second criterion, which says no test is lost or changed by the move. |
+| 20261127 | Caliper | Pass at `3db3cdf`, changes since `38aaea1`: 24 items checked, 0 blocking, 3 non-blocking. | n/a |
 
 ---
 
@@ -130,11 +134,11 @@ This is the defect fix, so the step runs the AC4.1 command twice. Before the cha
 
 ### Step 4 — the module docstring
 
-Under DR5. No other line of the file changes. AC5.1's command prints nothing.
+Under DR5. No other line of the file changes. The AC5.1 command prints nothing.
 
 ### Step 5 — results artifact
 
-`docs/dev/results/TEST_CLASSES_RESULTS.md`, from `docs/dev/results/_TEMPLATE_RESULTS.md`. Under "Defect shown before the fix" it records Step 3's two AC4.1 runs. It also records the AC1.1 command's two runs: 86 lines before Step 1, and nothing after Step 2.
+`docs/dev/results/TEST_CLASSES_RESULTS.md`, from `docs/dev/results/_TEMPLATE_RESULTS.md`. Under "Defect shown before the fix" it records Step 3's two AC4.1 runs. It also records the AC1.1 command's two runs: 86 lines before Step 1, and nothing after Step 2. AC2.3, and AC5.1's reading, are recorded `Not met` with `Awaiting Ray` as evidence (`docs/standards/1-workflow.md` §1.2).
 
 ### Close-out
 
@@ -150,11 +154,12 @@ None.
 | --- | --- | --- |
 | AC1.1 | Every test in `tests/` is defined in a class | The AC1.1 command below, the issue's own, printing nothing. It prints 86 lines at the **Read at:** commit. |
 | AC1.2 | Every test that was module-level at the branch's base is a method of a plain class in the same file (DR1) | The AC2.2 command below printing no `NOT PLAIN` and no `MISSING` line |
-| AC2.1 | No test is lost or added: the suite collects the same tests, by file, name and parameters, as the branch's base | The AC2.1 command below printing nothing, and `pytest --collect-only -q \| tail -1` reporting the same count on the branch as on its base (1866 at the **Read at:** commit) |
+| AC2.1 | No test is lost or added: the suite collects the same tests, by file, name and parameters, as the branch's base | The AC2.1 command below printing no diff line, and its two count lines, base then branch, matching (1866 at the **Read at:** commit) |
 | AC2.2 | No moved test changes what it checks, apart from the three Ollama tests (DR2) | The AC2.2 command below printing no `CHANGED` line. It compares each moved test with its original at the branch's base, after removing `self` and annotations and collapsing whitespace in docstrings. It doesn't compare the docstrings of the four DR2 lets be reworded. It reports the 5 `f6667a2` bodies as `CHANGED` when run against `402ec1a` (§2), so it can catch a body the conflict lost. |
+| AC2.3 | Each of the four docstrings DR2 lets be reworded says what it said at the branch's base | A stated reading by Ray of the four docstrings §2 names, each against its version at the branch's base (`git show "$(git merge-base origin/dev HEAD)":<file>`), for whether it states the same behaviour. Recorded as `docs/standards/1-workflow.md` §1.2 states for a sign-off. |
 | AC3.1 | The full suite passes | A bare `pytest` reporting 0 failed, with the passed, skipped, xfailed and xpassed counts equal to the baseline in §2 when run with the same `.env` |
 | AC4.1 | The three Ollama unavailability tests pass whatever listens on `localhost:11434`, and each passes because the request `OllamaProvider.check_availability` makes fails (DR4). The issue body gains this as its fourth criterion at close-out. | The AC4.1 command below reporting `3 passed` and printing no `NO FAILED REQUEST` line. It serves, on `127.0.0.1:11434`, a model list naming the tests' model and a complete reply, which makes all three fail at the **Read at:** commit (§2). While each test runs, it traces `check_availability` and prints `NO FAILED REQUEST` when the `except Exception` branch did not run. A bare `pytest` with nothing listening, AC3.1, covers the other case. |
-| AC5.1 | `tests/test_provider_foundation.py` cites no gate, phase, sprint, backlog item or open question (DR5). The issue body gains this as its fifth criterion at close-out. | `grep -nE '\bGate [0-9]+[A-Z]?\b\|\bPhase [0-9]+\b\|_Sprint\b\|\bSprint\b\|\bItem #?[0-9]+\b\|\bOQ[0-9]+\b' tests/test_provider_foundation.py` printing nothing. It prints line 2 at the **Read at:** commit. The pattern is `automation/style_check.py` `_HISTORY`. |
+| AC5.1 | The module docstring of `tests/test_provider_foundation.py` describes what the file tests as it is, with no citation of the process that produced it (DR5). The issue body gains this as its fifth criterion at close-out. | The AC5.1 command below printing nothing. It searches the module docstring alone with `automation/style_check.py` `_HISTORY`, the style check's citation pattern, and prints line 2 at the **Read at:** commit. Plus a stated reading by Ray of the module docstring, for whether it describes the file as it is and not how it came to be. Recorded as `docs/standards/1-workflow.md` §1.2 states for a sign-off. |
 
 **AC1.1 command** (the issue's), run from the repository root:
 
@@ -162,12 +167,14 @@ None.
 python3 -c "import ast,pathlib; [print(f'{p}:{n.lineno} {n.name}') for p in sorted(pathlib.Path('tests').rglob('test_*.py')) for n in ast.parse(p.read_text()).body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name.startswith('test')]"
 ```
 
-**AC2.1 command**, run from the repository root. It collects the base in a temporary worktree and removes the class part of every test ID:
+**AC2.1 command**, run from the repository root. It collects the base in a temporary worktree, removes the class part of every test ID and diffs the two lists, then prints the base's count and the branch's:
 
 ```bash
 collect() { (cd "$1" && pytest --collect-only -q -p no:cacheprovider 2>/dev/null | grep '::' | sed -E 's/::[A-Za-z_][A-Za-z0-9_]*::/::/' | sort); }
 w=$(mktemp -d) && git worktree add --detach "$w" "$(git merge-base origin/dev HEAD)" >/dev/null 2>&1
-diff <(collect "$w") <(collect .); git worktree remove --force "$w"
+diff <(collect "$w") <(collect .)
+(cd "$w" && pytest --collect-only -q -p no:cacheprovider 2>/dev/null | tail -1); pytest --collect-only -q -p no:cacheprovider 2>/dev/null | tail -1
+git worktree remove --force "$w"
 ```
 
 **AC2.2 command**, run from the repository root as `python3 - "$(git merge-base origin/dev HEAD)" HEAD`. The two arguments are the revision whose module-level tests are read, and the revision whose classes are searched for them:
@@ -253,6 +260,12 @@ sys.exit(rc)
 ```
 
 Run as `python3 - <<'EOF'` with the block above, then `EOF`.
+
+**AC5.1 command**, run from the repository root:
+
+```bash
+python3 -c "import ast, re; d = ast.get_docstring(ast.parse(open('tests/test_provider_foundation.py').read()), clean=False) or ''; [print(l) for l in d.splitlines() if re.search(r'\bGate \d+[A-Z]?\b|\bPhase \d+\b|_Sprint\b|\bSprint\b|\bItem #?\d+\b|\bOQ\d+\b', l)]"
+```
 
 ## 6. Test plan
 
