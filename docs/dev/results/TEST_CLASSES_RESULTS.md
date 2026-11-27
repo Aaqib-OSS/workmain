@@ -1,6 +1,6 @@
 # Module-level tests into plain classes — Implementation Results
 
-**Status:** Active
+**Status:** Shipped
 
 **Author:** Anvil
 
@@ -8,7 +8,7 @@
 
 **Spec:** `../specs/TEST_CLASSES_SPEC.md`
 
-**Released as:** set by `/closeout`
+**Released as:** 1.63.0, tag `v1.63.0`
 
 ---
 
@@ -64,12 +64,13 @@ None.
 
 ## 5. Verification
 
-- **Test suite:** 1862 passed, 0 failed, 0 skipped, with 1 xfailed and 3 xpassed (baseline: 1862 passed, 0 failed, 0 skipped, with 1 xfailed and 3 xpassed, the spec's §6). The same counts after every step.
+- **Test suite:** 1862 passed, 0 failed, 0 skipped, with 1 xfailed and 3 xpassed (baseline: 1862 passed, 0 failed, 0 skipped, with 1 xfailed and 3 xpassed, the spec's §6). The same counts after every step. At close-out, a bare `pytest` at `1917c37` gave 1862 passed, 0 failed, 0 skipped, with 1 xfailed and 3 xpassed.
 - **Defect shown before the fix:** the AC4.1 command, a stub on `127.0.0.1:11434` listing `mistral-7b:latest` and answering `/api/generate`, over `TestOllamaProvider::test_ollama_provider_generate_raises_unavailable`, `::test_ollama_provider_test_connection_returns_false` and `::test_ollama_provider_check_availability_returns_unavailable`.
   - Before Step 3, at `bfb5927`: `3 failed, 123 deselected`, and a `NO FAILED REQUEST` line for each of the three.
   - After, at `aef4690`: `3 passed, 123 deselected`, and no `NO FAILED REQUEST` line.
 - **AC1.1 runs:** 86 lines at `5d9bed2`, before Step 1: 66 in `tests/test_provider_foundation.py`, 6 in `tests/test_ai_foundation.py`, 4 each in `tests/test_ai_providers_live.py` and `tests/test_cli_logging.py`, 2 in `tests/test_compare_providers.py`, and 1 each in `tests/test_cost_display.py`, `tests/test_meetings_merge.py`, `tests/test_meetings_reschedule.py` and `tests/test_notes_add.py`. Nothing after Step 2, at `bfb5927`.
 - **Checks:** `automation/style_check.py`: 0 violations, PASS, at each step's commit (128 at the cherry-pick before Step 1's fixes). `automation/architecture_check.py`: PASS, no new finding.
+- **Pull request checks:** #312 at `1917c37`: Application suite, Commit messages, Session rules and Style check on changed lines all pass. The application suite run there re-checks AC3.1, and AC4.1's other case (nothing listening on 11434), on a clean runner.
 - **Live verification:** none. The change is to `tests/` alone.
 
 ## 6. Follow-ups
@@ -77,4 +78,4 @@ None.
 | Item | Description | Why deferred |
 | --- | --- | --- |
 | Issue #288 body | AC4.1 and AC5.1 join the issue's criteria as its fourth and fifth (spec §5). | Made at close-out. |
-| Pull request #290 | Ray credits its author in this branch's pull request description and closes #290 with a link to it (spec § Close-out). | Made at close-out. |
+| Pull request #290 | #312's description credits #290's author. Ray closes #290 with a link to #312 (spec § Close-out). | Made at close-out. |

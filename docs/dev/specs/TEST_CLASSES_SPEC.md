@@ -1,6 +1,6 @@
 # Module-level tests into plain classes — Spec
 
-**Status:** Approved
+**Status:** Shipped
 
 **Author:** Spanner
 

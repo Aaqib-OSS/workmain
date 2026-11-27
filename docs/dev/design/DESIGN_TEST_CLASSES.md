@@ -1,6 +1,6 @@
 # Module-level tests into plain classes — Design Study
 
-**Status:** Active
+**Status:** Shipped
 
 **Kind:** Design study
 
