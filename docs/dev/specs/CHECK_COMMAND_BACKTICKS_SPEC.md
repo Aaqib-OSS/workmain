@@ -27,6 +27,7 @@
 | 20261127 | Ray | Design study Q3: which checks the sweep covers | Accepted — every check that displays altered, and every command outside backticks in a check. Each change is checked against the body before it. Step 3, DR4, AC4.2 |
 | 20261127 | Ray | Design study Q4: parked #295 | Accepted — it stays parked. Its checks are swept like any other |
 | 20261127 | Ray | Design study Q5: where the sweep's backup is kept | Accepted — no durable backup. GitHub's edit history keeps every earlier body, and the copy step 3 compares against is temporary, in the session scratchpad |
+| 20261127 | Ray | Fix every placeholder outside backticks in the three `docs/dev/` templates, not only the template §5 rows issue #284 names | Accepted — step 2 and AC2.1 cover all three templates. AC2 is restated in §5 to name them |
 | 20261127 | Spanner | `docs/standards/3-code.md` §3.8: the text of rendered HTML is read with the standard library's `html.parser.HTMLParser` | Accepted — no mechanism is written by hand |
 
 ---
@@ -38,7 +39,7 @@
 - `automation/issue_validator.py`: a rule that refuses a check GitHub would display differently from its source, and the renderer it calls.
 - `automation/issue_validator_test.py`, and a new fixture, `automation/fixtures/check_display_rendered.json`.
 - `docs/standards/1-workflow.md` §1.2: the criterion-form sentence, whose `<property>` GitHub drops.
-- `docs/dev/specs/_TEMPLATE_SPEC.md` §5: the rows AC1.1 and AC1.3, whose placeholders GitHub drops.
+- Every placeholder written outside backticks in `docs/dev/specs/_TEMPLATE_SPEC.md`, `docs/dev/design/_TEMPLATE_DESIGN.md` and `docs/dev/results/_TEMPLATE_RESULTS.md`. Ten such lines lose a placeholder on GitHub. Five keep theirs only because of their wording: `<commit SHA §2 was verified at>` survives, while `<commit SHA the read was taken at>` is dropped.
 - The bodies of open GitHub issues: the checks only, and backticks only.
 
 **Out of scope:**
@@ -46,7 +47,8 @@
 - **Whether text is a command.** No validator rule judges it, and no standard states it (design study Q2).
 - **Every other part of an issue body**, including its context and its criteria. Only checks are swept.
 - **Closed issues**, and artifacts in `docs/archive/`.
-- **Other placeholders in the templates**, outside `docs/dev/specs/_TEMPLATE_SPEC.md` §5: the header fields and §6 of that file, and `docs/dev/design/_TEMPLATE_DESIGN.md` and `docs/dev/results/_TEMPLATE_RESULTS.md`. Issue #284 names only §1.2 and the template §5. Reported as an existing defect.
+- **The design template's `Promoted to:` line.** Its placeholder wraps code spans in angle brackets: ``<`../specs/<file>_SPEC.md`, …, or issue #N>``. GitHub escapes the brackets and displays the line as written, and a code span cannot hold it without nesting.
+- **Placeholders already in backticks**, such as `config/providers/_template/models/README.md`'s `models/<model>/`, and every placeholder inside a fenced block.
 - **`automation/fixtures/*.json` checks.** Tests not about display use `render_as_written`, so these fixtures are judged by no renderer.
 - **#295's own finding.** It stays parked (Q4).
 
@@ -72,7 +74,7 @@ Direct path: each step quotes the text it replaces (`docs/standards/1-workflow.m
 | Step | Deliverable | Files |
 | --- | --- | --- |
 | 1 | The validator refuses a check that GitHub would display differently from its source | `automation/issue_validator.py`, `automation/issue_validator_test.py`, `automation/fixtures/check_display_rendered.json` |
-| 2 | §1.2 and the template §5 display as written | `docs/standards/1-workflow.md`, `docs/dev/specs/_TEMPLATE_SPEC.md` |
+| 2 | §1.2 and the three `docs/dev/` templates display as written | `docs/standards/1-workflow.md`, `docs/dev/specs/_TEMPLATE_SPEC.md`, `docs/dev/design/_TEMPLATE_DESIGN.md`, `docs/dev/results/_TEMPLATE_RESULTS.md` |
 | 3 | Every open issue's checks display as written, with every command in backticks | open issue bodies on GitHub; `docs/dev/results/CHECK_COMMAND_BACKTICKS_RESULTS.md` (created) |
 | 4 | The results artifact records every criterion | `docs/dev/results/CHECK_COMMAND_BACKTICKS_RESULTS.md` |
 
@@ -436,25 +438,73 @@ index 8eab037..2aa8244 100644
 
 The suite after the step: `pytest automation/` 152 passed, 0 failed, 0 skipped (§6).
 
-### Step 2 — §1.2 and the template §5 display as written
+### Step 2 — §1.2 and the templates display as written
+
+Each placeholder is wrapped in backticks, and nothing else on its line changes.
 
 In `docs/standards/1-workflow.md` §1.2, the bullet "A criterion names a property of the delivered system":
 
 - Replace: ``Write it as "*<property>*, checked by `<command>`".``
 - With: ``Write it as "`<property>`, checked by `<command>`".``
 
-In `docs/dev/specs/_TEMPLATE_SPEC.md` §5, replace these two rows:
+In `docs/dev/specs/_TEMPLATE_SPEC.md`, replace these lines:
 
 ```text
+# <Title> — Spec
+**Read at:** <commit SHA §2 was verified at>
+| YYYYMMDD | <one of: Ray, Spanner, Caliper, Caliper (post-implementation), Anvil> | | Accepted / **Not taken** — <why> |
 | AC1.1 | <property of the delivered system> | `pytest tests/test_x.py` passes, with a test showing <behaviour> |
 | AC1.3 | <property of a document> | Ray reads <section> for <what> |
+- **Baseline before this work:** <passed> passed, <failed> failed, <skipped> skipped, from a bare `pytest` at the **Read at:** commit.
+- **Expected after:** <passed> passed, <failed> failed, <skipped> skipped.
 ```
 
 With:
 
 ```text
+# `<Title>` — Spec
+**Read at:** `<commit SHA §2 was verified at>`
+| YYYYMMDD | `<one of: Ray, Spanner, Caliper, Caliper (post-implementation), Anvil>` | | Accepted / **Not taken** — `<why>` |
 | AC1.1 | `<property of the delivered system>` | `pytest tests/test_x.py` passes, with a test showing `<behaviour>` |
 | AC1.3 | `<property of a document>` | Ray reads `<section>` for `<what>` |
+- **Baseline before this work:** `<passed>` passed, `<failed>` failed, `<skipped>` skipped, from a bare `pytest` at the **Read at:** commit.
+- **Expected after:** `<passed>` passed, `<failed>` failed, `<skipped>` skipped.
+```
+
+In `docs/dev/design/_TEMPLATE_DESIGN.md`, replace these lines:
+
+```text
+# <Title> — Design Study | Recon
+**Read at:** <commit SHA the read was taken at>
+### Option XX — <name>
+**Recommendation:** <which, and why>, argued from the governing rules above.
+- Superseded by: <filename, if applicable>
+```
+
+With:
+
+```text
+# `<Title>` — Design Study | Recon
+**Read at:** `<commit SHA the read was taken at>`
+### Option XX — `<name>`
+**Recommendation:** `<which, and why>`, argued from the governing rules above.
+- Superseded by: `<filename, if applicable>`
+```
+
+In `docs/dev/results/_TEMPLATE_RESULTS.md`, replace these lines:
+
+```text
+# <Title> — Implementation Results
+| AC1.2 | **Not met** | `Awaiting Ray`: <what he reads or runs> |
+- **Test suite:** <passed> passed, <failed> failed, <skipped> skipped (baseline: the spec's §6 baseline).
+```
+
+With:
+
+```text
+# `<Title>` — Implementation Results
+| AC1.2 | **Not met** | `Awaiting Ray`: `<what he reads or runs>` |
+- **Test suite:** `<passed>` passed, `<failed>` failed, `<skipped>` skipped (baseline: the spec's §6 baseline).
 ```
 
 No rule changes, so the §1.5 search for other statements of a changed rule does not apply.
@@ -492,14 +542,14 @@ None. `docs/standards/1-workflow.md` §1.4 lists none of the actions this spec t
 
 The issue body needs two edits at close-out (`docs/standards/1-workflow.md` §1.2):
 
-- **AC2:** drop its first check, the reading of §1.2 for how to write a check (design study Q2).
+- **AC2:** drop its first check, the reading of §1.2 for how to write a check (design study Q2). Name the three `docs/dev/` templates in place of `docs/dev/specs/_TEMPLATE_SPEC.md` §5 (Ray, 20261127).
 - **AC4:** add the criterion of AC4.2 (Q3).
 
 | AC | Criterion | How it is checked |
 | --- | --- | --- |
 | AC1.1 | An issue whose check would display on GitHub differently from its source is refused before `gh issue create` runs, for each form found altering display, and the same check with its command in backticks is accepted | `pytest automation/issue_validator_test.py` passes, including `TestCheckDisplay`'s refused and accepted cases for `backslash-before-punctuation`, `placeholder` and `double-underscore-name`, and `test_check_display_refusal_stops_the_create_path_before_gh_issue_create_runs` |
 | AC1.2 | Through its only entry path, `python3 automation/issue_validator.py <file>`, with GitHub's live renderer, the validator refuses a check that displays altered and accepts it in backticks | `python3 automation/issue_validator.py` run on a copy of `automation/fixtures/valid_minimal.json` whose check is `git -C <live tree> rev-parse HEAD equals git rev-parse dev` exits 1 and prints an `acs[0].check displays on GitHub as` line. The same file with `` `git -C <live tree> rev-parse HEAD` `` prints no such line. Recorded in the results artifact |
-| AC2.1 | `docs/standards/1-workflow.md` §1.2 and `docs/dev/specs/_TEMPLATE_SPEC.md` §5 display on GitHub as written. Restated from issue AC2 (design study Q2) | Each section rendered through `gh api -X POST /markdown -f mode=gfm` and compared line by line, and cell by cell, with its source with backticks removed, showing no difference. Recorded in the results artifact |
+| AC2.1 | `docs/standards/1-workflow.md` §1.2 and the three `docs/dev/` templates display every placeholder on GitHub as written. Restated from issue AC2 (design study Q2; Ray, 20261127) | Each line step 2 changes, rendered through `gh api -X POST /markdown -f mode=gfm`, displays every placeholder it holds. A search of `docs/dev/specs/_TEMPLATE_SPEC.md`, `docs/dev/design/_TEMPLATE_DESIGN.md` and `docs/dev/results/_TEMPLATE_RESULTS.md` for a `<…>` placeholder outside a code span or a fenced block finds only the design template's `Promoted to:` line (§1). Both recorded in the results artifact |
 | AC3.1 | Every check in every open issue displays on GitHub as its source states, in both forms | Every open issue's body rendered through `gh api -X POST /markdown -f mode=gfm` and compared check by check with its source with backticks removed, showing no difference. Recorded in the results artifact |
 | AC4.1 | The sweep changed nothing in any issue body but backticks | For each edited issue, its snapshot body and its body after, each with every backtick removed, compared showing no difference. Recorded in the results artifact's table of edited issues |
 | AC4.2 | Every command in an open issue's check is in backticks. Added from design study Q3 | A stated reading by Ray of the results artifact's table of edited issues, for whether each command, and only the command, is in backticks |
