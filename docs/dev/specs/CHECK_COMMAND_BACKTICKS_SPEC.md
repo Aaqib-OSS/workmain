@@ -35,6 +35,9 @@
 | 20261127 | Caliper | 2, Spec defect, non-blocking: §1's count "Ten such lines lose a placeholder… Five keep" doesn't match the render. I rendered the 15 lines step 2 lists through `gh api -X POST /markdown -f mode=gfm`, alone and in their whole files. 9 lose a placeholder: the spec template's Decision Log `<why>` row, AC1.1, AC1.3, Baseline and Expected; the design template's Read at and Option XX; and the results template's AC1.2 and Test suite. 6 keep theirs: the three `# <Title>` headings, which render as `&lt;Title&gt;`, plus the spec template's Read at, Recommendation and Superseded by. Step 2 lists every line, so the build isn't affected. | Accepted — §1 reads 9 and 6. Recommendation and Superseded by are in the design template, not the spec template |
 | 20261127 | Caliper | 4 (§1.2: a contract change enumerates its call sites), Spec defect, non-blocking: §2 row 1's searches don't give the stated results. `git grep -n "validate_issue("` also returns the `def` line. At `HEAD` it returns the spec's own diff lines too. The getattr search has no pathspec, so it returns hits in `docs/archive/` and the design study, not "none". It returns none with `-- '*.py'`. The conclusion holds: the only callers are `main` and `run_validate`. | Accepted — both searches take `-- '*.py'`, and the row states what each returns |
 | 20261127 | Caliper | Pass at 24dedd4, full: 18 items checked, 3 blocking, 2 non-blocking. | n/a |
+| 20261127 | Caliper | 2, Spec defect, non-blocking: when an issue's checks render as a different number of list items, `validate_check_display` returns one issue-level error (`acs: N checks display on GitHub as M list items`) that names no check. Step 3.3 puts a check in the set when the validator "reports it", so that error puts no check in the set, and step 3.6.1 doesn't say what happens next. None of the 78 open issues produces it today (run live at `d6ad044`). In step 3.5 it is an error, so it stops the sweep. Suggested fix: state that a count error stops the sweep at that issue. | Accepted — step 3.3 states that the count error stops the sweep at that issue, which is reported to Ray |
+| 20261127 | Caliper | 2, Spec defect, non-blocking: step 3.7 spaces renders "at least one second apart" for step 3 only. Step 4's AC3.1 run makes the same 78 `gh_render_markdown` calls and nothing spaces them. Step 3.7's "resumes there once the limit has cleared" also covers only a rate-limit error. Any other `gh` error has no resume rule. | Accepted — step 3.7 covers step 4's AC3.1 run, and step 4 cites it. After any error other than a rate limit, the run resumes only on Ray's word |
+| 20261127 | Caliper | Pass at d6ad044, changes since 24dedd4: 20 items checked, 0 blocking, 2 non-blocking. | n/a |
 | 20261127 | Spanner | Finding 2's measurement showed that one render call per check trips GitHub's secondary rate limit at sweep scale: 356 checks, refused with HTTP 403 partway through. | Accepted — `validate_check_display` renders all of an issue's checks in one call, one list item per check, so the sweep makes one call per issue: 78 calls, run one at a time, with no limit reached. DR2, step 1 |
 
 ---
@@ -557,6 +560,8 @@ The sweep's scripts live in the session scratchpad, and nothing it runs is commi
 3. **Measure the set.** A check is in the set when either holds:
    - `validate_check_display`, given the issue's checks as `acs` entries and `gh_render_markdown`, reports it (the AC3.1 compare). An inline check is judged as the line the validator builds, not inside its bullet. Measured on the population above, that judges exactly the 41 checks a render of each whole body finds.
    - it holds a command outside backticks, by the reading rule in 3.4
+
+   An issue for which `validate_check_display` returns its count error (`acs: N checks display on GitHub as M list items`) names no check, so the sweep stops at that issue and reports it to Ray. None of the open issues returns it at the **Read at:** commit.
 4. **Edit.** For each issue in the set, its new body is written to a scratchpad file. In each check in the set, backticks are added and nothing else changes. The reading rule:
    - A command runs from its first word to its last argument, and is wrapped in one span. The phrase stating the result, such as "returning no hits", "printing nothing" or "passing", stays outside it.
    - A check that holds more than one command gets one span for each.
@@ -571,12 +576,12 @@ The sweep's scripts live in the session scratchpad, and nothing it runs is commi
    1. Its live body is read. If it differs from the snapshot, that live body becomes the issue's before-body. The issue is found, measured and edited again from it by 3.2 to 3.4, and checked again by 3.5. A failure stops the sweep at that issue.
    2. `gh issue edit <N> --body-file <file>` is run, with its stderr read in the same command.
    3. The body is read back and compared with the file. A trailing newline added by `--jq` output is ignored.
-7. **Calls to GitHub.** Every render and every edit is made one at a time, at least one second apart, so GitHub's secondary rate limit is not reached. A `gh` error stops the sweep at the issue it was on, and the sweep resumes there once the limit has cleared.
+7. **Calls to GitHub.** This holds for every `gh` call in step 3 and in step 4's AC3.1 run. Every render and every edit is made one at a time, at least one second apart, so GitHub's secondary rate limit is not reached. Any `gh` error stops the run at the issue it was on. After a rate-limit error, the run resumes at that issue once the limit has cleared. After any other error, the error is reported to Ray, and the run resumes at that issue only when he says so.
 8. **Record.** `docs/dev/results/CHECK_COMMAND_BACKTICKS_RESULTS.md` is created from its template. Its table of edited issues gives each issue, each check as it was and as it now is, whether its before-body was the snapshot or a re-read, and the result of the AC4.1 compare. The file is the step's commit.
 
 ### Step 4 — the results artifact
 
-The results artifact records every criterion in §5 against the delivered branch and the live issues. It records the AC3.1 render compare over every open issue at that time, and Ray's AC4.2 reading as `Not met`, `Awaiting Ray` (`docs/standards/1-workflow.md` §1.2).
+The results artifact records every criterion in §5 against the delivered branch and the live issues. It records the AC3.1 render compare over every open issue at that time, made as step 3.7 states, and Ray's AC4.2 reading as `Not met`, `Awaiting Ray` (`docs/standards/1-workflow.md` §1.2).
 
 ### Authorization points
 
