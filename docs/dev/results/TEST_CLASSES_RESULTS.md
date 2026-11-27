@@ -14,7 +14,7 @@
 
 ## 1. Summary
 
-Complete, every test in `tests/` is now a method of a plain class. The 82 tests from pull request #290 enter through its commit `402ec1a`, cherry-picked with Aaqibhafeez Khan as author and carrying `f6667a2`'s five test bodies and the style check's annotations (`5a6227a`). The four tests in command test files follow in their own files (`bfb5927`). The three Ollama unavailability tests now set up the failed request themselves, so they pass whatever listens on `localhost:11434` (`aef4690`). The module docstring of `tests/test_provider_foundation.py` describes the file as it is (`64a21ac`). The suite collects the same 1866 tests and gives the baseline counts.
+Complete. Every test in `tests/` is now a method of a plain class. The 82 tests from pull request #290 enter through its commit `402ec1a`, cherry-picked with Aaqibhafeez Khan as author and carrying `f6667a2`'s five test bodies and the style check's annotations (`5a6227a`). The four tests in command test files follow in their own files (`bfb5927`). The three Ollama unavailability tests now set up the failed request themselves, so they pass whatever listens on `localhost:11434` (`aef4690`). The module docstring of `tests/test_provider_foundation.py` describes the file as it is (`64a21ac`). The suite collects the same 1866 tests and gives the baseline counts.
 
 ## 2. What shipped, by step
 
