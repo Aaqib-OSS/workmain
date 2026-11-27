@@ -1,11 +1,14 @@
 """
-Tests for the Provider Foundation Sprint deliverables: the PROVIDER_REGISTRY
-structure and subclass contract; base_provider.py's additions
-(ProviderUnavailableError, OLLAMA, test_connection); the OllamaProvider
-ABC-compliant stub; config-driven model selection for ClaudeProvider and
-GeminiProvider; ProviderManager's N-provider disabled tracking, get_provider
-and registry methods; dynamic CLI validation; and providers set default's
-read-modify-write.
+Tests for the AI providers, ProviderManager and the providers commands.
+
+Covers PROVIDER_REGISTRY and the BaseProvider subclass contract;
+BaseProvider.test_connection, ProviderUnavailableError and require_complete;
+OllamaProvider; the policy and rate keys a provider refuses to construct
+without; config-driven model selection for ClaudeProvider and GeminiProvider;
+ProviderManager's disabled tracking, refusals, routing, get_provider and
+registry methods, and the replies it records; and the providers list, test,
+costs and set default commands, including their argument validation and set
+default's read-modify-write of config/ai_settings.json.
 """
 
 import json
