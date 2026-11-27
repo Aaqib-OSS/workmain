@@ -1,6 +1,6 @@
 # A check that displays as written — Spec
 
-**Status:** Draft
+**Status:** Approved
 
 **Author:** Spanner
 
