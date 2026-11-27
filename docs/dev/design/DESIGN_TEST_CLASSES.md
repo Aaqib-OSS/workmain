@@ -97,10 +97,10 @@ The commit for that step has to carry three things: #290's move, `f6667a2`'s 5 t
 
 | Q | Question | Answer |
 | --- | --- | --- |
-| Q1 | Fifteen module-level tests are command tests that #208, #209, #211 or #212 will replace (F10, F11). #290 moves 11 of them and leaves 4. Does #288 move all 15 (Option A) or leave all 15 for those issues (Option B)? | |
-| Q2 | The commit that brings #290's move onto the branch also carries `f6667a2`'s 5 test bodies and 128 annotation fixes the contributor didn't write (F5, F7). Is the contributor its author (Option A) or its co-author (Option B)? | |
+| Q1 | Fifteen module-level tests are command tests that #208, #209, #211 or #212 will replace (F10, F11). #290 moves 11 of them and leaves 4. Does #288 move all 15 (Option A) or leave all 15 for those issues (Option B)? | Q1 answered 20261127, Ray: Option A. |
+| Q2 | The commit that brings #290's move onto the branch also carries `f6667a2`'s 5 test bodies and 128 annotation fixes the contributor didn't write (F5, F7). Is the contributor its author (Option A) or its co-author (Option B)? | Q2 answered 20261127, Ray: Option A. |
 
 ## 6. Disposition
 
-- Promoted to:
-- Superseded by:
+- Promoted to: `../specs/TEST_CLASSES_SPEC.md`
+- Superseded by: n/a
