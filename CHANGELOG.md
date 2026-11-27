@@ -7,6 +7,17 @@ and project versioning follows `docs/standards/2-git.md` §2.5.
 
 ## [Unreleased]
 
+## [1.63.0] - 2026-11-27
+
+86 tests were functions at module level, though `docs/standards/6-testing.md` §6.2 makes every test a method of a plain class. Every test in `tests/` is now a method of a plain `Test<Topic>` class. The move of 82 of them is the work of #290's author, merged through #312. Three Ollama tests also passed only while nothing listening on `localhost:11434` listed their model. Each now makes its own request fail (#288).
+
+### Changed
+
+- `tests/test_provider_foundation.py`, `tests/test_ai_foundation.py`, `tests/test_ai_providers_live.py`, `tests/test_cli_logging.py`, `tests/test_compare_providers.py`, `tests/test_cost_display.py`, `tests/test_meetings_merge.py`, `tests/test_meetings_reschedule.py`, `tests/test_notes_add.py`: every module-level test is a method of a plain class. Names, decorators and bodies are unchanged, apart from type hints and four docstrings rewritten into a one-line summary.
+- `tests/test_provider_foundation.py`: `TestOllamaProvider`'s three unavailability tests patch `urllib.request.urlopen` to refuse the connection, so `OllamaProvider.check_availability` runs its failure path whatever is running on the machine. The module docstring describes the file as it is.
+
+Suite: 1862 passed, 0 failed, 0 skipped (note: 1 xfailed, 3 xpassed) (baseline 1862 passed, 0 failed, 0 skipped).
+
 ## [1.62.0] - 2026-11-25
 
 Every repository kept the session it was built on in a public `session` attribute, so a use case holding a repository through its unit of work could query the database around the repository's methods, and no search could tell such a read apart. Each repository now holds its session as `_session`, and CI searches for a public session attribute and for any read of another object's `_session` on every push and pull request (#283).

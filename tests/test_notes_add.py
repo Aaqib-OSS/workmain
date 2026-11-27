@@ -85,14 +85,16 @@ class TestNotesAdd:
         assert db_session.query(TimeEntry).filter(TimeEntry.meeting_id == meeting.id).count() == 0
         assert note.meeting_id == meeting.id
 
+    def test_t12_note_persists_when_the_time_entry_prompt_is_cancelled(self, db_session: Session) -> None:
+        """
+        The note is committed before "Create time entry for this meeting?".
 
-def test_t12_note_persists_when_the_time_entry_prompt_is_cancelled(db_session: Session) -> None:
-    """The note is committed before "Create time entry for this meeting?", so
-    cancelling that prompt keeps it (#96)."""
-    meeting = _seed_meeting(db_session, "Sentinel Notes Add Abort Meeting 2099-96")
-    content = "Sentinel notes add abort 2099-96"
+        So cancelling that prompt keeps it (#96).
+        """
+        meeting = _seed_meeting(db_session, "Sentinel Notes Add Abort Meeting 2099-96")
+        content = "Sentinel notes add abort 2099-96"
 
-    with patch('click.confirm', side_effect=click.Abort()):
-        CliRunner().invoke(notes, ["add", content, "-m", str(meeting.id)])
+        with patch('click.confirm', side_effect=click.Abort()):
+            CliRunner().invoke(notes, ["add", content, "-m", str(meeting.id)])
 
-    assert db_session.query(Note).filter(Note.content == content).count() == 1
+        assert db_session.query(Note).filter(Note.content == content).count() == 1
