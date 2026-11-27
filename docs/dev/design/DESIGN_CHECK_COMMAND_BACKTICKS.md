@@ -1,4 +1,4 @@
-# A check's command in backticks — Design Study
+# A check that displays as written — Design Study
 
 **Status:** Active
 
@@ -6,7 +6,7 @@
 
 **Author:** Spanner
 
-**Date:** 20261125
+**Date:** 20261127
 
 **Read at:** 48419d5e982239ac9d8cb6475b7e55c3b14ba692
 
@@ -16,78 +16,92 @@
 
 ## 1. Purpose
 
-An issue's check is rendered as GitHub-flavoured Markdown, so a command written outside backticks can display altered: escapes, placeholders and emphasis markers vanish, and a reader who copies the displayed check runs a different command. This study decides how `automation/issue_validator.py` recognizes a command outside backticks, where `docs/standards/1-workflow.md` §1.2 states the rule, and what the one-time sweep of open issues covers. The issue asks for each candidate rule to be run over the live set it will judge, citing §1.2. That rule left §1.2 in `a7b8fe7` (F14), so the run in §3 is done as evidence for the options, not because a standard requires it. The read was read-only. The only things run were `gh issue list`, `gh api -X POST /markdown` over each open issue's body, and measurement scripts kept in the session scratchpad. `git status` showed the tree unchanged apart from this file.
+GitHub displays an issue's body as Markdown, and a check written outside backticks can display differently from what it states: escapes, placeholders and emphasis markers vanish. A reader who copies the displayed check runs a different command. This study answers the three questions in #284's Fix in mind:
+
+- how `automation/issue_validator.py` judges how a check will display
+- whether the rule "a check's command is written in backticks" is enforced by the validator, or left to the written rule and review
+- what the one-time sweep of open issues covers
+
+The body of #284 was rewritten on 20261127, to the §1.3 form, before this study was re-based on it. The body it replaced was written before `a7b8fe7` (20261119) rewrote §1, and cited §1.2 text that no longer exists. GitHub's edit history holds the earlier body.
+
+The read was read-only. The only things run were `gh issue list`, `gh api -X POST /markdown` over each open issue's body, and measurement scripts kept in the session scratchpad.
 
 ## 2. Scope of the read
 
-- **Source the work changes:** `automation/issue_validator.py`, `automation/issue_validator_test.py`, `automation/fixtures/`, `docs/standards/1-workflow.md` §1.2, and the bodies of open issues.
+- **Source the work changes:**
+  - `automation/issue_validator.py`, `automation/issue_validator_test.py`, `automation/fixtures/`
+  - `docs/standards/1-workflow.md` §1.2
+  - `docs/dev/specs/_TEMPLATE_SPEC.md` §5
+  - the bodies of open issues
 - **Checks that enforce a rule the work touches** (§7 locations): `automation/issue_validator.py` `validate_criterion_rule` enforces the §1.2 criterion rule on an issue file. No file in `.github/workflows/` or `.githooks/` reads issue text. `automation/closeout_acs.py` reads a spec's criteria at close-out, not an issue's checks.
-- **Every statement of the rule:** `git grep -n "checked by" -- docs/standards .claude docs/dev` returns `docs/standards/1-workflow.md:59` (the §1.2 criterion form) and `docs/dev/specs/_TEMPLATE_SPEC.md:79`. Every caller of the validator: `git grep -n issue_validator -- . ':!docs/archive'` returns `docs/standards/1-workflow.md:90` (§1.3, issue creation) and the validator's own test.
-- **Issues by file** (§1.3): `automation/issue_validator.py` → #284. `automation/issue_validator_test.py` → #284. `.github/ISSUE_TEMPLATE/issue.schema.json` → none. `docs/standards/1-workflow.md` → 24 issues. They cite §1 sections, mostly from inside their own checks, and none is about how a check displays. #295 is the one `parked` issue among them (Q5). The term searches `backticks` and `"Checked by" render` add nothing beyond #284.
-- **Measurement:** all 135 open issues, snapshotted at the read commit's time. Each body was rendered through `gh api -X POST /markdown -f mode=gfm -f context=lockdwn20/workmain`. Each check's rendered text was compared with its source with backticks removed. Checks were read in both forms (F3).
-- **Left out:** closed issues; spec and design artifacts in `docs/archive/`; Markdown elsewhere in the repository (F11). GFM's emphasis rules were not read beyond what the measurement exercised (F7).
+- **Every statement of the rule:** `git grep -n -i "checked by" -- docs/standards .claude docs/dev` returns `docs/standards/1-workflow.md:59` (the §1.2 criterion form), `docs/standards/1-workflow.md:60` and `docs/dev/specs/_TEMPLATE_SPEC.md:79`. Every caller of the validator: `git grep -n issue_validator -- . ':!docs/archive'` returns `docs/standards/1-workflow.md:90` (§1.3, issue creation) and the validator's own test.
+- **Issues by file** (§1.3):
+  - `automation/issue_validator.py` → #284
+  - `automation/issue_validator_test.py` → #284
+  - `docs/dev/specs/_TEMPLATE_SPEC.md` → #245, #284. #245 asks how a direct-path spec quotes replacement text, which this work does not touch.
+  - `docs/standards/1-workflow.md` → 24 issues. They cite §1 sections, mostly from inside their own checks, and none is about how a check displays. #295 is the one `parked` issue among them (Q4).
+
+  The term searches `backticks` and `"Checked by" render` add nothing beyond #284.
+- **Measurement:**
+  - **Snapshot:** all 135 open issues, taken at the read commit's time. Each body was rendered through `gh api -X POST /markdown -f mode=gfm -f context=lockdwn20/workmain`.
+  - **Comparison:** each check's rendered text against its source with backticks removed, in both forms (F3).
+  - **The two standard files:** the lines of `docs/standards/1-workflow.md` §1.2 and `docs/dev/specs/_TEMPLATE_SPEC.md` §5 were rendered the same way.
+- **Left out:** closed issues; artifacts in `docs/archive/`; Markdown elsewhere in the repository. GFM's emphasis rules were not read beyond what the measurement exercised (F7).
 
 ## 3. Findings
 
 | # | Finding | Evidence (file:line, symbol) |
 | --- | --- | --- |
-| F1 | The validator judges an issue **file** before creation, and enforces one rule on criteria. A criterion with no word outside its code spans is refused. It does not read `check`. `render_body` writes each check verbatim after the `Checked by:` label. | `automation/issue_validator.py` `validate_criterion_rule`, `_CODE_SPAN_RE`, `render_body` |
-| F2 | The validator already needs the network. `main` calls `gh_live_labels` and `gh_live_milestones` (`check=True`) and `gh_issue_state` before it reports anything. The tests replace these through the seams `validate_issue` takes (`get_issue_state`) and `monkeypatch`. | `automation/issue_validator.py` `main`, `validate_issue`; `automation/issue_validator_test.py` `fake_issue_state` |
-| F3 | Checks come in two forms. **Field form:** a `- Checked by: …` child bullet. 58 issues carry it, 273 checks in all. **Inline form:** "… — checked by …" inside the criterion bullet. 21 issues carry it, the set the issue names except that #89 is in and #155 is not, with 42 checks found by `— checked by` / `check is`. 12 issues carry no AC section. The remaining 44 carry checkbox criteria with no check. | measurement |
-| F4 | The issue's census reproduces, with drift. 38 field-form checks in 18 issues display differently: #205, #207–#216, #219, #230, #255, #256, #295, #298, #299. #206 and #224 have since closed. #295, #298 and #299 are newer than the census. 3 inline-form checks display differently: #158, #159, #169. | measurement; `gh issue view 206`, `224` → `CLOSED` |
-| F5 | Two forms account for every altered check. Backslash before punctuation (`\.`, `\(`, `\b` survives because `b` is not punctuation) appears in 36 checks. A `<placeholder>` read as an HTML tag and dropped appears in 5. #299's `git -C <live tree> rev-parse HEAD` displays as `git -C rev-parse HEAD`. #256's `session_param_check.py <the service module>` loses its argument. No live check holds a double-underscore name. That AC1 test case guards a form the census of 20261114 found, not one live today. | measurement |
-| F6 | What gets altered is not always a command. #295's `ConfigurationError naming providers.<name>.<key>` displays as `providers..`. It is a config key path in prose, and its check is altered the same way. What a reader is harmed by is display, not command shape. | #295 body |
-| F7 | An offline detector for the constructs that alter display matches the API exactly on the live set. Outside code spans, it looks for four things: a backslash before ASCII punctuation, a tag-shaped `<…>`, a matched emphasis delimiter pair (`*`, `**`, `_`, `__`, `~~`) not inside a word, and `[text](url)`. It flags 41 checks in 21 issues, with 0 missed and 0 extra against F4. It uses the standard library only. `cmarkgfm` is not installed, and no Markdown library is in `requirements*.txt`. | measurement script; `requirements.txt`, `requirements-dev.txt` |
-| F8 | Displaying unchanged does not mean the command is quoted. 97 checks in 47 issues begin with a command word outside backticks (`pytest` 43, `git` 32, `python3` 11, `grep` 9, `gh` 1, `for` 1), matching the issue's 97. 42 checks begin with a backtick. Only one leading-command check already carries a code span (#214, around a citation). | measurement |
-| F9 | A first-word rule refuses correct prose once in the live set. The `for` hit is #284's own check, "for each edited issue, the body before and after compared…". Requiring `for <name> in` removes it. A wider shape rule, matching command words anywhere or a `--flag` anywhere, also hits flag names in prose: #251 "under --force", "clients set active --help", #222 "--format". | measurement |
-| F10 | A command mid-sentence escapes a first-word rule. Examples: #298 "asks for git commit -am …", #299 "reads journalctl --user -u workmain-notify", "runs systemctl --user restart …". Those that hold an altering construct are caught by F7. Those that do not, display correctly and pass. The issue's own census calls its count a floor for this reason. | measurement |
-| F11 | The rule's natural home in §1.2 shows the defect itself. Line 59 writes the criterion form as ``"*<property>*, checked by `<command>`"``. GitHub renders `<property>` as a tag and drops it, so the sentence displays as `"<em></em>, checked by <command>"`. `docs/dev/specs/_TEMPLATE_SPEC.md` §5, which that line cites as its example, has the same defect. Its rows write `<property of the delivered system>`, `<behaviour>`, `<property of a document>`, `<section>` and `<what>` outside backticks. | `docs/standards/1-workflow.md:59`; `docs/dev/specs/_TEMPLATE_SPEC.md:83-85`; `gh api -X POST /markdown` of line 59 |
-| F12 | The sentence the issue names as the rule's anchor no longer exists: "`automation/issue_validator.py` refuses a criterion that states only a command". Commit `a7b8fe7` removed it on 20261119, five days after the issue was written. No live sentence in §1 cites the validator's criterion rule. §1.3 cites the validator only for creation (`:90`). | `git log -S"refuses a criterion that states only a command" -- docs/` → `a7b8fe7`; `docs/standards/1-workflow.md:90` |
-| F13 | The sweep set, taken as F7 together with F8's first-word rule, is 49 issues. No check contains a literal backtick or a double-backtick span, so AC4's "compare with every backtick removed" is exact. Each edit is a `gh issue edit --body-file` on a body the session did not author, so `CLAUDE.md` § Common Pitfalls' destructive-write checks apply to every one. | measurement; `CLAUDE.md` § Common Pitfalls |
-| F14 | The issue cites two §1.2 rules that `a7b8fe7` removed, with no replacement anywhere in `docs/standards/`, `.claude/` or `CLAUDE.md`: "A rule that refuses authored text is run over the live set it will judge before it is specified". And the sentence after it, that a rule which must tell a property's subject from its evidence is a reading. The issue's other §1.2 citation still holds: the sweep re-measures, because the spec "treats the issue's list as a starting point". | `git show a7b8fe7 -- docs/standards/1-workflow.md`; `git grep -n -i -E "live set\|before it is specified" -- docs/standards .claude CLAUDE.md` → no hit; `docs/standards/1-workflow.md` §1.2 first bullet |
+| F1 | The validator judges an issue **file** before creation, and enforces one rule on criteria. A criterion with no word outside its code spans is refused. It does not read `check`. `render_body` writes each check verbatim after the `Checked by:` label. Creation through the validator is the only way §1.3 opens an issue. | `automation/issue_validator.py` `validate_criterion_rule`, `_CODE_SPAN_RE`, `render_body`; `docs/standards/1-workflow.md:90` |
+| F2 | The validator already needs the network and `gh`. `main` calls `gh_live_labels` and `gh_live_milestones` (`check=True`) and `gh_issue_state` before it reports anything. The tests replace these through the seams `validate_issue` takes (`get_issue_state`) and `monkeypatch`. | `automation/issue_validator.py` `main`, `validate_issue`; `automation/issue_validator_test.py` `fake_issue_state` |
+| F3 | Checks come in two forms. **`Checked by:` form:** a child bullet. 58 issues carry it, 273 checks in all. **Inline form:** "… — checked by …" inside the criterion bullet. 21 issues carry it, 42 checks found by `— checked by` / `check is`. 12 issues carry no AC section. The remaining 44 carry checkbox criteria with no check. | measurement |
+| F4 | 41 checks in 21 issues display differently from their source. 38 are in the `Checked by:` form, in #205, #207–#216, #219, #230, #255, #256, #295, #298 and #299. 3 are in the inline form, in #158, #159 and #169. | measurement |
+| F5 | Two forms account for every altered check. A backslash before punctuation, dropped as an escape (`\.`, `\(`), appears in 36 checks. `\b` survives, because `b` is not punctuation. A `<placeholder>` read as an HTML tag and dropped appears in 5. #299's `git -C <live tree> rev-parse HEAD` displays as `git -C rev-parse HEAD`. No open issue holds a double-underscore name. The census of 20261114 found one, and AC1 keeps that case. | measurement |
+| F6 | What gets altered is not always a command. #295's `ConfigurationError naming providers.<name>.<key>` displays as `providers..`. It is a config key path in prose. What a reader is harmed by is display, not command shape. | #295 body |
+| F7 | An offline detector for the constructs that alter display matches the API exactly on the live set. Outside code spans, it looks for four things: a backslash before ASCII punctuation, a tag-shaped `<…>`, a matched emphasis delimiter pair (`*`, `**`, `_`, `__`, `~~`) not inside a word, and `[text](url)`. It flags the same 41 checks as F4, with 0 missed and 0 extra. It uses the standard library only. No Markdown library is in `requirements*.txt`. It is an approximation of GitHub's renderer, and cases the live set does not contain are untested. | measurement script; `requirements.txt`, `requirements-dev.txt` |
+| F8 | Displaying unchanged does not mean the command is quoted. 97 checks in 47 issues begin with a command word outside backticks (`pytest` 43, `git` 32, `python3` 11, `grep` 9, `gh` 1, `for` 1). 42 checks begin with a backtick. | measurement |
+| F9 | Telling a command from prose misjudges in both directions. A first-word rule needs a hand-kept list of command words, and on the live set refuses #284's own prose check, "for each edited issue, …". A wider shape rule refuses flag names in prose: #251 "under --force", "clients set active --help", #222 "--format". | measurement |
+| F10 | A command mid-sentence escapes a first-word rule. Examples: #298 "asks for git commit -am …", #299 "reads journalctl --user -u workmain-notify". Those that hold an altering construct are among F4's 41. | measurement |
+| F11 | The standard and the template it cites show the defect. `docs/standards/1-workflow.md:59` writes the criterion form as ``"*<property>*, checked by `<command>`"``, and GitHub displays it as `"<em></em>, checked by <command>"`. `docs/dev/specs/_TEMPLATE_SPEC.md` §5 writes `<property of the delivered system>`, `<behaviour>`, `<property of a document>`, `<section>` and `<what>` outside backticks. Its two criterion cells render empty. | `gh api -X POST /markdown` of `docs/standards/1-workflow.md:59` and `docs/dev/specs/_TEMPLATE_SPEC.md:77-90` |
+| F12 | No check contains a literal backtick or a double-backtick span, so AC3's and AC4's "compared with backticks removed" is exact. Each sweep edit is a `gh issue edit --body-file` on a body the session did not author, so `CLAUDE.md` § Common Pitfalls' destructive-write checks apply to every one. | measurement; `CLAUDE.md` § Common Pitfalls |
 
 ## 4. Governing rules and options
 
 **Governing rules.**
 
-- **Owner:** `automation/` is non-application tooling (`docs/standards/7-file-placement.md` §7). `automation/issue_validator.py` owns the rules on an issue file that the schema cannot express (its module docstring). No `workmain/` owner is involved.
-- **§1.2:** a criterion is "*property*, checked by *command*". Where the design makes an issue's criterion wrong, the spec restates it in its §5.
+- **Owner:** `docs/ARCHITECTURE.md` names no owner for `automation/`, which is non-application tooling (`docs/standards/7-file-placement.md` §7). `automation/issue_validator.py` owns the rules on an issue file that the schema cannot express (its module docstring).
+- **§1.2:** a criterion is a property, and its check is the evidence for it.
 - **§1.5:** a rule has one home, and a change to a rule finds every statement of it.
-- **`spanner.md` § Working rules:** build only what the issue asks for.
+- **`.claude/skills/session-start/references/spanner.md` § Working rules:** build only what the issue asks for, and offer only the options that survive.
+
+**The command rule (Fix in mind, second question).** Enforcing "a check's command is written in backticks" in the validator needs a hand-kept list of command words, and misjudges prose in both directions (F9, F10). The only surviving option is to leave it to the written rule in §1.2, and to review. The validator enforces display, which is the harm #284 names (F6). Q2 asks Ray to confirm.
+
+**How the validator judges display (Fix in mind, first question).** Two options survive.
 
 ### Option A — Render through GitHub and compare
 
-- **Approach:** `validate_check_rule` renders each check through `gh api /markdown` behind a seam (a `render` callable, as `get_issue_state` is). It refuses a check whose rendered text differs from its source with backticks removed.
-- **Pros:** exact by definition, with no reading of GFM to keep current. The network cost is small, because `main` already calls `gh` (F2).
-- **Cons:** passes the 97 unquoted commands that display unchanged (F8), so the issue's AC1 fourth case cannot be met and must be restated (§1.2). One API call per check at validation.
+- **Approach:** a new rule renders each check through `gh api -X POST /markdown -f mode=gfm` and refuses a check whose rendered text differs from its source with backticks removed. The renderer is passed to `validate_issue` as a seam, as `get_issue_state` is, so the tests stay offline.
+- **Pros:** exact by construction, because the renderer that displays the issue is the one judging it. There is no reading of GFM to keep current, and nothing to maintain. It adds no dependency: `main` already calls `gh` (F2).
+- **Cons:** one API call per check at validation. The rule cannot run without the network, as the validator's other live checks already cannot.
 
-### Option B — A command-shape pattern
+### Option B — Detect display-altering constructs offline
 
-- **Approach:** refuse a check whose text outside code spans matches a command's shape: a known command word, a `--flag`, shell or regex metacharacters.
-- **Pros:** offline. Catches unquoted commands whatever they display.
-- **Cons:** refuses correct prose, measured in F9 (flag names in prose, `for each`). It still misses commands mid-sentence (F10) and command words not on its list.
+- **Approach:** a pure function refuses a check whose text outside code spans holds any of F7's four constructs.
+- **Pros:** offline and fast. It matched the API on all 41 live cases (F7).
+- **Cons:** an approximation of GitHub's renderer, and it can drift from it in either direction: refusing text GitHub displays as written, or passing text it alters. Its construct list is maintained by hand.
 
-### Option C — Display-altering constructs, plus a leading command
+**Recommendation:** Option A. It is the only option whose judgement is exact, and it needs nothing the validator does not already use (F2). Option B's only advantage is working offline, and the validator cannot run offline anyway.
 
-- **Approach:** two refusals over the text of a check outside its code spans:
-  - **C1:** the four constructs in F7, which alter display.
-  - **C2:** a check whose first token is a command word, or `for <name> in`.
-
-  Both are pure functions over the string, using the standard library.
-- **Pros:** offline. C1 matched the API exactly on the live set (F7). C2 covers the 97 leading-form checks (F8) with no false refusal once `for` is narrowed (F9). Together they meet all four AC1 cases. The rule reads simply: the §1.2 form puts the command first, in backticks.
-- **Cons:** C1 approximates GFM, so an emphasis edge case could drift from GitHub in either direction: refusing text GitHub displays as written, or passing text it alters. The live set exercised neither (F7). C2's command-word list is maintained by hand, and has no live source to read it from. A command mid-sentence that displays unchanged still passes (F10), as the issue's census already accepts.
-
-**Recommendation:** Option C. It is the only option that meets every AC1 case without refusing correct prose on the live set (F7, F9), and it keeps validation offline. A cuts the AC that covers an unquoted command displaying unchanged. B refuses prose and still misses mid-sentence commands. C1's drift risk is bounded: the sweep's AC3 check renders every open issue through the API, so a divergence on the live set is caught there.
+**The sweep (Fix in mind, third question).** AC3 needs only the 41 altered checks fixed (F4). Under the written rule, the 97 unquoted commands that display correctly (F8) would break §1.2 from the day it ships. Q3 asks Ray which set the sweep covers.
 
 ## 5. Open questions
 
 | Q | Question | Answer |
 | --- | --- | --- |
-| Q1 | How does the validator recognize a command outside backticks? A (render and compare), B (shape pattern) or C (display-altering constructs plus a leading command)? Recommended: C (§4). | |
-| Q2 | The anchor sentence the issue names was removed on 20261119 (F12). Where does the rule go in §1.2? Recommended: in the "A criterion names a property" bullet (`:59`), which already shows the form. Fix F11 in the same edit by putting `<property>` in backticks. Name the validator as the rule's enforcement for issues. AC2's "beside the sentence that cites the validator" is restated in the spec's §5 (§1.2). | |
-| Q3 | The validator judges a file before creation (F1). AC3 asks for its rule to be run over every open issue's checks, which live in bodies, and 21 of those issues use the inline form (F3). Recommended: the rule is a function over a check string. The results artifact records a run of that function over checks extracted from each live body, by a script kept in the scratchpad, so no new validator mode ships. Both forms are in the sweep, as the issue's census includes them. The alternative ships a body-reading mode, a mechanism the issue does not name. | |
-| Q4 | §1.2 governs a criterion wherever it is written, spec §5 as well as an issue. Does the new sentence state the rule for every check, with the validator enforcing it on issues only? Or does it state the rule for issues alone? Recommended: every check. `docs/dev/specs/` holds only the template today, so no live spec needs sweeping. The template's §5 rows display altered (F11), and `docs/dev/specs/_TEMPLATE_SPEC.md` is not among the files the issue names. Put its placeholders in backticks under the §1.5 rule-change search, as a statement of the changed rule, or leave them for an issue of their own? Recommended: the §1.5 search, since the template is the example §1.2 cites. | |
-| Q5 | #295 is `parked` and names `docs/standards/1-workflow.md` (§1.3). Its finding, provider defaults in code, is unrelated to this work. Only its checks are in the sweep (F4). Fold it in, or leave it parked? Recommended: leave it parked. The sweep edits its checks' backticks and nothing else. | |
+| Q1 | Does the validator judge display by rendering through GitHub (Option A) or offline (Option B)? Recommended: A (§4). | |
+| Q2 | Is "a check's command is written in backticks" left to the written rule in §1.2 and to review, with the validator enforcing display only? This is the only surviving option (§4, F9, F10). | |
+| Q3 | Does the sweep cover only the 41 checks that display altered, in 21 issues (F4), or also the 97 unquoted commands that display correctly, in 49 issues together (F8)? Recommended: both. The new §1.2 rule then holds for every open issue from the day it ships. Each edit adds backticks only, AC4 proves that, and the results artifact lists every edited check for review. The cost is that choosing which text in a check is the command is a reading, done once per check and reviewable in that table. | |
+| Q4 | #295 is `parked` and names `docs/standards/1-workflow.md` (§1.3). Its finding, provider defaults written in code, is unrelated to this work. Only its checks are in the sweep (F4). Fold it in, or leave it parked? Recommended: leave it parked. | |
 
 ## 6. Disposition
 
