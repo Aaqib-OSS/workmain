@@ -12,7 +12,54 @@
 
 ---
 
+## 1. Summary
+
+Complete. `automation/issue_validator.py` refuses an issue whose check GitHub would display differently from its source, judged by GitHub's own renderer in one call per issue. `docs/standards/1-workflow.md` §1.2 and the three `docs/dev/` templates put their placeholders in backticks, so GitHub no longer drops them. The sweep edited 49 open issues, adding backticks to 111 checks, and every check in every open issue now displays as written. One criterion, AC4.2, waits on Ray's reading of the table in §5.
+
+## 2. What shipped, by step
+
+| Step | Delivered | Files changed | Tests |
+| --- | --- | --- | --- |
+| 1 | `validate_check_display`, `gh_render_markdown` and `CHECK_LABEL`; `validate_issue` takes the renderer as a seam (`aa863b4`) | `automation/issue_validator.py`, `automation/issue_validator_test.py`, `automation/fixtures/check_display_rendered.json` | +11 |
+| 2 | §1.2's criterion form and 15 template lines put their placeholders in backticks (`0db1bdd`) | `docs/standards/1-workflow.md`, `docs/dev/specs/_TEMPLATE_SPEC.md`, `docs/dev/design/_TEMPLATE_DESIGN.md`, `docs/dev/results/_TEMPLATE_RESULTS.md` | +0 |
+| 3 | 49 open issue bodies edited, 111 checks (`10df844`) | open issue bodies on GitHub; `docs/dev/results/CHECK_COMMAND_BACKTICKS_RESULTS.md` | +0 |
+| 4 | This artifact completed | `docs/dev/results/CHECK_COMMAND_BACKTICKS_RESULTS.md` | +0 |
+
+## 3. Acceptance criteria
+
+| AC | Status | Evidence |
+| --- | --- | --- |
+| AC1.1 | Met | `pytest automation/issue_validator_test.py`: 48 passed, 0 failed, 0 skipped. `TestCheckDisplay`'s 11 tests pass, among them the refused and accepted cases for `backslash-before-punctuation`, `placeholder` and `double-underscore-name`, and `test_check_display_refusal_stops_the_create_path_before_gh_issue_create_runs` |
+| AC1.2 | Met | §5 Live verification: the unquoted check exits 1 printing `acs[0].check displays on GitHub as 'git -C rev-parse HEAD equals git rev-parse dev', not as written — put its command in backticks`; the backticked check exits 0 printing its `gh issue create` command |
+| AC2.1 | Met | §5 Live verification: all 16 lines step 2 changed display every placeholder they hold, and the search of the three templates finds only `docs/dev/design/_TEMPLATE_DESIGN.md:72`, the `Promoted to:` line |
+| AC3.1 | Met | §5 Live verification: after the sweep, 273 checks in 58 issues and 83 in 20 found in 135 open issues, and `validate_check_display` refuses none, in 78 calls |
+| AC4.1 | Met | §5 The sweep: every one of the 49 edited bodies equals its before-body, the snapshot, with every backtick removed, checked before each write and again from a fresh read after |
+| AC4.2 | **Not met** | `Awaiting Ray`: a reading of §5's table of edited checks, for whether each command, and only the command, is in backticks |
+| AC5.1 | Met | `pytest automation/`: 153 passed, 0 failed, 0 skipped |
+
+## 4. Deviations and decisions
+
+| # | Departure or ambiguity | Step stopped at | Resolution | Resolved by |
+| --- | --- | --- | --- | --- |
+| 1 | Step 2's §1.2 replacement swaps the italics around `<property>` for backticks, so the line changes by more than the backticks the step's opening sentence allows | 2 | Applied as quoted: the backticks set the placeholder apart from prose as the italics did, so the line keeps its meaning. Spec Decision Log row, `6732a0f` | Ray, 20261127 |
+
+**Decisions below the contract.**
+
+| # | Step | Decision | Considered instead | Why |
+| --- | --- | --- | --- | --- |
+| 1 | 3 | #298's `git add <path> && git commit -m` is one span | One span per command | It is one shell line. Splitting it leaves `&&` in the prose, and step 3.4 wraps a command from its first word to its last argument |
+| 2 | 3 | Flags named in prose (`--force`, `--format list`, `--no-verify`), paths, environment settings (`TZ=…`) and function names are left as they are | Wrapping them as code | None is a command, and none displays altered. Step 3.4 wraps commands, and other text only where it displays altered |
+| 3 | 3 | "an end-to-end test of slack status" stays; "against clients set active --help" is wrapped | Treating both the same | The first names a command group as the subject of a test. The second is a command line Ray runs to read its output |
+| 4 | 3 | §5's table escapes every Markdown punctuation character in a check | Putting each check in a code span | Checks hold backticks and pipes, which a code span in a table cannot hold as written. Rendered through GitHub, all 111 rows display exactly as the raw checks |
+
 ## 5. Verification
+
+- **Test suite:** `pytest automation/` 153 passed, 0 failed, 0 skipped (baseline: 142 passed, 0 failed, 0 skipped). Bare `pytest`: 1862 passed, 0 failed, 0 skipped, with 1 xfailed and 3 xpassed, unchanged from the baseline.
+- **Live verification**, 20261127, after the sweep:
+  - **AC1.2:** `python3 automation/issue_validator.py`, without `--create`, on a copy of `automation/fixtures/valid_minimal.json` with `labels` `["gap", "process"]`. With the check `git -C <live tree> rev-parse HEAD equals git rev-parse dev` it exits 1 and prints the `acs[0].check displays on GitHub as` line. With `` `git -C <live tree> rev-parse HEAD` equals `git rev-parse dev` `` it exits 0 and prints its `gh issue create` command.
+  - **AC2.1:** the 16 lines `git diff aa863b4 0db1bdd` adds, each rendered through `gh api -X POST /markdown -f mode=gfm`, display every placeholder in their code spans. The three templates, searched outside code spans and fenced blocks for a `<…>` placeholder, return `docs/dev/design/_TEMPLATE_DESIGN.md:72` alone.
+  - **AC3.1:** a fresh `gh issue list` of the 135 open issues finds 273 checks in 58 issues in the `Checked by:` form and 83 in 20 inline, and `validate_check_display` refuses none, with no count error, in 78 calls.
+  - **AC4.1:** the same read shows each of the 49 edited bodies equal to its snapshot with every backtick removed. No other open issue changed, and none was opened.
 
 ### The sweep (step 3)
 
@@ -139,3 +186,9 @@ The table below gives each check as it was and as it now is, its text escaped so
 | 109 | #299 | field | Ray checks out a working branch in the development tree, runs systemctl --user restart workmain-notify, and git -C \<live tree\> rev-parse HEAD still equals git rev-parse dev | Ray checks out a working branch in the development tree, runs \`systemctl --user restart workmain-notify\`, and \`git -C \<live tree\> rev-parse HEAD\` still equals \`git rev-parse dev\` | snapshot | no difference |
 | 110 | #299 | field | After the next feature or hotfix close-out, git -C \<live tree\> rev-parse HEAD equals git rev-parse dev, and ActiveEnterTimestamp postdates the merge commit | After the next feature or hotfix close-out, \`git -C \<live tree\> rev-parse HEAD\` equals \`git rev-parse dev\`, and ActiveEnterTimestamp postdates the merge commit | snapshot | no difference |
 | 111 | #299 | field | Ray reads journalctl --user -u workmain-notify for a clean start and the next trigger's delivery | Ray reads \`journalctl --user -u workmain-notify\` for a clean start and the next trigger's delivery | snapshot | no difference |
+
+## 6. Follow-ups
+
+| Item | Description | Why deferred |
+| --- | --- | --- |
+| None | No issue was created or added to | — |
