@@ -1,4 +1,4 @@
-# <Title> — Design Study | Recon
+# `<Title>` — Design Study | Recon
 
 **Status:** Active | Shipped | Superseded
 
@@ -8,7 +8,7 @@
 
 **Date:** YYYYMMDD
 
-**Read at:** <commit SHA the read was taken at>
+**Read at:** `<commit SHA the read was taken at>`
 
 **Originating item:** Issue #N
 
@@ -49,13 +49,13 @@ Mark a claim the read could not verify as unverified, so the reader sees the gap
 
 For each option that survives the findings and the governing rules: what it is, what it costs, and what it closes off.
 
-### Option XX — <name>
+### Option XX — `<name>`
 
 - **Approach:**
 - **Pros:**
 - **Cons:**
 
-**Recommendation:** <which, and why>, argued from the governing rules above.
+**Recommendation:** `<which, and why>`, argued from the governing rules above.
 
 ## 5. Open questions
 
@@ -70,4 +70,4 @@ Numbered, so answers can be cited later (`Q3 answered YYYYMMDD: ...`). Each is a
 What happened to this study. Filled in when the work lands:
 
 - Promoted to: <`../specs/<file>_SPEC.md`, a change to `docs/ARCHITECTURE.md`, or issue #N>
-- Superseded by: <filename, if applicable>
+- Superseded by: `<filename, if applicable>`

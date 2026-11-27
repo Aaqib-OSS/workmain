@@ -1,4 +1,4 @@
-# <Title> — Implementation Results
+# `<Title>` — Implementation Results
 
 **Status:** Active | Shipped | Superseded
 
@@ -40,7 +40,7 @@ Every AC on the **approved spec**, by identifier, checked against **delivered co
 | AC | Status | Evidence |
 | --- | --- | --- |
 | AC1.1 | Met / **Not met** / Carried | `pytest ...` output, file:line, or command result |
-| AC1.2 | **Not met** | `Awaiting Ray`: <what he reads or runs> |
+| AC1.2 | **Not met** | `Awaiting Ray`: `<what he reads or runs>` |
 
 Close-out reads every three-column table under `## 3.` as AC rows (`automation/closeout_acs.py`), so this section holds the AC table alone. A supporting table goes under `## 5. Verification`, and the AC row cites it.
 
@@ -66,7 +66,7 @@ Every departure (`.claude/skills/session-start/SKILL.md` § Role 3) is listed he
 
 Counts are recorded in the form `docs/standards/6-testing.md` §6 states. Close-out completes the suite results and live verification (`.claude/skills/closeout/SKILL.md`).
 
-- **Test suite:** <passed> passed, <failed> failed, <skipped> skipped (baseline: the spec's §6 baseline).
+- **Test suite:** `<passed>` passed, `<failed>` failed, `<skipped>` skipped (baseline: the spec's §6 baseline).
 - **Defect shown before the fix** (defect fixes only, `.claude/skills/session-start/references/anvil.md` § Working rules): each test that shows the defect, with its run before the fix (failed) and after (passed).
 - **Live verification:** what was exercised against the running system, and when.
 

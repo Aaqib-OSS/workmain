@@ -1,4 +1,4 @@
-# <Title> — Spec
+# `<Title>` — Spec
 
 **Status:** Draft | Approved | Shipped | Superseded
 
@@ -6,7 +6,7 @@
 
 **Date:** YYYYMMDD
 
-**Read at:** <commit SHA §2 was verified at>
+**Read at:** `<commit SHA §2 was verified at>`
 
 **Branch:** `<type>/issue-<N>-<slug>` (base: `docs/standards/2-git.md` §2.1)
 
@@ -32,7 +32,7 @@ Decisions and review findings, each with its resolution (§1.5). Record a findin
 
 | Date | Source | Decision or finding | Resolution |
 | --- | --- | --- | --- |
-| YYYYMMDD | <one of: Ray, Spanner, Caliper, Caliper (post-implementation), Anvil> | | Accepted / **Not taken** — <why> |
+| YYYYMMDD | `<one of: Ray, Spanner, Caliper, Caliper (post-implementation), Anvil>` | | Accepted / **Not taken** — `<why>` |
 
 Source is written exactly as listed: §1.1's done conditions match `Caliper` and `Caliper (post-implementation)` by their exact text.
 
@@ -80,9 +80,9 @@ Each criterion is a property of the delivered system, checked by running somethi
 
 | AC | Criterion | How it is checked |
 | --- | --- | --- |
-| AC1.1 | <property of the delivered system> | `pytest tests/test_x.py` passes, with a test showing <behaviour> |
+| AC1.1 | `<property of the delivered system>` | `pytest tests/test_x.py` passes, with a test showing `<behaviour>` |
 | AC1.2 | Every Python module under `workmain/` leaves version history to git (`docs/standards/3-code.md` §3.1) | `grep -rn '^Version:' workmain/ --include='*.py'` returns zero hits |
-| AC1.3 | <property of a document> | Ray reads <section> for <what> |
+| AC1.3 | `<property of a document>` | Ray reads `<section>` for `<what>` |
 
 Naming the property is what makes AC1.2 reviewable: renaming the header to `Ver:` passes the check and fails the property.
 
@@ -90,8 +90,8 @@ Naming the property is what makes AC1.2 reviewable: renaming the header to `Ver:
 
 Counts are recorded in the form `docs/standards/6-testing.md` §6 states.
 
-- **Baseline before this work:** <passed> passed, <failed> failed, <skipped> skipped, from a bare `pytest` at the **Read at:** commit.
-- **Expected after:** <passed> passed, <failed> failed, <skipped> skipped.
+- **Baseline before this work:** `<passed>` passed, `<failed>` failed, `<skipped>` skipped, from a bare `pytest` at the **Read at:** commit.
+- **Expected after:** `<passed>` passed, `<failed>` failed, `<skipped>` skipped.
 - **Test files:** the proposed files to add or change, and what each covers, written as §6.2 states and placed as §7 states.
 
 ## 7. Risks and rollback

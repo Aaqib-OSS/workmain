@@ -1,9 +1,11 @@
 """Tests for automation/issue_validator.py, named for the AC they cover (§6, AC4.1)."""
 
+import html
 import importlib.util
 import json
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -41,10 +43,31 @@ def fake_issue_state(open_numbers=(), closed_numbers=()):
     return get_issue_state
 
 
-def run_validate(data, label_pair=LABEL_PAIR, live_labels=LIVE_LABELS, live_milestones=LIVE_MILESTONES, get_issue_state=None):
+def render_as_written(text: str) -> str:
+    """A renderer that displays every line as written, so a test not about display is unaffected by it."""
+    items = "".join(f"<li>{html.escape(line.removeprefix('  - ').replace('`', ''))}</li>\n" for line in text.splitlines())
+    return f"<ul>\n{items}</ul>"
+
+
+RENDERED = json.loads((FIXTURES / "check_display_rendered.json").read_text())
+
+
+def render_recorded(text: str) -> str:
+    """GitHub's HTML for each input in check_display_rendered.json, recorded from `gh api -X POST /markdown`."""
+    return RENDERED[text]
+
+
+def run_validate(
+    data: dict,
+    label_pair: list = LABEL_PAIR,
+    live_labels: set = LIVE_LABELS,
+    live_milestones: set = LIVE_MILESTONES,
+    get_issue_state: Callable[[int], str | None] | None = None,
+    render: Callable[[str], str] = render_as_written,
+) -> tuple[list[str], dict]:
     if get_issue_state is None:
         get_issue_state = fake_issue_state(open_numbers=(100, 101, 102))
-    return issue_validator.validate_issue(data, SCHEMA, label_pair, live_labels, live_milestones, get_issue_state)
+    return issue_validator.validate_issue(data, SCHEMA, label_pair, live_labels, live_milestones, get_issue_state, render)
 
 
 class TestAC1:
@@ -268,6 +291,7 @@ class TestStructuredCriteria:
         monkeypatch.setattr(issue_validator, "gh_live_labels", lambda: LIVE_LABELS)
         monkeypatch.setattr(issue_validator, "gh_live_milestones", lambda: LIVE_MILESTONES)
         monkeypatch.setattr(issue_validator, "gh_issue_state", fake_issue_state())
+        monkeypatch.setattr(issue_validator, "gh_render_markdown", render_as_written)
         monkeypatch.setattr(
             subprocess,
             "run",
@@ -289,6 +313,99 @@ class TestStructuredCriteria:
         )
 
 
+ALTERING_FORMS = [
+    pytest.param(
+        'grep -nE "config\\.get\\(" workmain/ai/providers/ returning zero hits',
+        '`grep -nE "config\\.get\\(" workmain/ai/providers/` returning zero hits',
+        id="backslash-before-punctuation",
+    ),
+    pytest.param(
+        "python3 automation/session_param_check.py <service module> printing nothing",
+        "`python3 automation/session_param_check.py <service module>` printing nothing",
+        id="placeholder",
+    ),
+    pytest.param(
+        "grep -rn __repr__ workmain/ returning zero hits",
+        "`grep -rn __repr__ workmain/` returning zero hits",
+        id="double-underscore-name",
+    ),
+]
+
+
+def with_check(check: str) -> dict:
+    data = fixture("valid_minimal.json")
+    data["acs"][0]["check"] = check
+    return data
+
+
+class TestCheckDisplay:
+    """A check displays on GitHub as written, judged by GitHub's renderer."""
+
+    @pytest.mark.parametrize("unquoted, quoted", ALTERING_FORMS)
+    def test_check_display_a_form_that_alters_display_is_refused(self, unquoted: str, quoted: str) -> None:
+        errors, _ = run_validate(with_check(unquoted), render=render_recorded)
+        assert len(errors) == 1
+        assert errors[0].startswith("acs[0].check displays on GitHub as ")
+
+    @pytest.mark.parametrize("unquoted, quoted", ALTERING_FORMS)
+    def test_check_display_the_same_check_in_backticks_is_accepted(self, unquoted: str, quoted: str) -> None:
+        errors, _ = run_validate(with_check(quoted), render=render_recorded)
+        assert errors == []
+
+    def test_check_display_prose_that_displays_as_written_is_accepted(self) -> None:
+        check = "a stated reading by Ray of docs/standards/1-workflow.md §1.2 for whether a check displays as written"
+        errors, _ = run_validate(with_check(check), render=render_recorded)
+        assert errors == []
+
+    def test_check_display_renders_every_check_in_one_call_as_the_lines_render_body_writes(self) -> None:
+        seen = []
+
+        def spy(text: str) -> str:
+            seen.append(text)
+            return render_as_written(text)
+
+        data = with_check("`pytest automation/` reporting 0 failed")
+        data["acs"].append({"criterion": "a second property", "check": "`git status` showing a clean tree"})
+        run_validate(data, render=spy)
+        body_lines = issue_validator.render_body(data["context"], data["acs"]).splitlines()
+        assert len(seen) == 1
+        assert seen[0].splitlines() == [line for line in body_lines if line.startswith("  - Checked by: ")]
+
+    def test_check_display_names_the_index_of_the_check_that_displays_differently(self) -> None:
+        data = with_check("`pytest automation/` reporting 0 failed")
+        data["acs"].append({"criterion": "a second property", "check": ALTERING_FORMS[1].values[0]})
+        errors, _ = run_validate(data, render=render_recorded)
+        assert len(errors) == 1
+        assert errors[0].startswith("acs[1].check displays on GitHub as ")
+
+    def test_check_display_refusal_stops_the_create_path_before_gh_issue_create_runs(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        issue_file = tmp_path / "issue.json"
+        issue_file.write_text(json.dumps(with_check(ALTERING_FORMS[1].values[0])))
+
+        monkeypatch.setattr(issue_validator, "gh_live_labels", lambda: LIVE_LABELS)
+        monkeypatch.setattr(issue_validator, "gh_live_milestones", lambda: LIVE_MILESTONES)
+        monkeypatch.setattr(issue_validator, "gh_issue_state", fake_issue_state())
+        monkeypatch.setattr(issue_validator, "gh_render_markdown", render_recorded)
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            lambda *a, **k: pytest.fail("gh issue create must not run for a refused issue"),
+        )
+
+        assert issue_validator.main([str(issue_file), "--create"]) == 1
+
+    def test_check_display_gh_render_markdown_sends_the_text_unchanged(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls = []
+
+        def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+            calls.append(cmd)
+            return subprocess.CompletedProcess(cmd, 0, stdout="<p>x</p>", stderr="")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        assert issue_validator.gh_render_markdown("a `b` <c>") == "<p>x</p>"
+        assert calls == [["gh", "api", "-X", "POST", "/markdown", "-f", "mode=gfm", "-f", "text=a `b` <c>"]]
+
+
 class TestAC3:
     def test_ac3_1_default_run_creates_nothing(self, tmp_path, monkeypatch, capsys):
         issue_file = tmp_path / "issue.json"
@@ -297,6 +414,7 @@ class TestAC3:
         monkeypatch.setattr(issue_validator, "gh_live_labels", lambda: LIVE_LABELS)
         monkeypatch.setattr(issue_validator, "gh_live_milestones", lambda: LIVE_MILESTONES)
         monkeypatch.setattr(issue_validator, "gh_issue_state", fake_issue_state())
+        monkeypatch.setattr(issue_validator, "gh_render_markdown", render_as_written)
         monkeypatch.setattr(
             subprocess,
             "run",
