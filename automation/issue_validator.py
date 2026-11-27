@@ -1,12 +1,14 @@
 """
-Validate a WorkmAIn issue JSON file against the schema and against live
-GitHub state, then create the issue through `gh issue create`.
+Validates a WorkmAIn issue file, then creates the issue through `gh issue create`.
+
+The file is checked against the schema and against live GitHub state.
 
 The schema (`.github/ISSUE_TEMPLATE/issue.schema.json`) declares the key set
 and each key's type and required-ness. This script owns the rules the schema
 file cannot express: the §1.3 label-pair rule, the §1.2 rule that a criterion
-is not only a command, and existence checks against live GitHub state (labels,
-milestones, referenced issues).
+is not only a command, that each check displays on GitHub as written, and
+existence checks against live GitHub state (labels, milestones, referenced
+issues).
 
 Why this exists: GitHub carries no type-vs-area marking on a label
 (`Repository.issueTypes` is null for this repository), so the label
@@ -21,6 +23,8 @@ import re
 import subprocess
 import sys
 import tempfile
+from collections.abc import Callable
+from html.parser import HTMLParser
 from pathlib import Path
 
 SCHEMA_RELATIVE_PATH = Path(".github/ISSUE_TEMPLATE/issue.schema.json")
@@ -28,6 +32,7 @@ TEMPLATE_RELATIVE_PATH = Path(".github/ISSUE_TEMPLATE/issue.template.json")
 STANDARDS_RELATIVE_PATH = Path("docs/standards/1-workflow.md")
 LABEL_PAIR_PHRASE = "label pair"
 PROJECT_NAME = "WorkmAIn Queue"
+CHECK_LABEL = "Checked by:"
 
 
 class ValidationAbort(Exception):
@@ -227,6 +232,80 @@ def validate_criterion_rule(data: dict) -> list:
     return errors
 
 
+class _ListItemCollector(HTMLParser):
+    """Collects the text of each list item in an HTML fragment, in order, with its entities decoded."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.items: list[list[str]] = []
+        self._open = False
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "li":
+            self.items.append([])
+            self._open = True
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "li":
+            self._open = False
+
+    def handle_data(self, data: str) -> None:
+        if self._open:
+            self.items[-1].append(data)
+
+
+def _displayed_items(rendered_html: str) -> list[str]:
+    collector = _ListItemCollector()
+    collector.feed(rendered_html)
+    collector.close()
+    return [" ".join("".join(parts).split()) for parts in collector.items]
+
+
+def validate_check_display(data: dict, render: Callable[[str], str]) -> list[str]:
+    """
+    Refuse a check that GitHub would display differently from its source.
+
+    The checks are rendered together, in one call, as the lines
+    `render_body` writes for them, and each list item GitHub displays is
+    compared with its check with the backticks removed, whitespace
+    collapsed on both sides. GitHub's own renderer judges, so an escape, a
+    `<placeholder>` or an emphasis marker the body would lose is refused,
+    and prose that displays as written is accepted. Shape errors are the
+    schema's to report; an entry without a non-empty, single-line string
+    check is skipped here.
+
+    Args:
+        data: The issue data, after schema normalization.
+        render: Takes Markdown and returns the HTML GitHub renders for it.
+            `gh_render_markdown` in production.
+
+    Returns:
+        One error per check that displays differently, naming its index and
+        what GitHub displays.
+    """
+    checks = []
+    for i, ac in enumerate(data.get("acs") or []):
+        if not isinstance(ac, dict):
+            continue
+        check = ac.get("check")
+        if isinstance(check, str) and check.strip() and not _has_line_break(check):
+            checks.append((i, check.strip()))
+    if not checks:
+        return []
+
+    displayed_items = _displayed_items(render("\n".join(f"  - {CHECK_LABEL} {check}" for _, check in checks)))
+    if len(displayed_items) != len(checks):
+        return [f"acs: {len(checks)} checks display on GitHub as {len(displayed_items)} list items"]
+
+    errors = []
+    for (i, check), displayed in zip(checks, displayed_items):
+        written = " ".join(check.replace("`", "").split())
+        shown = displayed.removeprefix(CHECK_LABEL).strip()
+        if shown != written:
+            errors.append(f"acs[{i}].check displays on GitHub as {shown!r}, not as written — put its command in backticks")
+    return errors
+
+
 def _check_open_issue(field: str, number: int, get_issue_state) -> list:
     state = get_issue_state(number)
     if state is None:
@@ -263,7 +342,7 @@ def render_body(context: str, acs: list) -> str:
     lines = [context.strip(), "", "**ACs**", ""]
     for ac in acs:
         lines.append(f"- {ac['criterion'].strip()}")
-        lines.append(f"  - Checked by: {ac['check'].strip()}")
+        lines.append(f"  - {CHECK_LABEL} {ac['check'].strip()}")
     return "\n".join(lines) + "\n"
 
 
@@ -303,6 +382,28 @@ def gh_issue_state(number: int):
     return json.loads(result.stdout)["state"]
 
 
+def gh_render_markdown(text: str) -> str:
+    """
+    Render Markdown through GitHub's API, as GitHub displays an issue body.
+
+    Args:
+        text: The Markdown to render.
+
+    Returns:
+        The HTML GitHub returns for it.
+
+    Raises:
+        subprocess.CalledProcessError: `gh api` failed.
+    """
+    result = subprocess.run(
+        ["gh", "api", "-X", "POST", "/markdown", "-f", "mode=gfm", "-f", f"text={text}"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout
+
+
 def gh_live_labels() -> set:
     result = subprocess.run(
         ["gh", "label", "list", "--limit", "100", "--json", "name"],
@@ -323,11 +424,34 @@ def gh_live_milestones() -> set:
     return {line for line in result.stdout.splitlines() if line}
 
 
-def validate_issue(data: dict, schema: dict, label_pair: list, live_labels: set, live_milestones: set, get_issue_state):
-    """Run every check and return (errors, normalized_data). Total reporting — DR4."""
+def validate_issue(
+    data: dict,
+    schema: dict,
+    label_pair: list,
+    live_labels: set,
+    live_milestones: set,
+    get_issue_state: Callable[[int], str | None],
+    render: Callable[[str], str],
+) -> tuple[list[str], dict]:
+    """
+    Run every check on an issue's data, and report every error found.
+
+    Args:
+        data: The issue data as read from its file.
+        schema: The key specs `load_schema` returns.
+        label_pair: The §1.3 label pair `parse_label_pair` returns.
+        live_labels: The labels that exist on GitHub.
+        live_milestones: The milestones that exist on GitHub.
+        get_issue_state: Takes an issue number and returns its state, or None if it does not exist.
+        render: Takes Markdown and returns the HTML GitHub renders for it.
+
+    Returns:
+        Every error found, and the data normalized by the schema.
+    """
     errors, normalized = validate_schema(data, schema)
     errors += validate_label_pair_rule(normalized, label_pair)
     errors += validate_criterion_rule(normalized)
+    errors += validate_check_display(normalized, render)
     errors += validate_live_state(normalized, live_labels, live_milestones, get_issue_state)
     return errors, normalized
 
@@ -372,7 +496,7 @@ def main(argv=None) -> int:
     live_milestones = gh_live_milestones()
 
     errors, normalized = validate_issue(
-        data, schema, label_pair, live_labels, live_milestones, gh_issue_state
+        data, schema, label_pair, live_labels, live_milestones, gh_issue_state, gh_render_markdown
     )
 
     if errors:

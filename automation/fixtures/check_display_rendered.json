@@ -1,0 +1,10 @@
+{
+  "  - Checked by: grep -nE \"config\\.get\\(\" workmain/ai/providers/ returning zero hits": "<ul>\n<li>Checked by: grep -nE \"config.get(\" workmain/ai/providers/ returning zero hits</li>\n</ul>",
+  "  - Checked by: `grep -nE \"config\\.get\\(\" workmain/ai/providers/` returning zero hits": "<ul>\n<li>Checked by: <code class=\"notranslate\">grep -nE \"config\\.get\\(\" workmain/ai/providers/</code> returning zero hits</li>\n</ul>",
+  "  - Checked by: python3 automation/session_param_check.py <service module> printing nothing": "<ul>\n<li>Checked by: python3 automation/session_param_check.py  printing nothing</li>\n</ul>",
+  "  - Checked by: `python3 automation/session_param_check.py <service module>` printing nothing": "<ul>\n<li>Checked by: <code class=\"notranslate\">python3 automation/session_param_check.py &lt;service module&gt;</code> printing nothing</li>\n</ul>",
+  "  - Checked by: grep -rn __repr__ workmain/ returning zero hits": "<ul>\n<li>Checked by: grep -rn <strong>repr</strong> workmain/ returning zero hits</li>\n</ul>",
+  "  - Checked by: `grep -rn __repr__ workmain/` returning zero hits": "<ul>\n<li>Checked by: <code class=\"notranslate\">grep -rn __repr__ workmain/</code> returning zero hits</li>\n</ul>",
+  "  - Checked by: a stated reading by Ray of docs/standards/1-workflow.md §1.2 for whether a check displays as written": "<ul>\n<li>Checked by: a stated reading by Ray of docs/standards/1-workflow.md §1.2 for whether a check displays as written</li>\n</ul>",
+  "  - Checked by: `pytest automation/` reporting 0 failed\n  - Checked by: python3 automation/session_param_check.py <service module> printing nothing": "<ul>\n<li>Checked by: <code class=\"notranslate\">pytest automation/</code> reporting 0 failed</li>\n<li>Checked by: python3 automation/session_param_check.py  printing nothing</li>\n</ul>"
+}
