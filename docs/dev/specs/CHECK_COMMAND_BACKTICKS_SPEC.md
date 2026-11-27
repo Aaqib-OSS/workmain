@@ -40,6 +40,7 @@
 | 20261127 | Caliper | Pass at d6ad044, changes since 24dedd4: 20 items checked, 0 blocking, 2 non-blocking. | n/a |
 | 20261127 | Spanner | Finding 2's measurement showed that one render call per check trips GitHub's secondary rate limit at sweep scale: 356 checks, refused with HTTP 403 partway through. | Accepted — `validate_check_display` renders all of an issue's checks in one call, one list item per check, so the sweep makes one call per issue: 78 calls, run one at a time, with no limit reached. DR2, step 1 |
 | 20261127 | Spanner | Step 2 stopped before any write: its §1.2 replacement drops the italics around `<property>`, so the line changes by more than the backticks the step's opening sentence allows | Ray, 20261127: apply the replacement as quoted. The backticks do the work the italics did, setting the placeholder apart from prose, so the line keeps its meaning |
+| 20261127 | Caliper (post-implementation) | No findings. | n/a |
 
 ---
 
