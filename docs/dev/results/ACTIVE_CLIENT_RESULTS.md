@@ -1,6 +1,6 @@
 # The active client in one home — Implementation Results
 
-**Status:** Active
+**Status:** Shipped
 
 **Author:** Anvil
 
@@ -8,7 +8,7 @@
 
 **Spec:** `../specs/ACTIVE_CLIENT_SPEC.md`
 
-**Released as:** set at close-out
+**Released as:** v1.64.0 (tag `v1.64.0`)
 
 ---
 
@@ -77,6 +77,7 @@ No step stopped on a departure.
 ## 5. Verification
 
 - **Test suite:** 1880 passed, 0 failed, 0 skipped (1 xfailed, 3 xpassed), at `9e57e2b`. The baseline was 1862 passed, 0 failed, 0 skipped (1 xfailed, 3 xpassed). Step 1 added 10, step 2 added 6, and step 4 added 8 and removed 6.
+- **Close-out, 20261128:** bare `pytest` at `254693f`: 1880 passed, 0 failed, 0 skipped (1 xfailed, 3 xpassed). `automation/closeout_acs.py` exited 0, and `automation/architecture_check.py` and `automation/style_check.py` passed. Pull request #314's checks passed on `254693f`: Application suite, Commit messages, Session rules, and Style check on changed lines.
 - **Revision round trip, test database only:** with `DB_NAME=workmain_test`, `alembic downgrade 0001` then `alembic upgrade head` each exited 0. At `0001` the database held `idx_clients_is_active` and the baseline comments, and at `0002` it held `uq_clients_one_active` and the new comments.
 - **Live verification, 20261127:**
   - **Item 1:** Ray stopped `workmain-notify.service`, after Claude Code's permission check refused Anvil's `systemctl` call. `systemctl --user is-active` then read `inactive`.

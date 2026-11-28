@@ -1,6 +1,6 @@
 # The active client in one home — Spec
 
-**Status:** Approved
+**Status:** Shipped
 
 **Author:** Spanner
 

@@ -1,6 +1,6 @@
 # The active client in one home — Design Study
 
-**Status:** Active
+**Status:** Shipped
 
 **Kind:** Design study
 
@@ -87,7 +87,7 @@ The active client is stored as `clients.is_active` and as `system_state.active_c
 
 ## 6. Disposition
 
-- Promoted to:
+- Promoted to: `../specs/ACTIVE_CLIENT_SPEC.md`
 - Superseded by:
 
 ## 7. Corrections to issue #255
