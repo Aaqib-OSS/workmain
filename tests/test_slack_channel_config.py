@@ -219,7 +219,7 @@ class TestSlackStatusDisplay:
     """slack status displays clients.slack_channel as the primary channel value."""
 
     def test_slack_status_shows_client_channel(self, db_session: Session) -> None:
-        """slack status output contains the active client's slack_channel."""
+        """slack status output contains the active client's slack_channel and name."""
         _active_client = _make_active_client(db_session)
         # Set a known channel value
         _active_client.slack_channel = '#status-test-channel'
@@ -228,6 +228,7 @@ class TestSlackStatusDisplay:
         result = _invoke('status')
         assert result.exit_code == 0
         assert '#status-test-channel' in result.output
+        assert '(Client: Slack Channel Test Client)' in result.output
 
     def test_slack_status_fallback_when_no_client_channel(self, db_session: Session) -> None:
         """No client channel set -> falls back to config.json or shows not configured."""
