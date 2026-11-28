@@ -92,7 +92,7 @@ The active client is stored as `clients.is_active` and as `system_state.active_c
 
 ## 7. Corrections to issue #255
 
-The issue was written on 20261102. Ray approved body corrections 1–5 and criterion corrections 1–4 on 20261127, and approved the rewording of criteria 1 and 2 below on 20261127. Body corrections 1–5 were made to the issue on 20261127. The spec's §5 restates each corrected criterion, and the issue's criteria are edited at close-out (§1.2).
+The issue was written on 20261102. Ray approved body corrections 1–5 and criterion corrections 1–4 on 20261127, and approved the rewording of criterion 2 below on 20261127. Criterion 1 carries his two changes of 20261127 and awaits his approval. Body corrections 1–5 were made to the issue on 20261127. The spec's §5 restates each corrected criterion, and the issue's criteria are edited at close-out (§1.2).
 
 **Body.**
 
