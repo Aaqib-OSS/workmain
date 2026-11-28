@@ -33,13 +33,13 @@ Complete. `clients.is_active` is now the only store of the active client, and `C
 | --- | --- | --- |
 | AC1.1 | Met | At `3ec7c6b`, the spec's `git grep -nE` over `workmain scripts tests/mocks` hits only `workmain/database/repositories/client_repository.py` (the `Client.is_active == True` filters and the flag write) and `workmain/database/migrations/versions/0002_active_client_flag.py` (`_KEY`). Both are allowed files. |
 | AC1.2 | Met | Ray, 20261127: read the lookup table under §5 Verification, each former lookup and the call that replaced it |
-| AC1.3 | Met | The spec's `pytest` over the ten files: 259 passed, 0 failed, 0 skipped (1 xfailed, 1 xpassed). The test for each lookup is in the lookup table under §5. Each seeds a flagged client and no key. |
+| AC1.3 | Met | At `9e57e2b`, the spec's `pytest` over the ten files: 259 passed, 0 failed, 0 skipped (1 xfailed, 1 xpassed). The test for each lookup is in the lookup table under §5. Each seeds a flagged client and no key. `slack_status`'s test asserts the client name its own lookup prints, after Caliper's post-implementation finding of 20261128 (decision 21). |
 | AC2.1 | Met | `pytest tests/test_client_repository.py tests/test_fake_unit_of_work.py`: 186 passed, 0 failed, 0 skipped. Covers `tests/test_client_repository.py::TestClientRepositoryActiveContext::test_flushing_a_second_flagged_client_raises` and `tests/test_fake_unit_of_work.py::TestFakeClientRefusesTwoFlaggedClients::test_the_active_client_methods_raise[get_active]` |
 | AC2.2 | Met | `pytest tests/test_clients_service.py tests/test_notes_service.py`: 44 passed, 0 failed, 0 skipped. Covers `tests/test_clients_service.py::TestDelete::test_deleting_the_active_client_clears_the_context` and `tests/test_notes_service.py::TestCreateNote::test_after_the_active_client_is_deleted_no_client_is_stamped` |
 | AC2.3 | Met | `pytest tests/test_active_client_revision.py`: 9 passed, 0 failed, 0 skipped. That is seven `TestMoveKeyToFlag` cases, one per DR6 case, including the two that raise and change neither store. The other two are `TestMoveFlagToKey`, including `test_writes_no_key_when_no_client_is_flagged`. |
 | AC2.4 | Met | `pytest tests/test_fake_unit_of_work.py`: 169 passed, 0 failed, 0 skipped. Covers `tests/test_fake_unit_of_work.py::TestClientContract::test_set_active_moves_the_flag_without_raising`, with targets `another client` and `the flagged client`, each on `real` and `fake` |
 | AC3.1 | Met | Ray, 20261127: read the `clients` and `system_state` table comments as `0002` sets them (under §5, live verification) and `docs/ARCHITECTURE.md` §2's Data line naming `get_active()`. `grep -n 'The active client' docs/ARCHITECTURE.md` exits 1, with no §3 entry. |
-| AC4.1 | Met | Bare `pytest` at `3ec7c6b`: 1880 passed, 0 failed, 0 skipped (1 xfailed, 3 xpassed) |
+| AC4.1 | Met | Bare `pytest` at `9e57e2b`: 1880 passed, 0 failed, 0 skipped (1 xfailed, 3 xpassed) |
 
 ## 4. Deviations and decisions
 
@@ -72,10 +72,11 @@ No step stopped on a departure.
 | 18 | 4 | The fake's refusal test is parametrized over `set_active`, `clear_active` and `get_active` | `get_active` alone, as AC2.1 asks | DR5 names all three |
 | 19 | 4 | `test_delete_active_client` also asserts `get_active() is None` | Removing only its comments | Its docstring says it shows that |
 | 20 | 4 | `TestClientContract`'s `_state` helper is removed | Keeping it | No rewritten test reads `system_state` |
+| 21 | post-implementation | `test_slack_status_shows_client_channel` also asserts `(Client: Slack Channel Test Client)` (`9e57e2b`). With `slack_status`'s lookup replaced by `client = None` it failed; restored, it passed. | The bare name, as Caliper's finding suggested | Only `slack_status`'s lookup prints the `(Client: <name>)` suffix, and the suffix contains the suggested text |
 
 ## 5. Verification
 
-- **Test suite:** 1880 passed, 0 failed, 0 skipped (1 xfailed, 3 xpassed), at `3ec7c6b`. The baseline was 1862 passed, 0 failed, 0 skipped (1 xfailed, 3 xpassed). Step 1 added 10, step 2 added 6, and step 4 added 8 and removed 6.
+- **Test suite:** 1880 passed, 0 failed, 0 skipped (1 xfailed, 3 xpassed), at `9e57e2b`. The baseline was 1862 passed, 0 failed, 0 skipped (1 xfailed, 3 xpassed). Step 1 added 10, step 2 added 6, and step 4 added 8 and removed 6.
 - **Revision round trip, test database only:** with `DB_NAME=workmain_test`, `alembic downgrade 0001` then `alembic upgrade head` each exited 0. At `0001` the database held `idx_clients_is_active` and the baseline comments, and at `0002` it held `uq_clients_one_active` and the new comments.
 - **Live verification, 20261127:**
   - **Item 1:** Ray stopped `workmain-notify.service`, after Claude Code's permission check refused Anvil's `systemctl` call. `systemctl --user is-active` then read `inactive`.
