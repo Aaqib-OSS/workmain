@@ -20,7 +20,6 @@ from workmain.database.models import (
     TimeEntry,
 )
 from workmain.database.repositories.client_repository import ClientRepository
-from workmain.database.repositories.system_state_repository import SystemStateRepository
 
 # The clients these tests seed. The two names differ from each other and from
 # the reserved name "internal", which ClientRepository.create() refuses.
@@ -122,15 +121,6 @@ class TestClientRepositoryActiveContext:
         with pytest.raises(IntegrityError):
             db_session.flush()
 
-    def test_set_active_updates_system_state(self, db_session):
-        """set_active() writes active_client_id to system_state."""
-        repo = ClientRepository(db_session)
-        client = repo.create(_NAME_A)
-        repo.set_active(client.id)
-        state_repo = SystemStateRepository(db_session)
-        stored_id = state_repo.get_int('active_client_id')
-        assert stored_id == client.id
-
     def test_set_active_atomic(self, db_session):
         """Multiple set_active calls leave exactly one client active."""
         repo = ClientRepository(db_session)
@@ -147,39 +137,31 @@ class TestClientRepositoryActiveContext:
         assert active_clients[0].name == _NAME_A
 
     def test_clear_active(self, db_session):
-        """clear_active() removes is_active flag and deletes system_state key."""
+        """clear_active() removes the is_active flag."""
         repo = ClientRepository(db_session)
         client = repo.create(_NAME_A)
         repo.set_active(client.id)
         repo.clear_active()
         assert repo.get_by_id(client.id).is_active is False
-        state_repo = SystemStateRepository(db_session)
-        assert state_repo.get('active_client_id') is None
 
     def test_clear_active_no_active(self, db_session):
         """clear_active() does not raise when nothing is active, and leaves nothing active."""
         repo = ClientRepository(db_session)
-        state_repo = SystemStateRepository(db_session)
         client = repo.create(_NAME_A)
         repo.set_active(client.id)
         repo.clear_active()
         assert repo.get_active() is None
-        assert state_repo.get('active_client_id') is None
         repo.clear_active()
         assert repo.get_active() is None
-        assert state_repo.get('active_client_id') is None
 
     def test_delete_active_client(self, db_session):
-        """After deleting the active client, get_active returns None
-        (system_state key is stale but get_by_id returns None)."""
+        """After deleting the active client, get_active returns None."""
         repo = ClientRepository(db_session)
         client = repo.create(_NAME_A)
         repo.set_active(client.id)
         repo.delete(client.id)
-        # get_active fast path reads system_state, then falls back to DB
-        # Since the record is gone, it returns None
-        result = repo.get_by_id(client.id)
-        assert result is None
+        assert repo.get_by_id(client.id) is None
+        assert repo.get_active() is None
 
 
 class TestCountLinkedRecords:

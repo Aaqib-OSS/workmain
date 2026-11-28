@@ -13,6 +13,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from tests.mocks.fake_unit_of_work import (
@@ -339,12 +340,6 @@ class TestClientContract:
             return ClientRepository(db_session)
         return FakeClientRepository(store)
 
-    @staticmethod
-    def _state(kind: str, db_session: Session, store: dict) -> SystemStateRepository:
-        if kind == 'real':
-            return SystemStateRepository(db_session)
-        return FakeSystemStateRepository(store)
-
     def test_create_writes_an_inactive_client(self, kind: str, db_session: Session) -> None:
         repo = self._repository(kind, db_session, {})
         client = repo.create('ZqvNew')
@@ -537,11 +532,8 @@ class TestClientContract:
             ('report_recipients', 1), ('reports', 1), ('time_entries', 1),
         ]
 
-    def test_set_active_flags_one_client_and_stores_its_id(
-        self, kind: str, db_session: Session
-    ) -> None:
-        store: dict = {}
-        repo = self._repository(kind, db_session, store)
+    def test_set_active_flags_one_client(self, kind: str, db_session: Session) -> None:
+        repo = self._repository(kind, db_session, {})
         first = repo.create('ZqvFirst')
         second = repo.create('ZqvSecond')
         repo.set_active(first.id)
@@ -550,7 +542,24 @@ class TestClientContract:
 
         assert (active.id, active.is_active) == (second.id, True)
         assert repo.get_by_id(first.id).is_active is False
-        assert self._state(kind, db_session, store).get('active_client_id') == str(second.id)
+        assert repo.get_active().id == second.id
+
+    @pytest.mark.parametrize('target', ['another client', 'the flagged client'])
+    def test_set_active_moves_the_flag_without_raising(
+        self, kind: str, db_session: Session, target: str
+    ) -> None:
+        repo = self._repository(kind, db_session, {})
+        flagged = repo.create('ZqvFlagged')
+        other = repo.create('ZqvOther')
+        repo.set_active(flagged.id)
+        chosen = other if target == 'another client' else flagged
+
+        repo.set_active(chosen.id)
+
+        assert repo.get_active().id == chosen.id
+        assert [repo.get_by_id(c.id).is_active for c in (flagged, other)] == [
+            c.id == chosen.id for c in (flagged, other)
+        ]
 
     def test_set_active_of_unknown_id_raises(self, kind: str, db_session: Session) -> None:
         repo = self._repository(kind, db_session, {})
@@ -558,53 +567,49 @@ class TestClientContract:
             repo.set_active(99999999)
         assert str(e.value) == "No client with ID 99999999."
 
-    def test_clear_active_unflags_and_deletes_the_stored_id(
-        self, kind: str, db_session: Session
-    ) -> None:
-        store: dict = {}
-        repo = self._repository(kind, db_session, store)
+    def test_clear_active_unflags_the_client(self, kind: str, db_session: Session) -> None:
+        repo = self._repository(kind, db_session, {})
         client = repo.create('ZqvActive')
         repo.set_active(client.id)
 
         repo.clear_active()
 
         assert repo.get_by_id(client.id).is_active is False
-        assert self._state(kind, db_session, store).get('active_client_id') is None
+        assert repo.get_active() is None
 
-    def test_get_active_returns_the_client_the_stored_id_names(
-        self, kind: str, db_session: Session
-    ) -> None:
+    def test_get_active_returns_the_flagged_client(self, kind: str, db_session: Session) -> None:
         repo = self._repository(kind, db_session, {})
         repo.create('ZqvFirst')
         second = repo.create('ZqvSecond')
         repo.set_active(second.id)
         assert repo.get_active().id == second.id
 
-    def test_get_active_without_a_stored_id_falls_back_to_the_flagged_client(
-        self, kind: str, db_session: Session
-    ) -> None:
-        store: dict = {}
-        repo = self._repository(kind, db_session, store)
-        client = repo.create('ZqvFlagged')
-        repo.set_active(client.id)
-        self._state(kind, db_session, store).delete('active_client_id')
-        assert repo.get_active().id == client.id
-
-    def test_get_active_falls_back_when_the_stored_id_names_no_client(
-        self, kind: str, db_session: Session
-    ) -> None:
-        store: dict = {}
-        repo = self._repository(kind, db_session, store)
-        client = repo.create('ZqvFlagged')
-        repo.set_active(client.id)
-        self._state(kind, db_session, store).set_int('active_client_id', 99999999)
-        assert repo.get_active().id == client.id
-
     def test_get_active_with_nothing_active_is_none(self, kind: str, db_session: Session) -> None:
         repo = self._repository(kind, db_session, {})
         repo.create('ZqvIdle')
         repo.clear_active()
         assert repo.get_active() is None
+
+
+class TestFakeClientRefusesTwoFlaggedClients:
+    """
+    FakeClientRepository refuses a store holding two flagged clients, as uq_clients_one_active does.
+
+    The database cannot hold such a store, so the real side is
+    tests/test_client_repository.py, which flushes a second flagged client.
+    """
+
+    @pytest.mark.parametrize('call', ['get_active', 'clear_active', 'set_active'])
+    def test_the_active_client_methods_raise(self, call: str) -> None:
+        created = datetime(2099, 1, 1, 9, 0, tzinfo=timezone.utc)
+        repo = FakeClientRepository({'clients': {
+            1: {'id': 1, 'name': 'ZqvOne', 'is_active': True, 'created_at': created},
+            2: {'id': 2, 'name': 'ZqvTwo', 'is_active': True, 'created_at': created},
+        }})
+        args = (1,) if call == 'set_active' else ()
+
+        with pytest.raises(IntegrityError):
+            getattr(repo, call)(*args)
 
 
 @pytest.mark.parametrize('kind', ['real', 'fake'])

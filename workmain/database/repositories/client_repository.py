@@ -1,7 +1,10 @@
 """
-Data access layer for the clients table. set_active() is atomic —
-updates clients.is_active and system_state.active_client_id in one
-transaction.
+Data access layer for the clients table.
+
+The active client is stored as clients.is_active alone, and get_active() is
+its one lookup. The unique partial index uq_clients_one_active allows one
+flagged row, so set_active() unflags every flagged row before it flags the
+target.
 """
 
 from __future__ import annotations
@@ -19,7 +22,6 @@ from workmain.database.models import (
     ReportRecipient,
     TimeEntry,
 )
-from workmain.database.repositories.system_state_repository import SystemStateRepository
 
 
 class ClientRepository:
@@ -147,10 +149,12 @@ class ClientRepository:
     # ------------------------------------------------------------------
 
     def set_active(self, client_id: int) -> Client:
-        """Set a client as the active context. Atomic single transaction:
-        1. Clear is_active on any currently active client.
-        2. Set is_active=True on target client.
-        3. Write active_client_id to system_state.
+        """
+        Flag a client as the active one.
+
+        Every flagged row is unflagged in one UPDATE, then the target is
+        flagged in a later flush, so uq_clients_one_active never sees two
+        flagged rows.
 
         Args:
             client_id: ID of the client to activate.
@@ -169,32 +173,17 @@ class ClientRepository:
             {Client.is_active: False}, synchronize_session='fetch'
         )
         client.is_active = True
-        SystemStateRepository(self._session).set_int('active_client_id', client_id)
         self._session.flush()
         self._session.refresh(client)
         return client
 
     def clear_active(self) -> None:
-        """Clear active client context (internal mode). Atomic single transaction:
-        1. Clear is_active on any currently active client.
-        2. Delete active_client_id from system_state.
-        """
+        """Unflag every client, which leaves no active client (internal mode)."""
         self._session.query(Client).filter(Client.is_active == True).update(
             {Client.is_active: False}, synchronize_session='fetch'
         )
-        SystemStateRepository(self._session).delete('active_client_id')
         self._session.flush()
 
     def get_active(self) -> Optional[Client]:
-        """Return the active client, or None if in internal mode.
-
-        Fast path: reads active_client_id from system_state.
-        Safety net: falls back to SELECT WHERE is_active=TRUE if key absent.
-        """
-        state_repo = SystemStateRepository(self._session)
-        client_id = state_repo.get_int('active_client_id')
-        if client_id is not None:
-            client = self.get_by_id(client_id)
-            if client is not None:
-                return client
+        """Return the flagged client, or None if in internal mode."""
         return self._session.query(Client).filter(Client.is_active == True).first()

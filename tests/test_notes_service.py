@@ -14,7 +14,7 @@ from tests.mocks.fake_unit_of_work import FakeUnitOfWork
 from workmain.database.models import Note
 from workmain.database.repositories.notes_repo import NotesRepository
 from workmain.database.repositories.task_status_repo import TaskStatusRepository
-from workmain.services import notes_service
+from workmain.services import clients_service, notes_service
 from workmain.services.exceptions import InvalidTagsError
 
 
@@ -75,6 +75,22 @@ class TestCreateNote:
         with fake_uow:
             note = notes_service.create_note(fake_uow, content="Internal note")
         assert _note_row(fake_uow, note.id)['client_id'] is None
+
+    def test_after_the_active_client_is_deleted_no_client_is_stamped(
+        self, fake_uow: FakeUnitOfWork
+    ) -> None:
+        fake_uow.store['clients'] = {
+            7: {
+                'id': 7, 'name': 'Sentinel Client', 'is_active': True,
+                'created_at': datetime(2099, 1, 1, 9, 0, tzinfo=timezone.utc),
+            },
+        }
+        clients_service.delete_client(fake_uow, 7)
+
+        uow = FakeUnitOfWork(store=fake_uow.store)
+        with uow:
+            note = notes_service.create_note(uow, content="After the delete")
+        assert _note_row(uow, note.id)['client_id'] is None
 
     def test_source_defaults_to_ad_hoc(self, fake_uow: FakeUnitOfWork) -> None:
         with fake_uow:
