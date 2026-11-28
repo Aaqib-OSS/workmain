@@ -7,6 +7,8 @@ All tests use the db_session fixture for full transaction isolation.
 from datetime import date, datetime, time
 
 import pytest
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from workmain.database.models import (
     Client,
@@ -111,6 +113,14 @@ class TestClientRepositoryActiveContext:
         repo.set_active(b.id)
         assert repo.get_by_id(a.id).is_active is False
         assert repo.get_by_id(b.id).is_active is True
+
+    def test_flushing_a_second_flagged_client_raises(self, db_session: Session) -> None:
+        """The unique index uq_clients_one_active refuses a second flagged row."""
+        db_session.add(Client(name=_NAME_A, is_active=True))
+        db_session.flush()
+        db_session.add(Client(name=_NAME_B, is_active=True))
+        with pytest.raises(IntegrityError):
+            db_session.flush()
 
     def test_set_active_updates_system_state(self, db_session):
         """set_active() writes active_client_id to system_state."""
