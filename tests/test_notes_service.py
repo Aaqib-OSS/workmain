@@ -5,7 +5,7 @@ create_note, apply_cf_hook_on_create and add_note are tested on fake_uow.
 update_note still takes a session, so its tests seed and run on db_session.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy.orm import Session
@@ -61,13 +61,17 @@ class TestCreateNote:
         assert fake_uow.store.get('notes', {}) == {}
 
     def test_the_active_client_is_stamped(self, fake_uow: FakeUnitOfWork) -> None:
-        fake_uow.store['system_state'] = {'active_client_id': '7'}
+        fake_uow.store['clients'] = {
+            7: {
+                'id': 7, 'name': 'Sentinel Client', 'is_active': True,
+                'created_at': datetime(2099, 1, 1, 9, 0, tzinfo=timezone.utc),
+            },
+        }
         with fake_uow:
             note = notes_service.create_note(fake_uow, content="Attributed note")
         assert _note_row(fake_uow, note.id)['client_id'] == 7
 
     def test_no_active_client_leaves_the_client_unset(self, fake_uow: FakeUnitOfWork) -> None:
-        fake_uow.store['system_state'] = {'active_client_id': ''}
         with fake_uow:
             note = notes_service.create_note(fake_uow, content="Internal note")
         assert _note_row(fake_uow, note.id)['client_id'] is None

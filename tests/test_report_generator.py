@@ -20,11 +20,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
+from sqlalchemy.orm import Session
 
 from tests.mocks.stub_providers import complete, cut_off, stubbed_manager
 from workmain.ai.base_provider import ProviderError, ProviderType
 from workmain.ai.provider_manager import ProviderManager
 from workmain.ai.report_generator import ReportGenerator
+from workmain.database.models import Client
 
 _SENTINEL_TOKENS = 7001
 
@@ -243,13 +245,37 @@ class TestPreviewRouting:
         }
         with patch("workmain.cli.commands.reports.get_db"), \
                 patch("workmain.cli.commands.reports.get_report_generator", return_value=generator), \
-                patch("workmain.cli.commands.reports.SystemStateRepository"):
+                patch("workmain.cli.commands.reports.ClientRepository"):
             result = CliRunner().invoke(
                 reports, ["preview", "daily_internal", "--provider", "claude"]
             )
 
         assert result.exit_code == 0, result.output
         assert generator.preview_report.call_args.kwargs["provider"] == ProviderType.CLAUDE
+
+
+    def test_cli_preview_of_a_client_template_filters_on_the_flagged_client(
+        self, db_session: Session
+    ) -> None:
+        from workmain.cli.commands.reports import reports
+
+        client = Client(name="Sentinel Report Client 2099", is_active=True)
+        db_session.add(client)
+        db_session.commit()
+        generator = MagicMock()
+        generator.preview_report.return_value = {
+            "template_name": "weekly_client", "report_date": "2026-01-01",
+            "provider": "gemini", "system_prompt": "s", "user_prompt": "u",
+            "estimated_tokens": 10, "max_completion_tokens": 100,
+            "estimated_cost": 0.5,
+        }
+        with patch("workmain.cli.commands.reports.get_report_generator", return_value=generator), \
+                patch("workmain.cli.commands.reports.require_eligible_provider", return_value=None):
+            result = CliRunner().invoke(reports, ["preview", "weekly_client"])
+
+        assert result.exit_code == 0, result.output
+        kwargs = generator.preview_report.call_args.kwargs
+        assert (kwargs["filter_client"], kwargs["client_id"]) == (True, client.id)
 
 
 # ---------------------------------------------------------------------------

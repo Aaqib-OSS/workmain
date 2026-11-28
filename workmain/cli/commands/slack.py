@@ -112,15 +112,9 @@ def _resolve_client_channel(session) -> Optional[str]:
     Does not fall back to config.json — caller decides fallback behavior.
     """
     from workmain.database.repositories.client_repository import ClientRepository
-    from workmain.database.repositories.system_state_repository import (
-        SystemStateRepository,
-    )
-    state_repo = SystemStateRepository(session)
-    active_client_id = state_repo.get_int('active_client_id')
-    if active_client_id:
-        client = ClientRepository(session).get_by_id(active_client_id)
-        if client and client.slack_channel:
-            return client.slack_channel
+    client = ClientRepository(session).get_active()
+    if client is not None and client.slack_channel:
+        return client.slack_channel
     return None
 
 
@@ -242,13 +236,9 @@ def slack_status():
         channel = _get_display_channel(session)
 
         from workmain.database.repositories.client_repository import ClientRepository
-        from workmain.database.repositories.system_state_repository import (
-            SystemStateRepository,
-        )
-        active_client_id = SystemStateRepository(session).get_int('active_client_id')
-        if active_client_id:
-            client = ClientRepository(session).get_by_id(active_client_id)
-            client_name = client.name if client else "(unknown)"
+        client = ClientRepository(session).get_active()
+        if client is not None:
+            client_name = client.name
             if channel:
                 console.print(f"  Channel:         {channel} (Client: {client_name})")
             else:
@@ -309,19 +299,16 @@ def slack_set_channel(channel: str):
     db = get_db()
     with db.session_scope() as session:
         from workmain.database.repositories.client_repository import ClientRepository
-        from workmain.database.repositories.system_state_repository import (
-            SystemStateRepository,
-        )
-        active_client_id = SystemStateRepository(session).get_int('active_client_id')
-        if not active_client_id:
+        client_repo = ClientRepository(session)
+        active_client = client_repo.get_active()
+        if active_client is None:
             console.print(
                 "\n[red]✗ No active client set.[/red]"
                 "\n  Run 'workmain clients set active <name>' first."
             )
             return
 
-        client_repo = ClientRepository(session)
-        client = client_repo.update(active_client_id, slack_channel=channel)
+        client = client_repo.update(active_client.id, slack_channel=channel)
         console.print(
             f"\n[green]✓[/green] Slack channel for '[bold]{client.name}[/bold]' "
             f"set to '[bold]{channel}[/bold]'."

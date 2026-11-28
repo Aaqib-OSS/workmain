@@ -184,7 +184,7 @@ class TestProviderArguments:
                 patch('workmain.cli.commands.reports.get_report_generator',
                       return_value=generator), \
                 patch('workmain.cli.commands.reports.get_db'), \
-                patch('workmain.cli.commands.reports.SystemStateRepository'):
+                patch('workmain.cli.commands.reports.ClientRepository'):
             CliRunner().invoke(reports, ['save', 'daily_internal', '--provider', override])
         return asked
 
@@ -255,8 +255,8 @@ class TestReportTypeArguments:
         with patch(_PATCH_TARGET, return_value=manager), \
                 patch('workmain.cli.commands.email.get_db'), \
                 patch('workmain.cli.commands.email.get_email_repository', return_value=repo), \
-                patch('workmain.database.repositories.system_state_repository.'
-                      'SystemStateRepository'):
+                patch('workmain.database.repositories.client_repository.'
+                      'ClientRepository'):
             result = CliRunner().invoke(email, ['assign', '1', 'zz_issue154_type', 'to'])
         assert result.exit_code == 0, result.output
         assert repo.assign_recipient.call_args.args[1] == 'zz_issue154_type'
@@ -332,7 +332,7 @@ class TestReportsFailureOutput:
         with patch('workmain.cli.commands.reports.get_report_generator',
                    return_value=generator), \
                 patch('workmain.cli.commands.reports.get_db'), \
-                patch('workmain.cli.commands.reports.SystemStateRepository'):
+                patch('workmain.cli.commands.reports.ClientRepository'):
             result = CliRunner(mix_stderr=False).invoke(reports, ['save', 'daily_internal'])
         assert result.exit_code == 3, result.output
         assert 'daily_internal' in result.stderr
@@ -357,7 +357,7 @@ class TestReportsFailureOutput:
         with patch('workmain.cli.commands.reports.get_report_generator',
                    return_value=generator), \
                 patch('workmain.cli.commands.reports.get_db'), \
-                patch('workmain.cli.commands.reports.SystemStateRepository'):
+                patch('workmain.cli.commands.reports.ClientRepository'):
             result = CliRunner(mix_stderr=False).invoke(reports, ['save', 'daily_internal'])
         assert result.exit_code == 0, result.output
         assert '⚠' in result.stdout

@@ -13,8 +13,8 @@ from typing import Optional, Tuple
 
 from sqlalchemy.orm import Session
 
+from workmain.database.repositories.client_repository import ClientRepository
 from workmain.database.repositories.email_repository import get_email_repository
-from workmain.database.repositories.system_state_repository import SystemStateRepository
 from workmain.services.exceptions import NoReportFoundError
 
 # Project root: workmain/services/email_service.py -> 3 parents up
@@ -113,7 +113,8 @@ def _draft_recipients(
     Returns:
         (to, cc) tuples of email addresses.
     """
-    active_client_id = SystemStateRepository(session).get_int('active_client_id')
+    active_client = ClientRepository(session).get_active()
+    active_client_id = active_client.id if active_client is not None else None
     assignments = get_email_repository(session).list_for_client(template, active_client_id)
     seen: dict[str, str] = {}  # email -> role
     for a in assignments:

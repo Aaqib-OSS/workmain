@@ -12,11 +12,14 @@ isolation. Tests use fixed client IDs and dates.
 from unittest.mock import patch
 
 import pytest
+from click.testing import CliRunner, Result
 from sqlalchemy import event
+from sqlalchemy.orm import Session
 
+from workmain.cli.commands.email import email
 from workmain.database.models import Client, Recipient, ReportRecipient
+from workmain.database.repositories.client_repository import ClientRepository
 from workmain.database.repositories.email_repository import EmailRepository
-from workmain.database.repositories.system_state_repository import SystemStateRepository
 from workmain.services import email_service
 
 _TMPL = "weekly_client_2099_test"
@@ -31,9 +34,9 @@ def _make_recipient(session, email: str) -> Recipient:
     return r
 
 
-def _make_client(session, name: str) -> Client:
-    """Helper: create a Client row (rolled back after test)."""
-    c = Client(name=name, is_active=False)
+def _make_client(session: Session, name: str, is_active: bool = False) -> Client:
+    """Helper: create a Client row, flagged active when is_active (rolled back after test)."""
+    c = Client(name=name, is_active=is_active)
     session.add(c)
     session.commit()
     session.refresh(c)
@@ -130,6 +133,48 @@ class TestUnassignRecipient:
         assert remaining[0].client_id == client.id  # Client-scoped record still present
 
 
+class TestEmailCommandsUseTheActiveClient:
+    """email assign and email unassign act at the flagged client's scope."""
+
+    def _invoke(self, *args: str) -> Result:
+        with patch('workmain.cli.commands.email.require_report_type'):
+            return CliRunner().invoke(email, list(args))
+
+    def _scopes(self, db_session: Session, recipient_id: int) -> list[int | None]:
+        db_session.expire_all()
+        rows = db_session.query(ReportRecipient).filter(
+            ReportRecipient.recipient_id == recipient_id,
+            ReportRecipient.report_type == _TMPL,
+        ).all()
+        return sorted((row.client_id for row in rows), key=lambda c: (c is not None, c))
+
+    def test_assign_writes_the_assignment_at_the_flagged_clients_scope(
+        self, db_session: Session
+    ) -> None:
+        client = _make_client(db_session, "_T255_AssignClient", is_active=True)
+        recipient = _make_recipient(db_session, "assign_active@test.invalid")
+
+        result = self._invoke('assign', str(recipient.id), _TMPL, 'to')
+
+        assert result.exit_code == 0, result.output
+        assert self._scopes(db_session, recipient.id) == [client.id]
+
+    def test_unassign_removes_the_assignment_at_the_flagged_clients_scope(
+        self, db_session: Session
+    ) -> None:
+        client = _make_client(db_session, "_T255_UnassignClient", is_active=True)
+        recipient = _make_recipient(db_session, "unassign_active@test.invalid")
+        repo = EmailRepository(db_session)
+        repo.assign_recipient(recipient.id, _TMPL, "to", client_id=None)
+        repo.assign_recipient(recipient.id, _TMPL, "to", client_id=client.id)
+        db_session.commit()
+
+        result = self._invoke('unassign', str(recipient.id), _TMPL)
+
+        assert result.exit_code == 0, result.output
+        assert self._scopes(db_session, recipient.id) == [None]
+
+
 class TestListForClient:
     """list_for_client() returns correct merged or filtered recipient sets."""
 
@@ -198,16 +243,13 @@ class TestDraftRecipients:
 
     def test_uses_list_for_client_with_active_client(self, db_session, tmp_path):
         """With active client, client-scoped recipients appear in the result."""
-        client = _make_client(db_session, "_T11_5_DraftClient_A")
+        client = _make_client(db_session, "_T11_5_DraftClient_A", is_active=True)
         r_global = _make_recipient(db_session, "draft_global@test.invalid")
         r_scoped = _make_recipient(db_session, "draft_scoped@test.invalid")
         repo = EmailRepository(db_session)
 
         repo.assign_recipient(r_global.id, _TMPL, "to", client_id=None)
         repo.assign_recipient(r_scoped.id, _TMPL, "to", client_id=client.id)
-
-        # Set active client in system_state
-        SystemStateRepository(db_session).set_int('active_client_id', client.id)
 
         draft = self._draft(db_session, tmp_path, _TMPL)
         all_emails = draft.to + draft.cc
@@ -224,9 +266,7 @@ class TestDraftRecipients:
         repo.assign_recipient(r_global.id, _TMPL, "to", client_id=None)
         repo.assign_recipient(r_scoped.id, _TMPL, "to", client_id=client.id)
 
-        # Ensure no active client (delete key if present)
-        state_repo = SystemStateRepository(db_session)
-        state_repo.delete('active_client_id')
+        ClientRepository(db_session).clear_active()
 
         draft = self._draft(db_session, tmp_path, _TMPL)
         all_emails = draft.to + draft.cc
@@ -235,15 +275,13 @@ class TestDraftRecipients:
 
     def test_deduplication_client_scoped_wins(self, db_session, tmp_path):
         """Same email in global (to) and scoped (cc) — client-scoped role wins."""
-        client = _make_client(db_session, "_T11_5_DedupClient")
+        client = _make_client(db_session, "_T11_5_DedupClient", is_active=True)
         recipient = _make_recipient(db_session, "dedup@test.invalid")
         repo = EmailRepository(db_session)
 
         # Assign same email globally as 'to' and client-scoped as 'cc'
         repo.assign_recipient(recipient.id, _TMPL, "to", client_id=None)
         repo.assign_recipient(recipient.id, _TMPL, "cc", client_id=client.id)
-
-        SystemStateRepository(db_session).set_int('active_client_id', client.id)
 
         draft = self._draft(db_session, tmp_path, _TMPL)
         # Email should appear exactly once, as 'cc' (client-scoped wins)

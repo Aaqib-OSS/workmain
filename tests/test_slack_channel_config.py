@@ -54,17 +54,12 @@ class TestResolveSlackChannel:
         from workmain.cli.commands.slack import _resolve_slack_channel
         from workmain.database.models import Client
         from workmain.database.repositories.client_repository import ClientRepository
-        from workmain.database.repositories.system_state_repository import (
-            SystemStateRepository,
-        )
 
-        client = Client(name="_T11_5_SlackResolve_A", is_active=False,
+        client = Client(name="_T11_5_SlackResolve_A", is_active=True,
                         slack_channel="#test-client-channel")
         db_session.add(client)
         db_session.commit()
         db_session.refresh(client)
-
-        SystemStateRepository(db_session).set_int('active_client_id', client.id)
 
         result = _resolve_slack_channel(db_session)
         assert result == "#test-client-channel"
@@ -75,17 +70,12 @@ class TestResolveSlackChannel:
 
         from workmain.cli.commands.slack import _resolve_slack_channel
         from workmain.database.models import Client
-        from workmain.database.repositories.system_state_repository import (
-            SystemStateRepository,
-        )
 
-        client = Client(name="_T11_5_SlackResolve_B", is_active=False,
+        client = Client(name="_T11_5_SlackResolve_B", is_active=True,
                         slack_channel=None)
         db_session.add(client)
         db_session.commit()
         db_session.refresh(client)
-
-        SystemStateRepository(db_session).set_int('active_client_id', client.id)
 
         with patch('workmain.cli.commands.slack.get_default_channel',
                    return_value='#config-fallback'):
@@ -97,11 +87,9 @@ class TestResolveSlackChannel:
         from unittest.mock import patch
 
         from workmain.cli.commands.slack import _resolve_slack_channel
-        from workmain.database.repositories.system_state_repository import (
-            SystemStateRepository,
-        )
+        from workmain.database.repositories.client_repository import ClientRepository
 
-        SystemStateRepository(db_session).delete('active_client_id')
+        ClientRepository(db_session).clear_active()
 
         with patch('workmain.cli.commands.slack.get_default_channel',
                    return_value=None):
@@ -114,17 +102,12 @@ class TestResolveSlackChannel:
 
         from workmain.cli.commands.slack import _resolve_slack_channel
         from workmain.database.models import Client
-        from workmain.database.repositories.system_state_repository import (
-            SystemStateRepository,
-        )
 
-        client = Client(name="_T11_5_SlackResolve_C", is_active=False,
+        client = Client(name="_T11_5_SlackResolve_C", is_active=True,
                         slack_channel="#client-wins")
         db_session.add(client)
         db_session.commit()
         db_session.refresh(client)
-
-        SystemStateRepository(db_session).set_int('active_client_id', client.id)
 
         with patch('workmain.cli.commands.slack.get_default_channel',
                    return_value='#config-should-not-win'):

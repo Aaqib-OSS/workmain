@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy.orm import Session
 
 from workmain.ai.base_provider import (
     FinishStatus,
@@ -23,9 +24,9 @@ from workmain.ai.base_provider import (
 from workmain.ai.note_condenser import NoteCondenser
 from workmain.ai.provider_manager import ProviderManager
 from workmain.ai.report_generator import ReportGenerator
-from workmain.database.models import Meeting
+from workmain.database.models import Client, Meeting
+from workmain.database.repositories.client_repository import ClientRepository
 from workmain.database.repositories.notes_repo import NotesRepository
-from workmain.database.repositories.system_state_repository import SystemStateRepository
 
 _SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "compare_providers.py"
 _spec = importlib.util.spec_from_file_location("compare_providers", _SCRIPT)
@@ -158,11 +159,11 @@ class TestCompareProviders:
 
         pm.respond = _response
         pm.calls.clear()
-        with patch.object(SystemStateRepository, "get_int", return_value=None):
-            runs = compare_providers.compare(
-                db_session, _DATE, ProviderType.GEMINI, ProviderType.CLAUDE,
-                ["weekly_client"], pm,
-            )
+        ClientRepository(db_session).clear_active()
+        runs = compare_providers.compare(
+            db_session, _DATE, ProviderType.GEMINI, ProviderType.CLAUDE,
+            ["weekly_client"], pm,
+        )
         assert pm.calls == []
         assert [r.skipped is not None for r in runs] == [True]
         assert compare_providers.exit_status(runs) == 1
@@ -170,11 +171,12 @@ class TestCompareProviders:
     def test_default_types_follow_routing(self, tmp_path, db_session):
         _seed_meeting(db_session)
 
+        ClientRepository(db_session).clear_active()
+
         def types_for(pm):
-            with patch.object(SystemStateRepository, "get_int", return_value=None):
-                runs = compare_providers.compare(
-                    db_session, _DATE, ProviderType.GEMINI, ProviderType.CLAUDE, None, pm,
-                )
+            runs = compare_providers.compare(
+                db_session, _DATE, ProviderType.GEMINI, ProviderType.CLAUDE, None, pm,
+            )
             return {r.call_type for r in runs}
 
         base = _manager(tmp_path)
@@ -192,6 +194,28 @@ class TestCompareProviders:
         assert types_for(_manager(tmp_path, routing=routing)) == {
             "weekly_client", "note_condensation",
         }
+
+    def test_weekly_client_runs_for_the_flagged_client(
+        self, tmp_path: Path, db_session: Session
+    ) -> None:
+        _seed_meeting(db_session)
+        client = Client(name="Sentinel Compare Client 2099", is_active=True)
+        db_session.add(client)
+        db_session.commit()
+        pm = _manager(tmp_path)
+
+        with patch.object(
+            compare_providers, "get_client_filter", wraps=compare_providers.get_client_filter
+        ) as client_filter:
+            runs = compare_providers.compare(
+                db_session, _DATE, ProviderType.GEMINI, ProviderType.CLAUDE,
+                ["weekly_client"], pm,
+            )
+
+        assert [r.skipped for r in runs] == [None, None]
+        assert len(pm.calls) == 2
+        assert client_filter.call_args.args[1] == client.id
+
 
 class TestCompareProvidersOutput:
     """Compare Providers Output tests."""

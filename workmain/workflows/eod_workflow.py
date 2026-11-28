@@ -19,8 +19,8 @@ from typing import Any, Optional
 
 from workmain.daemon import state_io
 from workmain.database.connection import get_db
+from workmain.database.repositories.client_repository import ClientRepository
 from workmain.database.repositories.meetings_repo import MeetingsRepository
-from workmain.database.repositories.system_state_repository import SystemStateRepository
 from workmain.services import email_service
 from workmain.utils.editor import edit_in_editor
 from workmain.utils.self_invoke import (
@@ -881,7 +881,8 @@ def _run_report_review_step(
     if require_active_client:
         db = get_db()
         with db.session_scope() as session:
-            active_client_id = SystemStateRepository(session).get_int('active_client_id')
+            active_client = ClientRepository(session).get_active()
+            active_client_id = active_client.id if active_client is not None else None
 
         if active_client_id is None:
             print(
