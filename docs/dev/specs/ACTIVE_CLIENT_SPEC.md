@@ -45,6 +45,8 @@
 | 20261127 | Caliper | 2, Spec defect, non-blocking: Ray's ruling row says "Rows above cite the old numbers", but the two Caliper rows below it, the `test_clients_service.py` row and the DR5 row, also use the old numbering. | Accepted — both resolutions name step 4, with the old number beside it. |
 | 20261127 | Caliper | Pass at dcbf14b, changes since a05c254: 31 items checked, 0 blocking, 3 non-blocking. | n/a |
 | 20261127 | Ray | Caliper's existing-defect line from the pass at dcbf14b: `_set_active_client` in `tests/test_clockify_service.py:107` has no callers (`git grep -n _set_active_client -- tests` finds only its definition). | Accepted — step 2 deletes it instead of reseeding `:111`. |
+| 20261128 | Caliper (post-implementation) | I4: results §3 marks AC1.3 `Met`, but the test the results' lookup table names for `slack_status`, `tests/test_slack_channel_config.py::TestSlackStatusDisplay::test_slack_status_shows_client_channel`, does not exercise `slack_status`'s own `ClientRepository(session).get_active()` (`slack.py:239`). It asserts only `'#status-test-channel' in result.output`, which comes from `_resolve_client_channel`, a separate lookup with its own row. `slack_status`'s lookup affects only the client name, so the test would pass with that lookup returning `None`. Fix: also assert `'Slack Channel Test Client' in result.output`. | Accepted — an I4 finding, not an unstopped departure, so no Revert or Keep ruling is needed. Anvil adds the assertion to that test, re-runs AC1.3's check and the full suite, and corrects the AC1.3 and suite-count rows in the results artifact. |
+| 20261128 | Caliper (post-implementation) | Pass at bc25da5, changes since bc9e4ee: 33 items checked, 1 blocking, 0 non-blocking. | n/a |
 
 ---
 
