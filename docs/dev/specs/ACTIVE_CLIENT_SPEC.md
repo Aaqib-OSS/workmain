@@ -30,7 +30,7 @@
 | 20261127 | Ray | Spec requirements: state the Q3 consequence; `set_active` unflags in its own UPDATE before it flags, tested; `models.py` declares the index in the revision's commit; the fake refuses a second flagged row and the fallback tests are rewritten, not reseeded. | Accepted — DR4, DR5, DR6, step 1, step 3. |
 | 20261127 | Spanner | The index is on the column, `ON clients (is_active) WHERE is_active`, not on the expression `((true))` the study named. Every row it indexes holds `true`, so it admits one row. The column form is the one SQLAlchemy's `Index` declares on `Client` without an expression, which §4.5's model-in-the-same-commit rule needs. | Accepted. |
 | 20261127 | Spanner | The revision's data moves are module-level functions, `move_key_to_flag` and `move_flag_to_key`, that `upgrade()` and `downgrade()` call with `op.get_bind()`. A test calls them on `db_session`'s connection. The alternative, running `alembic downgrade` and `upgrade` against `workmain_test`, leaves the test's transaction, which `docs/standards/6-testing.md` §6.1 allows only for tests of the database build. | Accepted. |
-| 20261127 | Spanner | Open for Ray: when `0002` is applied to live relative to the service restart. Step 5 and §7 state the window. | Open. |
+| 20261127 | Ray | When `0002` is applied to live relative to the service restart. | Accepted — option (c): the service is stopped before the upgrade and stays stopped until `/closeout`'s restart, which starts a stopped unit (`.claude/skills/closeout/references/feature.md` step 10). No work runs on the application in the window, and it is clear of the T1 and EOD triggers. Step 5 and §7 state it. |
 
 ---
 
@@ -43,7 +43,7 @@
 - Every lookup of the active client in §2 calling `ClientRepository.get_active()`.
 - `docs/ARCHITECTURE.md` §2's data line naming the one lookup, and §3's #255 entry removed.
 - The tests that seed, read or assert the key, and new tests for each criterion in §5.
-- Applying `0002` to live, as an authorization point.
+- Stopping the service and applying `0002` to live, each an authorization point.
 
 **Out of scope:**
 
@@ -97,7 +97,7 @@ Verified at `bc9e4ee`. The study's findings F1–F20 are the evidence; each row 
 | 2 | Every lookup calls `get_active()` | `workmain/services/notes_service.py`, `workmain/services/email_service.py`, `workmain/cli/commands/email.py`, `workmain/cli/commands/meetings.py`, `workmain/cli/commands/reports.py`, `workmain/cli/commands/slack.py`, `workmain/cli/commands/time.py`, `workmain/workflows/eod_workflow.py`, `scripts/compare_providers.py`, and the tests listed in step 2 |
 | 3 | The repository and its fake hold the flag alone | `workmain/database/repositories/client_repository.py`, `tests/mocks/fake_unit_of_work.py`, `tests/test_client_repository.py`, `tests/test_fake_unit_of_work.py`, `tests/test_clients_service.py`, `tests/test_clients_commands.py`, `tests/test_notes_service.py` |
 | 4 | The architecture map | `docs/ARCHITECTURE.md` |
-| 5 | `0002` applied to live | none (authorization point) |
+| 5 | Service stopped, `0002` applied to live | none (authorization points) |
 | 6 | Results artifact | `docs/dev/results/ACTIVE_CLIENT_RESULTS.md` |
 
 ### Step 1 — Revision `0002` and the model's index
@@ -143,9 +143,17 @@ In `docs/ARCHITECTURE.md`:
 - §2 Data, replace `` - `workmain/database/repositories/` — one repository per table, named for it. `system_state_repository` is the key-value store. `` with `` - `workmain/database/repositories/` — one repository per table, named for it. `system_state_repository` is the key-value store. `client_repository`'s `get_active()` is the one lookup of the active client, which is stored as `clients.is_active` alone. ``
 - §3, delete the paragraph `` **The active client — #255.** It is stored as `clients.is_active` and as `system_state.active_client_id`, and read three ways. ``
 
-### Step 5 — `0002` applied to live
+### Step 5 — Service stopped, `0002` applied to live
 
-`alembic current` on live, expecting `0001`; then `alembic upgrade head`; then `alembic current`, expecting `0002`. Before and after, `SELECT count(*) FROM clients WHERE is_active` and `SELECT count(*) FROM system_state WHERE key = 'active_client_id'` are recorded in the results artifact, as counts only (`CLAUDE.md` § Client Reference). When it runs relative to the service restart is open (Decision Log).
+In this order:
+
+1. `systemctl --user stop workmain-notify.service`, then `systemctl --user is-active workmain-notify.service`, expecting `inactive`.
+2. `alembic current` on live, expecting `0001`.
+3. Record `SELECT count(*) FROM clients WHERE is_active` and `SELECT count(*) FROM system_state WHERE key = 'active_client_id'`.
+4. `alembic upgrade head`, then `alembic current`, expecting `0002`.
+5. Record the same two counts again.
+
+The counts go in the results artifact as counts only (`CLAUDE.md` § Client Reference). The service stays stopped until `/closeout`'s restart, so no old code runs against `0002`.
 
 ### Step 6 — Results artifact
 
@@ -153,7 +161,10 @@ In `docs/ARCHITECTURE.md`:
 
 ### Authorization points
 
-- **Step 5:** applying revision `0002` to the live database (`docs/standards/1-workflow.md` §1.4). It moves the active client into `clients.is_active` as DR6 states, deletes the `system_state` key `active_client_id`, replaces `idx_clients_is_active` with `uq_clients_one_active`, and rewrites two table comments. Ray approves it when it is about to run.
+- **Step 5, item 1:** stopping `workmain-notify.service`, a change to a live service's run state other than the post-merge restart (`docs/standards/1-workflow.md` §1.4). It stays stopped until `/closeout`'s restart, so the T1–T6 triggers and Slack Socket Mode do not run in between.
+- **Step 5, item 4:** applying revision `0002` to the live database (§1.4). It moves the active client into `clients.is_active` as DR6 states, deletes the `system_state` key `active_client_id`, replaces `idx_clients_is_active` with `uq_clients_one_active`, and rewrites two table comments.
+
+Ray approves each when it is about to run.
 
 ## 5. Acceptance criteria
 
@@ -186,5 +197,5 @@ Each criterion restates one of the issue's, corrected as study §7 states and Ra
 
 - **Live has two flagged rows.** The repository allows that state today through a direct write, and the unique index cannot be built on it. `move_key_to_flag` runs first and leaves at most one flagged row, so the index builds. The counts recorded in step 5 show what the revision moved.
 - **The flagged client changes on live.** Under DR6, a live key that is absent or names no client leaves no client flagged, so `clients status` reads internal after the upgrade where it showed the flagged client. Note writes were already internal in that state. Ray re-runs `clients set active` if he wants a client active.
-- **The window between upgrade and restart.** The daemon loads code at start (`docs/standards/2-git.md` §2.6) and runs `dev` until `/closeout` restarts it. Once live is at `0002`, the daemon's old code finds no key, so a note captured through Slack is written as internal until the restart. Before live is at `0002`, CLI commands run on this branch read the flag, which may name another client than the key the daemon stamps. The window is closed by applying the upgrade as close to the restart as Ray allows (Decision Log, open).
-- **Rollback.** Steps 1–4 revert by commit. On live, `alembic downgrade 0001` restores the old index, the key from the flag and both comments, and code before step 3 works on that state.
+- **The window between upgrade and restart.** The daemon loads code at start (`docs/standards/2-git.md` §2.6) and runs `dev` until `/closeout` restarts it. On `0002` its old code would find no key and write Slack captures as internal. Step 5 stops it first, so no old code runs on `0002`. While it is stopped, no trigger fires and no Slack message is received. Before step 5, CLI commands run on this branch read the flag, which may name a different client from the key the daemon stamps; Ray holds application work until close-out (Decision Log).
+- **Rollback.** Steps 1–4 revert by commit. On live, `alembic downgrade 0001` restores the old index, the key from the flag and both comments, and code before step 3 works on that state. If the work stops after step 5's service stop and before close-out, the service is started again only after live is back at `0001` or the branch has merged. Starting it is Ray's, as an authorization point (§1.4).
