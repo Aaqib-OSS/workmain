@@ -159,7 +159,6 @@ class TestDelete:
         fake_uow.store['clients'] = {
             1: {'id': 1, 'name': 'Acme', 'is_active': True, 'created_at': CREATED},
         }
-        fake_uow.store['system_state'] = {'active_client_id': '1'}
 
         with pytest.raises(ActiveClientDeleteError) as e:
             clients_service.preview_delete(fake_uow, 'Acme', False)
@@ -170,7 +169,6 @@ class TestDelete:
         fake_uow.store['clients'] = {
             1: {'id': 1, 'name': 'Acme', 'is_active': True, 'created_at': CREATED},
         }
-        fake_uow.store['system_state'] = {'active_client_id': '1'}
 
         preview = clients_service.preview_delete(fake_uow, 'Acme', True)
 
@@ -214,13 +212,11 @@ class TestDelete:
         fake_uow.store['clients'] = {
             1: {'id': 1, 'name': 'Acme', 'is_active': True, 'created_at': CREATED},
         }
-        fake_uow.store['system_state'] = {'active_client_id': '1'}
 
         clients_service.delete_client(fake_uow, 1)
 
         assert fake_uow.committed is True
         assert fake_uow.store['clients'] == {}
-        assert fake_uow.store['system_state'] == {}
         status = clients_service.get_status(FakeUnitOfWork(store=fake_uow.store))
         assert status.totals == clients_service.ClientStatusTotals('internal', None)
 
@@ -242,27 +238,23 @@ class TestActive:
         assert status == Summary(clients_service.ClientStatusTotals('Acme', 1), ())
         assert fake_uow.committed is True
         assert fake_uow.store['clients'][1]['is_active'] is True
-        assert fake_uow.store['system_state'] == {'active_client_id': '1'}
 
     @pytest.mark.parametrize('name', ['internal', 'INTERNAL', ' Internal '])
     def test_internal_clears_the_context(self, fake_uow: FakeUnitOfWork, name: str) -> None:
         fake_uow.store['clients'] = {
             1: {'id': 1, 'name': 'Acme', 'is_active': True, 'created_at': CREATED},
         }
-        fake_uow.store['system_state'] = {'active_client_id': '1'}
 
         status = clients_service.set_active(fake_uow, name)
 
         assert status.totals == clients_service.ClientStatusTotals('internal', None)
         assert fake_uow.committed is True
         assert fake_uow.store['clients'][1]['is_active'] is False
-        assert fake_uow.store['system_state'] == {}
 
     def test_unknown_name_leaves_the_active_client(self, fake_uow: FakeUnitOfWork) -> None:
         fake_uow.store['clients'] = {
             1: {'id': 1, 'name': 'Alpha', 'is_active': True, 'created_at': CREATED},
         }
-        fake_uow.store['system_state'] = {'active_client_id': '1'}
 
         with pytest.raises(ClientNotFoundError) as e:
             clients_service.set_active(fake_uow, 'alp')
@@ -278,21 +270,10 @@ class TestStatus:
         fake_uow.store['clients'] = {
             1: {'id': 1, 'name': 'Acme', 'is_active': True, 'created_at': CREATED},
         }
-        fake_uow.store['system_state'] = {'active_client_id': '1'}
 
         status = clients_service.get_status(fake_uow)
 
         assert status == Summary(clients_service.ClientStatusTotals('Acme', 1), ())
-
-    def test_falls_back_to_the_flagged_client(self, fake_uow: FakeUnitOfWork) -> None:
-        fake_uow.store['clients'] = {
-            1: {'id': 1, 'name': 'Other', 'is_active': False, 'created_at': CREATED},
-            2: {'id': 2, 'name': 'Flagged', 'is_active': True, 'created_at': CREATED},
-        }
-
-        status = clients_service.get_status(fake_uow)
-
-        assert status.totals == clients_service.ClientStatusTotals('Flagged', 2)
 
     def test_internal_when_nothing_is_active_and_formatters(
         self, fake_uow: FakeUnitOfWork

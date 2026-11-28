@@ -13,14 +13,15 @@ from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from workmain.ai.base_provider import ConfigurationError, ProviderError, ProviderStatus
 from workmain.daemon import state_io
 from workmain.daemon.models import Observation, ObservationType
-from workmain.database.models import Report
+from workmain.database.models import Client, Report
+from workmain.database.repositories.client_repository import ClientRepository
 from workmain.database.repositories.notes_repo import NotesRepository
 from workmain.database.repositories.reports_repo import ReportsRepository
-from workmain.database.repositories.system_state_repository import SystemStateRepository
 from workmain.database.repositories.task_status_repo import TaskStatusRepository
 from workmain.services import email_service
 from workmain.services.email_service import EmailDraft, SavedDraft
@@ -1005,6 +1006,12 @@ class TestHandleReplyMidFlightGuard:
 GATE1_SENTINEL_DATE = date(2098, 11, 3)
 
 
+def _seed_active_client(db_session: Session) -> None:
+    """Seed a flagged client, so the weekly step finds an active client."""
+    db_session.add(Client(name='Sentinel EOD Active Client 2098', is_active=True))
+    db_session.commit()
+
+
 class TestReportReviewStepCollapse:
     """Item #61 Gate 1 (Design Rules 1-2) — collapsed _run_report_review_step,
     exercised through its two public thin wrappers. Covers G2's re-review
@@ -1039,10 +1046,10 @@ class TestReportReviewStepCollapse:
 
     def test_weekly_g2_existing_corrected_report_skips_generation_and_reviews(self, db_session):
         self._seed(db_session, 'weekly_client', 'corrected')
+        _seed_active_client(db_session)
         with patch('workmain.workflows.eod_workflow._is_interactive', return_value=True), \
              patch('workmain.workflows.eod_workflow.run_workmain') as mock_run, \
-             patch('workmain.workflows.eod_workflow._prompt_choice', return_value='s'), \
-             patch.object(SystemStateRepository, 'get_int', return_value=1):
+             patch('workmain.workflows.eod_workflow._prompt_choice', return_value='s'):
             result = _run_weekly_report_step(dry_run=False, target_date=GATE1_SENTINEL_DATE)
         mock_run.assert_not_called()
         assert result.status == EodStepStatus.COMPLETED
@@ -1075,9 +1082,9 @@ class TestReportReviewStepCollapse:
 
     # --- G1 (weekly-only, unchanged): no active client skips entirely ---
 
-    def test_weekly_g1_no_active_client_skips_without_generating(self):
-        with patch.object(SystemStateRepository, 'get_int', return_value=None), \
-             patch('workmain.workflows.eod_workflow.run_workmain') as mock_run:
+    def test_weekly_g1_no_active_client_skips_without_generating(self, db_session: Session) -> None:
+        ClientRepository(db_session).clear_active()
+        with patch('workmain.workflows.eod_workflow.run_workmain') as mock_run:
             result = _run_weekly_report_step(dry_run=False, target_date=GATE1_SENTINEL_DATE)
         mock_run.assert_not_called()
         assert result.status == EodStepStatus.COMPLETED
@@ -1093,21 +1100,21 @@ class TestReportReviewStepCollapse:
             result = _run_report_step(dry_run=False, target_date=GATE1_SENTINEL_DATE)
         assert result.status == EodStepStatus.FAILED
 
-    def test_weekly_generation_error_non_fatal_when_interactive(self):
+    def test_weekly_generation_error_non_fatal_when_interactive(self, db_session: Session) -> None:
         """generation_error_fatal=False — weekly stays COMPLETED
         ("non-fatal in CLI") interactively (unchanged)."""
+        _seed_active_client(db_session)
         with patch('workmain.workflows.eod_workflow._is_interactive', return_value=True), \
              patch('workmain.workflows.eod_workflow.run_workmain',
-                   side_effect=OSError('boom')), \
-             patch.object(SystemStateRepository, 'get_int', return_value=1):
+                   side_effect=OSError('boom')):
             result = _run_weekly_report_step(dry_run=False, target_date=GATE1_SENTINEL_DATE)
         assert result.status == EodStepStatus.COMPLETED
 
-    def test_weekly_generation_error_fatal_when_non_interactive(self):
+    def test_weekly_generation_error_fatal_when_non_interactive(self, db_session: Session) -> None:
+        _seed_active_client(db_session)
         with patch('workmain.workflows.eod_workflow._is_interactive', return_value=False), \
              patch('workmain.workflows.eod_workflow.run_workmain',
-                   side_effect=OSError('boom')), \
-             patch.object(SystemStateRepository, 'get_int', return_value=1):
+                   side_effect=OSError('boom')):
             result = _run_weekly_report_step(dry_run=False, target_date=GATE1_SENTINEL_DATE)
         assert result.status == EodStepStatus.FAILED
 
@@ -1158,14 +1165,14 @@ class TestReportReviewStepEditBranch:
 
     def test_weekly_edit_branch_no_note_leaves_correction_note_unset(self, db_session):
         report = self._seed(db_session, 'weekly_client')
+        _seed_active_client(db_session)
         with patch('workmain.workflows.eod_workflow._is_interactive', return_value=True), \
              patch('workmain.workflows.eod_workflow.run_workmain',
                    return_value=WorkmainRun(returncode=0)), \
              patch('workmain.workflows.eod_workflow._prompt_choice', return_value='e'), \
              patch('workmain.workflows.eod_workflow._prompt_raw', return_value=''), \
              patch('workmain.workflows.eod_workflow.edit_in_editor',
-                   return_value='Edited weekly via EOD.'), \
-             patch.object(SystemStateRepository, 'get_int', return_value=1):
+                   return_value='Edited weekly via EOD.'):
             result = _run_weekly_report_step(dry_run=False, target_date=GATE1_SENTINEL_DATE)
         assert result.status == EodStepStatus.COMPLETED
         db_session.refresh(report)

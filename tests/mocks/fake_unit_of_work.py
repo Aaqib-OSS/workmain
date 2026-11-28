@@ -26,6 +26,8 @@ from decimal import Decimal
 from types import TracebackType
 from typing import Dict, List, Optional, Type
 
+from sqlalchemy.exc import IntegrityError
+
 from workmain.database.models import Client, Meeting, Note, TaskStatus, TimeEntry
 from workmain.database.repositories.client_repository import ClientRepository
 from workmain.database.repositories.system_state_repository import SystemStateRepository
@@ -179,6 +181,11 @@ class FakeClientRepository:
     It also reads and unlinks notes, meetings and time_entries rows, in the
     shapes FakeNotesRepository's, FakeMeetingsRepository's and
     FakeTimeEntriesRepository's docstrings state, which hold client_id.
+
+    The active client is the one row with is_active True. As the unique
+    index uq_clients_one_active does in the database, set_active,
+    clear_active and get_active raise sqlalchemy.exc.IntegrityError when
+    the store holds more than one flagged client.
     """
 
     RESERVED_NAME = ClientRepository.RESERVED_NAME
@@ -274,35 +281,37 @@ class FakeClientRepository:
             for table in self._LINKED
         }
 
+    def _flagged(self) -> list[dict]:
+        """Return the flagged rows, refusing a store the unique index would refuse."""
+        flagged = [row for row in _rows(self._store, self._TABLE).values() if row['is_active']]
+        if len(flagged) > 1:
+            raise IntegrityError(
+                'clients: more than one row with is_active TRUE', None,
+                Exception('duplicate key value violates unique constraint "uq_clients_one_active"'),
+            )
+        return flagged
+
     def set_active(self, client_id: int) -> Client:
-        """Flag the client active, unflag the others, and store its id."""
+        """Unflag every client, then flag this one."""
+        self._flagged()
         rows = _rows(self._store, self._TABLE)
         if client_id not in rows:
             raise ValueError(f"No client with ID {client_id}.")
         for row in rows.values():
             row['is_active'] = False
         rows[client_id]['is_active'] = True
-        FakeSystemStateRepository(self._store).set_int('active_client_id', client_id)
         return self._client(rows[client_id])
 
     def clear_active(self) -> None:
-        """Unflag every client and delete the stored active id."""
+        """Unflag every client."""
+        self._flagged()
         for row in _rows(self._store, self._TABLE).values():
             row['is_active'] = False
-        FakeSystemStateRepository(self._store).delete('active_client_id')
 
     def get_active(self) -> Optional[Client]:
-        """Return the client the stored id names, else the flagged client with the lowest id."""
-        client_id = FakeSystemStateRepository(self._store).get_int('active_client_id')
-        if client_id is not None:
-            client = self.get_by_id(client_id)
-            if client is not None:
-                return client
-        rows = _rows(self._store, self._TABLE)
-        for key in sorted(rows):
-            if rows[key]['is_active']:
-                return self._client(rows[key])
-        return None
+        """Return the flagged client, or None when none is flagged."""
+        flagged = self._flagged()
+        return self._client(flagged[0]) if flagged else None
 
 
 class FakeNotesRepository:

@@ -20,6 +20,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -63,6 +64,11 @@ class Client(Base):
                            onupdate=lambda: datetime.now(timezone.utc))
 
     projects = relationship("Project", back_populates="client")
+
+    # One active client: the database refuses a second row with is_active TRUE.
+    __table_args__ = (
+        Index('uq_clients_one_active', is_active, unique=True, postgresql_where=is_active),
+    )
 
 
 class Project(Base):

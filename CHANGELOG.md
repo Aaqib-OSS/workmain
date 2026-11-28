@@ -7,6 +7,19 @@ and project versioning follows `docs/standards/2-git.md` §2.5.
 
 ## [Unreleased]
 
+## [1.64.0] - 2026-11-28
+
+The active client was stored twice, as `clients.is_active` and as the `system_state` key `active_client_id`, and nothing kept the two in step. `clients status` and `clients list` could name different clients, a key naming a deleted client made note writes fail on their foreign key, and `slack set channel` crashed. The flag is now the only store. The database holds it to one row, and every lookup goes through `ClientRepository.get_active()` (#255).
+
+### Changed
+
+- `workmain/database/migrations/versions/0002_active_client_flag.py` (new): moves the key into the flag and deletes it, and replaces `idx_clients_is_active` with the unique partial index `uq_clients_one_active`. It raises, changing nothing, when the key and the flag name different clients. It also rewrites the `clients` and `system_state` table comments. `Client` in `workmain/database/models.py` declares the index.
+- `ClientRepository.set_active`, `clear_active` and `get_active` read and write the flag alone. `set_active` unflags before it flags.
+- `notes_service.create_note`, `email_service`, the `email`, `meetings`, `reports` and `slack` commands, the EOD weekly-client guard and `scripts/compare_providers.py` look up the active client through `get_active()`. `time add` no longer reads the key it never used.
+- `docs/ARCHITECTURE.md` §2 names `get_active()` as the one lookup of the active client. The §3 known-deficiency entry is removed.
+
+Suite: 1880 passed, 0 failed, 0 skipped (note: 1 xfailed, 3 xpassed) (baseline 1862 passed, 0 failed, 0 skipped).
+
 ## [1.63.0] - 2026-11-27
 
 86 tests were functions at module level, though `docs/standards/6-testing.md` §6.2 makes every test a method of a plain class. Every test in `tests/` is now a method of a plain `Test<Topic>` class. The move of 82 of them is the work of #290's author, merged through #312. Three Ollama tests also passed only while nothing listening on `localhost:11434` listed their model. Each now makes its own request fail (#288).

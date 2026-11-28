@@ -7,7 +7,7 @@ link_condensed_note) run inside an entered fake; the use cases
 into the fake's store in the shapes tests/mocks/fake_unit_of_work.py states.
 """
 
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -22,6 +22,16 @@ from workmain.services.exceptions import (
 
 _SENTINEL = date(2099, 1, 1)
 _DEFAULT_TIME = time(10, 0)
+
+
+def _seed_active_client(store: dict, client_id: int) -> None:
+    """Seed a flagged clients row, which makes that client the active one."""
+    store.setdefault('clients', {})[client_id] = {
+        'id': client_id,
+        'name': f'Sentinel Client {client_id}',
+        'is_active': True,
+        'created_at': datetime(2099, 1, 1, 9, 0, tzinfo=timezone.utc),
+    }
 
 
 def _seed_meeting(store: dict, start: datetime, minutes: int = 30, title: str = 'Sentinel') -> int:
@@ -134,7 +144,7 @@ class TestCreateTimeEntry:
     def test_the_active_client_is_stamped_on_entry_and_note(
         self, fake_uow: FakeUnitOfWork
     ) -> None:
-        fake_uow.store['system_state'] = {'active_client_id': '7'}
+        _seed_active_client(fake_uow.store, 7)
         with fake_uow:
             entry = time_entry_service.create_time_entry(
                 fake_uow, description="Attributed entry", duration_hours=1.0,
@@ -144,7 +154,6 @@ class TestCreateTimeEntry:
         assert fake_uow.store['notes'][entry.note_id]['client_id'] == 7
 
     def test_no_active_client_leaves_both_unset(self, fake_uow: FakeUnitOfWork) -> None:
-        fake_uow.store['system_state'] = {'active_client_id': ''}
         with fake_uow:
             entry = time_entry_service.create_time_entry(
                 fake_uow, description="Internal entry", duration_hours=1.0,
@@ -192,7 +201,7 @@ class TestCreatePairedTimeEntry:
     def test_meeting_and_client_come_from_the_note(self, fake_uow: FakeUnitOfWork) -> None:
         meeting_id = _seed_meeting(fake_uow.store, datetime(2099, 1, 1, 9, 0))
         _seed_note(fake_uow.store, "Sentinel paired", meeting_id=meeting_id, client_id=3)
-        fake_uow.store['system_state'] = {'active_client_id': '9'}
+        _seed_active_client(fake_uow.store, 9)
         with fake_uow:
             note = fake_uow.notes.get_by_id(1)
             entry = time_entry_service.create_paired_time_entry(
@@ -319,7 +328,7 @@ class TestLogMeetingTime:
 
     def test_writes_the_meeting_note_and_its_entry(self, fake_uow: FakeUnitOfWork) -> None:
         meeting_id = _seed_meeting(fake_uow.store, datetime(2099, 1, 1, 9, 0))
-        fake_uow.store['system_state'] = {'active_client_id': '4'}
+        _seed_active_client(fake_uow.store, 4)
         backdated = datetime(2099, 1, 1, 12, 0)
 
         result = time_entry_service.log_meeting_time(
@@ -344,7 +353,7 @@ class TestLogMeetingTime:
 
     def test_category_and_project_go_on_the_entry(self, fake_uow: FakeUnitOfWork) -> None:
         meeting_id = _seed_meeting(fake_uow.store, datetime(2099, 1, 1, 9, 0))
-        fake_uow.store['system_state'] = {'active_client_id': '1'}
+        _seed_active_client(fake_uow.store, 1)
         fake_uow.store['projects'] = {5: {'id': 5, 'client_id': 1}}
 
         result = time_entry_service.log_meeting_time(
@@ -358,7 +367,7 @@ class TestLogMeetingTime:
 
     def test_a_failed_entry_rolls_back_the_note(self, fake_uow: FakeUnitOfWork) -> None:
         meeting_id = _seed_meeting(fake_uow.store, datetime(2099, 1, 1, 9, 0))
-        fake_uow.store['system_state'] = {'active_client_id': '2'}
+        _seed_active_client(fake_uow.store, 2)
         fake_uow.store['projects'] = {5: {'id': 5, 'client_id': 1}}
 
         with pytest.raises(ValueError, match="mismatched project"):
@@ -401,7 +410,7 @@ class TestLogTaskTime:
     def test_a_failed_entry_rolls_back_the_note_and_its_task(
         self, fake_uow: FakeUnitOfWork
     ) -> None:
-        fake_uow.store['system_state'] = {'active_client_id': '2'}
+        _seed_active_client(fake_uow.store, 2)
         fake_uow.store['projects'] = {5: {'id': 5, 'client_id': 1}}
 
         with pytest.raises(ValueError, match="mismatched project"):

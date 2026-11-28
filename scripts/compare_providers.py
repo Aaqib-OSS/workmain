@@ -24,14 +24,18 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import List, Optional
 
-from workmain.ai.base_provider import GenerationRequest, GenerationResponse, ProviderType
+from workmain.ai.base_provider import (
+    GenerationRequest,
+    GenerationResponse,
+    ProviderType,
+)
 from workmain.ai.note_condenser import NoteCondenser
 from workmain.ai.provider_manager import ProviderManager, get_provider_manager
 from workmain.ai.report_generator import ReportGenerator
 from workmain.cli.commands.reports import get_client_filter
 from workmain.database.connection import get_db
+from workmain.database.repositories.client_repository import ClientRepository
 from workmain.database.repositories.meetings_repo import MeetingsRepository
-from workmain.database.repositories.system_state_repository import SystemStateRepository
 from workmain.templates_engine import get_template_loader
 
 CONDENSATION_TYPE = 'note_condensation'
@@ -84,7 +88,8 @@ def _report_request(
     """Build a report type's request as generate_report would; None if no client is active."""
     template = get_template_loader().load(call_type)
     recipient_type = template.get('recipient_type', 'internal_management')
-    active_client_id = SystemStateRepository(session).get_int('active_client_id')
+    active_client = ClientRepository(session).get_active()
+    active_client_id = active_client.id if active_client is not None else None
     filter_client, client_id = get_client_filter(recipient_type, active_client_id)
     if filter_client and client_id is None:
         return None

@@ -473,12 +473,11 @@ def email_assign(recipient_id: int, template: str, role: str):
       workmain email assign 2 weekly_client cc
     """
     require_report_type(template)
-    from workmain.database.repositories.system_state_repository import (
-        SystemStateRepository,
-    )
+    from workmain.database.repositories.client_repository import ClientRepository
     db = get_db()
     with db.session_scope() as session:
-        active_client_id = SystemStateRepository(session).get_int('active_client_id')
+        active_client = ClientRepository(session).get_active()
+        active_client_id = active_client.id if active_client is not None else None
         repo = get_email_repository(session)
         recipient = repo.get_recipient_by_id(recipient_id)
         if not recipient:
@@ -508,12 +507,11 @@ def email_unassign(recipient_id: int, template: str):
       workmain email unassign 2 weekly_client
     """
     require_report_type(template)
-    from workmain.database.repositories.system_state_repository import (
-        SystemStateRepository,
-    )
+    from workmain.database.repositories.client_repository import ClientRepository
     db = get_db()
     with db.session_scope() as session:
-        active_client_id = SystemStateRepository(session).get_int('active_client_id')
+        active_client = ClientRepository(session).get_active()
+        active_client_id = active_client.id if active_client is not None else None
         repo = get_email_repository(session)
         recipient = repo.get_recipient_by_id(recipient_id)
         if not recipient:

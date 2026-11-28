@@ -54,17 +54,12 @@ class TestResolveSlackChannel:
         from workmain.cli.commands.slack import _resolve_slack_channel
         from workmain.database.models import Client
         from workmain.database.repositories.client_repository import ClientRepository
-        from workmain.database.repositories.system_state_repository import (
-            SystemStateRepository,
-        )
 
-        client = Client(name="_T11_5_SlackResolve_A", is_active=False,
+        client = Client(name="_T11_5_SlackResolve_A", is_active=True,
                         slack_channel="#test-client-channel")
         db_session.add(client)
         db_session.commit()
         db_session.refresh(client)
-
-        SystemStateRepository(db_session).set_int('active_client_id', client.id)
 
         result = _resolve_slack_channel(db_session)
         assert result == "#test-client-channel"
@@ -75,17 +70,12 @@ class TestResolveSlackChannel:
 
         from workmain.cli.commands.slack import _resolve_slack_channel
         from workmain.database.models import Client
-        from workmain.database.repositories.system_state_repository import (
-            SystemStateRepository,
-        )
 
-        client = Client(name="_T11_5_SlackResolve_B", is_active=False,
+        client = Client(name="_T11_5_SlackResolve_B", is_active=True,
                         slack_channel=None)
         db_session.add(client)
         db_session.commit()
         db_session.refresh(client)
-
-        SystemStateRepository(db_session).set_int('active_client_id', client.id)
 
         with patch('workmain.cli.commands.slack.get_default_channel',
                    return_value='#config-fallback'):
@@ -97,11 +87,9 @@ class TestResolveSlackChannel:
         from unittest.mock import patch
 
         from workmain.cli.commands.slack import _resolve_slack_channel
-        from workmain.database.repositories.system_state_repository import (
-            SystemStateRepository,
-        )
+        from workmain.database.repositories.client_repository import ClientRepository
 
-        SystemStateRepository(db_session).delete('active_client_id')
+        ClientRepository(db_session).clear_active()
 
         with patch('workmain.cli.commands.slack.get_default_channel',
                    return_value=None):
@@ -114,17 +102,12 @@ class TestResolveSlackChannel:
 
         from workmain.cli.commands.slack import _resolve_slack_channel
         from workmain.database.models import Client
-        from workmain.database.repositories.system_state_repository import (
-            SystemStateRepository,
-        )
 
-        client = Client(name="_T11_5_SlackResolve_C", is_active=False,
+        client = Client(name="_T11_5_SlackResolve_C", is_active=True,
                         slack_channel="#client-wins")
         db_session.add(client)
         db_session.commit()
         db_session.refresh(client)
-
-        SystemStateRepository(db_session).set_int('active_client_id', client.id)
 
         with patch('workmain.cli.commands.slack.get_default_channel',
                    return_value='#config-should-not-win'):
@@ -236,7 +219,7 @@ class TestSlackStatusDisplay:
     """slack status displays clients.slack_channel as the primary channel value."""
 
     def test_slack_status_shows_client_channel(self, db_session: Session) -> None:
-        """slack status output contains the active client's slack_channel."""
+        """slack status output contains the active client's slack_channel and name."""
         _active_client = _make_active_client(db_session)
         # Set a known channel value
         _active_client.slack_channel = '#status-test-channel'
@@ -245,6 +228,7 @@ class TestSlackStatusDisplay:
         result = _invoke('status')
         assert result.exit_code == 0
         assert '#status-test-channel' in result.output
+        assert '(Client: Slack Channel Test Client)' in result.output
 
     def test_slack_status_fallback_when_no_client_channel(self, db_session: Session) -> None:
         """No client channel set -> falls back to config.json or shows not configured."""

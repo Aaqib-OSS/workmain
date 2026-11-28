@@ -25,8 +25,8 @@ from workmain.cli.params import DateParamType, MonthParamType
 from workmain.database.connection import get_db
 from workmain.database.models import Meeting
 from workmain.database.repositories.ai_costs_repo import get_ai_cost_repository
+from workmain.database.repositories.client_repository import ClientRepository
 from workmain.database.repositories.meetings_repo import MeetingsRepository
-from workmain.database.repositories.system_state_repository import SystemStateRepository
 from workmain.services import ai_cost_service
 from workmain.utils.ai_arguments import failure_exit_code, require_provider
 from workmain.utils.cost_display import (
@@ -198,7 +198,8 @@ def create(title: str, start: str, end: str, meeting_date: Optional[str],
     try:
         with db.session_scope() as session:
             repo = MeetingsRepository(session)
-            active_client_id = SystemStateRepository(session).get_int('active_client_id')
+            active_client = ClientRepository(session).get_active()
+            active_client_id = active_client.id if active_client is not None else None
 
             # Validate recurring parameters and set default --until
             if recurring and not until:

@@ -32,8 +32,8 @@ from workmain.cli.output import (
 )
 from workmain.cli.params import DateParamType, MonthParamType
 from workmain.database.connection import get_db
+from workmain.database.repositories.client_repository import ClientRepository
 from workmain.database.repositories.reports_repo import get_reports_repository
-from workmain.database.repositories.system_state_repository import SystemStateRepository
 from workmain.services import ai_cost_service, email_service
 from workmain.utils.ai_arguments import (
     failure_exit_code,
@@ -134,7 +134,8 @@ def generate_report_impl(
         with db.session_scope() as session:
             from workmain.templates_engine import get_template_loader
             generator = get_report_generator(session)
-            active_client_id = SystemStateRepository(session).get_int('active_client_id')
+            active_client = ClientRepository(session).get_active()
+            active_client_id = active_client.id if active_client is not None else None
             if report_date is None:
                 report_date = datetime.today().date()
 
