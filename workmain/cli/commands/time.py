@@ -10,7 +10,6 @@ from typing import Optional
 import click
 
 from workmain.database.connection import get_db
-from workmain.database.repositories.system_state_repository import SystemStateRepository
 from workmain.database.repositories.time_entries_repo import TimeEntriesRepository
 from workmain.services import clockify_service
 
@@ -197,7 +196,6 @@ def time_add(description: Optional[str], duration: str, time: str,
     db = get_db()
     with db.session_scope() as session:
         repo = TimeEntriesRepository(session)
-        active_client_id = SystemStateRepository(session).get_int('active_client_id')
 
         # Parse duration
         try:

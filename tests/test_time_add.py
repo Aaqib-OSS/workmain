@@ -19,7 +19,6 @@ from sqlalchemy.orm import Session
 
 from workmain.cli.commands.time import time
 from workmain.database.models import Client, Meeting, Note, TimeEntry
-from workmain.database.repositories.system_state_repository import SystemStateRepository
 from workmain.services import clockify_service
 from workmain.services.exceptions import IntegrationError
 from workmain.services.results import Page
@@ -82,7 +81,6 @@ class TestTimeAdd:
         client = Client(name="Sentinel Time Add ClientID Client 2099", is_active=True)
         db_session.add(client)
         db_session.flush()
-        SystemStateRepository(db_session).set_int("active_client_id", client.id)
         meeting = _seed_meeting(db_session, "Sentinel Time Add ClientID Meeting 2099")
 
         result = CliRunner().invoke(

@@ -21,9 +21,9 @@ from sqlalchemy.orm import Session
 
 from tests.mocks.fake_unit_of_work import FakeTimeEntriesRepository, FakeUnitOfWork
 from workmain.database.connection import DatabaseConnection
-from workmain.database.models import Client, Note, Project, TimeEntry
+from workmain.database.models import Note, Project, TimeEntry
+from workmain.database.repositories.client_repository import ClientRepository
 from workmain.database.repositories.notes_repo import NotesRepository
-from workmain.database.repositories.system_state_repository import SystemStateRepository
 from workmain.database.repositories.time_entries_repo import TimeEntriesRepository
 from workmain.services import clockify_service
 from workmain.services.clockify_service import (
@@ -71,7 +71,8 @@ def _seed_entry(
     `project` is the Clockify project id of a project created for the entry, on the
     note's client (the repository refuses a project of another client).
     """
-    client_id = SystemStateRepository(session).get_int("active_client_id")
+    active_client = ClientRepository(session).get_active()
+    client_id = active_client.id if active_client is not None else None
     note = NotesRepository(session).create(
         content=description, tags=['internal-only'], source='ad-hoc', client_id=client_id,
     )
@@ -102,14 +103,6 @@ def _remote(clockify_id="remote-id", description="Client work", *, day=DAY, at=t
 
 def _item(entry, kind="new", local_id=None):
     return PullItem(entry, kind, local_id, Page((), 0))
-
-
-def _set_active_client(session, name):
-    client = Client(name=name, is_active=True)
-    session.add(client)
-    session.flush()
-    SystemStateRepository(session).set_int("active_client_id", client.id)
-    return client.id
 
 
 def _record_scope_spy():
@@ -520,7 +513,10 @@ class TestPull:
         assert db_session.get(TimeEntry, local).clockify_id == 'clockify-link-id'
 
     def test_s27_import_stamps_the_active_client(self) -> None:
-        uow = FakeUnitOfWork(record=True, store={'system_state': {'active_client_id': '3'}})
+        uow = FakeUnitOfWork(record=True, store={'clients': {
+            3: {'id': 3, 'name': 'Sentinel Client', 'is_active': True,
+                'created_at': datetime(2099, 1, 1, 9, 0, tzinfo=timezone.utc)},
+        }})
 
         outcome = apply_pull(uow, _item(_remote("s27-client")), PullAnswer("import", ""))
 

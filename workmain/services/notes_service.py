@@ -110,7 +110,8 @@ def create_note(
             raise InvalidTagsError(invalid_tags=invalid, valid_tags=valid_vocab)
         resolved_tags = tags
 
-    active_client_id = uow.system_state.get_int("active_client_id")
+    active_client = uow.clients.get_active()
+    active_client_id = active_client.id if active_client is not None else None
 
     note = uow.notes.create(
         content=content,

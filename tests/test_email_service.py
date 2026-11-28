@@ -15,9 +15,9 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.orm import Session
 
-from workmain.database.models import Recipient
+from workmain.database.models import Client, Recipient
+from workmain.database.repositories.client_repository import ClientRepository
 from workmain.database.repositories.email_repository import get_email_repository
-from workmain.database.repositories.system_state_repository import SystemStateRepository
 from workmain.services import email_service
 from workmain.services.email_service import EmailDraft, SavedDraft
 from workmain.services.exceptions import NoReportFoundError
@@ -43,7 +43,7 @@ def _assign(session, email, template, role):
     session.commit()
     session.refresh(recipient)
     get_email_repository(session).assign_recipient(recipient.id, template, role, client_id=None)
-    SystemStateRepository(session).delete('active_client_id')
+    ClientRepository(session).clear_active()
 
 
 class TestBuildDraft:
@@ -66,6 +66,24 @@ class TestBuildDraft:
             assert "To: t1_to@test.invalid" in draft.content
             assert "Subject: Daily Report — 05 Jan 2099" in draft.content
             assert "report body text" in draft.content
+
+    def test_build_draft_includes_the_flagged_clients_recipients(
+        self, db_session: Session, tmp_path: Path
+    ) -> None:
+        client = Client(name="Sentinel Draft Client 2099", is_active=True)
+        recipient = Recipient(email="client_to@test.invalid")
+        db_session.add_all([client, recipient])
+        db_session.commit()
+        get_email_repository(db_session).assign_recipient(
+            recipient.id, _DAILY, "to", client_id=client.id,
+        )
+        with _dirs(tmp_path) as dirs:
+            reports, _ = dirs
+            (reports / f"{_DAILY}_2099-01-05.md").write_text("body", encoding="utf-8")
+
+            draft = email_service.build_draft(db_session, _DAILY)
+
+        assert draft.to == ("client_to@test.invalid",)
 
     @pytest.mark.parametrize("template, subject", [
         ("daily_x_2099_test", "Daily Report — 04 Mar 2099"),
@@ -122,7 +140,7 @@ class TestSaveDraft:
         with _dirs(tmp_path) as dirs:
             reports, drafts = dirs
             (reports / f"{_DAILY}_2099-01-05.md").write_text("body", encoding="utf-8")
-            SystemStateRepository(db_session).delete('active_client_id')
+            ClientRepository(db_session).clear_active()
 
             saved = email_service.save_draft(db_session, _DAILY)
 

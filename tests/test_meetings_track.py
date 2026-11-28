@@ -1,5 +1,5 @@
 """
-CLI-level coverage for 'workmain meetings track'.
+CLI-level coverage for 'workmain meetings track', and for the active client on 'meetings create'.
 
 Each test runs the command through CliRunner against the test's database,
 with nothing patched between the command and
@@ -16,7 +16,6 @@ from sqlalchemy.orm import Session
 
 from workmain.cli.commands.meetings import meetings
 from workmain.database.models import Client, Meeting, Note, TimeEntry
-from workmain.database.repositories.system_state_repository import SystemStateRepository
 
 _SENTINEL_DESCRIPTION = "Sentinel meetings track description 2099-07-28"
 
@@ -43,7 +42,6 @@ class TestMeetingsTrack:
         client = Client(name="Sentinel Meetings Track Client 2099", is_active=True)
         db_session.add(client)
         db_session.flush()
-        SystemStateRepository(db_session).set_int("active_client_id", client.id)
         meeting = _seed_meeting(db_session, "Sentinel Meetings Track Meeting 2099")
 
         result = CliRunner().invoke(
@@ -65,3 +63,24 @@ class TestMeetingsTrack:
         assert (entry.entry_date, float(entry.duration_hours)) == (
             meeting.start_time.date(), 0.5,
         )
+
+
+class TestMeetingsCreate:
+    """meetings create stamps the meeting with the active client."""
+
+    def test_the_meeting_carries_the_flagged_client(self, db_session: Session) -> None:
+        client = Client(name="Sentinel Meetings Create Client 2099", is_active=True)
+        db_session.add(client)
+        db_session.commit()
+
+        result = CliRunner().invoke(
+            meetings,
+            ["create", "Sentinel Meetings Create Meeting 2099", "-b", "10:00", "-e", "10:30",
+             "--date", "2099-06-04"],
+        )
+
+        assert result.exit_code == 0, result.output
+        meeting = db_session.query(Meeting).filter(
+            Meeting.title == "Sentinel Meetings Create Meeting 2099"
+        ).one()
+        assert meeting.client_id == client.id

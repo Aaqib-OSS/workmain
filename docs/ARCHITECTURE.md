@@ -88,7 +88,7 @@ The three entry points (CLI, daemon, Slack Socket Mode) are the three surfaces, 
 - `workmain/database/connection.py` — `get_db()`, `session_scope()` and `record_scope()`, the only way to get a session, and `scope_open()`, whether a `session_scope()` is open on the calling thread.
 - `workmain/database/models.py` — every ORM model.
 - `workmain/database/migrations/` — the schema's migrations: the Alembic environment (`env.py`), the revision template (`script.py.mako`), and `versions/`, one revision per schema change.
-- `workmain/database/repositories/` — one repository per table, named for it. `system_state_repository` is the key-value store.
+- `workmain/database/repositories/` — one repository per table, named for it. `system_state_repository` is the key-value store. `client_repository`'s `get_active()` is the one lookup of the active client, which is stored as `clients.is_active` alone.
 
 ### Shared
 
@@ -130,8 +130,6 @@ Code that breaks a rule above, where the fix is tracked. A known deficiency is n
 **AI cost recording inside capabilities — #262.** Covers `workmain/ai/provider_manager.py` and `workmain/ai/report_generator.py`. `workmain/ai/provider_manager.py` records each call's cost through `workmain/services/ai_cost_service.py`, and `workmain/ai/report_generator.py` links costs to reports, so a capability calls the application layer. The fix returns each call's usage, failed calls included, to the application layer that asked for it, which records it.
 
 **EOD and the Slack conversation code — #254.** Covers `workmain/integrations/slack/slack_eod.py`, `workmain/workflows/eod_workflow.py`, `workmain/daemon/conversation_state.py` and `workmain/orchestration/confirmation_gate.py`. The Slack conversation code and `workmain/cli/commands/eod.py` each walk the EOD steps themselves. The Slack code reaches `IntentParser` and `ActionExecutor` directly. `workmain/workflows/eod_workflow.py` runs its steps through the `workmain` CLI and prompts on the terminal. `workmain/daemon/conversation_state.py` and `workmain/workflows/eod_workflow.py` import each other. `workmain/orchestration/confirmation_gate.py` is Slack-only surface code.
-
-**The active client — #255.** It is stored as `clients.is_active` and as `system_state.active_client_id`, and read three ways.
 
 **Configuration files — #147, and #211 for `config/ai_settings.json` writes.** Configuration files are located three ways, and most readers build their own path rather than going through `workmain/config_manager/`. `workmain/cli/commands/providers.py` reads and writes `config/ai_settings.json` itself. `config/` mixes settings shipped with the repository and files the application rewrites at runtime.
 

@@ -25,7 +25,6 @@ from workmain.cli.output import WorkmAInGroup
 from workmain.database.models import Client, Note
 from workmain.database.repositories.client_repository import ClientRepository
 from workmain.database.repositories.notes_repo import NotesRepository
-from workmain.database.repositories.system_state_repository import SystemStateRepository
 from workmain.services import clients_service
 from workmain.services.results import Summary
 
@@ -112,7 +111,7 @@ class TestClientsCommands:
         )
         db_session.expunge_all()
         assert db_session.query(Client).filter(Client.id == client.id).one().is_active is True
-        assert SystemStateRepository(db_session).get_int('active_client_id') == client.id
+        assert ClientRepository(db_session).get_active().id == client.id
 
     def test_delete_answered_yes_deletes_and_unlinks(
         self, db_session: Session, recording_renderer: NonCallableMagicMock
@@ -202,4 +201,4 @@ class TestClientsCommands:
         )
         db_session.expunge_all()
         assert db_session.query(Client).filter(Client.id == client.id).one_or_none() is None
-        assert SystemStateRepository(db_session).get_int('active_client_id') is None
+        assert ClientRepository(db_session).get_active() is None

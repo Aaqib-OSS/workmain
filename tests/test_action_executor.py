@@ -15,7 +15,6 @@ import pytest
 from workmain.database.models import Client, Report
 from workmain.database.repositories.notes_repo import NotesRepository
 from workmain.database.repositories.reports_repo import ReportsRepository
-from workmain.database.repositories.system_state_repository import SystemStateRepository
 from workmain.database.repositories.task_status_repo import TaskStatusRepository
 from workmain.orchestration.action_executor import (
     ActionExecutor,
@@ -245,7 +244,6 @@ class TestActionExecutorCreateNote:
         client = Client(name="ActionTestClient-note", is_active=True)
         db_session.add(client)
         db_session.flush()
-        SystemStateRepository(db_session).set_int("active_client_id", client.id)
 
         executor = ActionExecutor()
         result = executor.execute({
@@ -365,7 +363,6 @@ class TestActionExecutorCreateTimeEntry:
         client = Client(name="ActionTestClient-time", is_active=True)
         db_session.add(client)
         db_session.flush()
-        SystemStateRepository(db_session).set_int("active_client_id", client.id)
 
         executor = ActionExecutor()
         result = executor.execute({
